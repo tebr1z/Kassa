@@ -1,0 +1,31 @@
+import { NextResponse } from "next/server";
+import { logSystemError } from "@/lib/log-error";
+import postgres from "postgres";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const connection=()=>{if(!process.env.DATABASE_URL)throw new Error("DATABASE_URL təyin edilməyib");return postgres(process.env.DATABASE_URL,{max:1,prepare:false,connect_timeout:10})};
+
+export async function GET(){const sql=connection();try{
+  const [metrics]=await sql.unsafe(`select
+    coalesce((select sum(cs.opening_cash) from cashier_shifts cs where cs.closed_at is null),0)
+      + coalesce((select sum(p.amount) from payments p join sales s on s.id=p.sale_id where s.status='completed' and p.method='cash'),0)
+      + coalesce((select sum(case when type='income' then amount else -amount end) from finance_transactions where account='cash'),0)
+      - coalesce((select sum(amount) from supplier_payments where account='cash'),0) as cash_balance,
+    coalesce((select sum(total) from purchase_orders where status='received'),0)-coalesce((select sum(amount) from supplier_payments),0) as supplier_debt,
+    coalesce((select sum(total) from sales where status='completed' and date_trunc('month',created_at at time zone 'Asia/Baku')=date_trunc('month',now() at time zone 'Asia/Baku')),0)
+      + coalesce((select sum(case when type='income' then amount else -amount end) from finance_transactions where date_trunc('month',occurred_at at time zone 'Asia/Baku')=date_trunc('month',now() at time zone 'Asia/Baku')),0)
+      - coalesce((select sum(amount) from supplier_payments where date_trunc('month',paid_at at time zone 'Asia/Baku')=date_trunc('month',now() at time zone 'Asia/Baku')),0) as monthly_flow`);
+  const debts=await sql.unsafe(`select s.id,s.name,coalesce(po.total,0)-coalesce(sp.paid,0) as debt from suppliers s left join (select supplier_id,sum(total) total from purchase_orders where status='received' group by supplier_id) po on po.supplier_id=s.id left join (select supplier_id,sum(amount) paid from supplier_payments group by supplier_id) sp on sp.supplier_id=s.id where s.is_active=true order by debt desc,s.name`);
+  const recent=await sql.unsafe(`select * from (
+    select s.id,s.created_at as occurred_at,'income' as type,'POS satışı '||s.receipt_no as description,coalesce(p.method,'cash') as account,s.total as amount from sales s left join lateral (select method from payments where sale_id=s.id limit 1) p on true where s.status='completed'
+    union all select id,occurred_at,type,description,account,amount from finance_transactions
+    union all select sp.id,sp.paid_at,'expense','Təchizatçı ödənişi — '||su.name,sp.account,sp.amount from supplier_payments sp join suppliers su on su.id=sp.supplier_id
+  ) movements order by occurred_at desc limit 30`);
+  return NextResponse.json({metrics:{cashBalance:Number(metrics.cash_balance),supplierDebt:Math.max(0,Number(metrics.supplier_debt)),monthlyFlow:Number(metrics.monthly_flow)},debts:debts.map(r=>({id:r.id,name:r.name,debt:Math.max(0,Number(r.debt))})),recent:recent.map(r=>({id:r.id,occurredAt:r.occurred_at,type:r.type,description:r.description,account:r.account,amount:Number(r.amount)}))});
+}catch(error){console.error("finance.get",error);void logSystemError("finance.get", error);return NextResponse.json({error:"Maliyyə məlumatları yüklənmədi"},{status:500})}finally{await sql.end({timeout:2})}}
+
+export async function POST(request:Request){const sql=connection();try{const body=await request.json() as {action?:string;type?:string;category?:string;description?:string;account?:string;amount?:number|string;supplierId?:string;note?:string;occurredAt?:string};const amount=Number(body.amount);if(!Number.isFinite(amount)||amount<=0)return NextResponse.json({error:"Məbləği düzgün yazın"},{status:400});const account=body.account==='bank'?'bank':'cash';const result=await sql.begin(async tx=>{const [user]=await tx.unsafe("select id from users where id=$1 and is_active=true",[request.headers.get("x-birkassa-user-id")]);if(!user)throw Object.assign(new Error("İstifadəçi sessiyası tapılmadı"),{statusCode:401});if(body.action==='supplier_payment'){if(!body.supplierId)throw Object.assign(new Error("Təchizatçını seçin"),{statusCode:400});const [supplier]=await tx.unsafe(`select s.id,s.name,coalesce((select sum(total) from purchase_orders where supplier_id=s.id and status='received'),0)-coalesce((select sum(amount) from supplier_payments where supplier_id=s.id),0) debt from suppliers s where s.id=$1 for update`,[body.supplierId]);if(!supplier)throw Object.assign(new Error("Təchizatçı tapılmadı"),{statusCode:404});if(amount>Number(supplier.debt)+0.001)throw Object.assign(new Error(`Ödəniş borcdan çox ola bilməz (${Number(supplier.debt).toFixed(2)} ₼)`),{statusCode:409});const [row]=await tx.unsafe("insert into supplier_payments (supplier_id,amount,account,note,created_by) values ($1,$2,$3,$4,$5) returning id",[supplier.id,amount,account,body.note||null,user.id]);await tx.unsafe("insert into audit_logs (user_id,action,entity_type,entity_id,after_json) values ($1,'finance.supplier_payment','supplier_payment',$2,$3)",[user.id,row.id,JSON.stringify({supplierId:supplier.id,amount,account})]);return row}
+    const type=body.type==='expense'?'expense':'income',category=String(body.category||'Digər').trim(),description=String(body.description||'').trim();if(description.length<2)throw Object.assign(new Error("Açıqlama yazın"),{statusCode:400});const [row]=await tx.unsafe("insert into finance_transactions (type,category,description,account,amount,created_by,occurred_at) values ($1,$2,$3,$4,$5,$6,coalesce($7::timestamptz,now())) returning id",[type,category,description,account,amount,user.id,body.occurredAt||null]);await tx.unsafe("insert into audit_logs (user_id,action,entity_type,entity_id,after_json) values ($1,'finance.transaction_created','finance_transaction',$2,$3)",[user.id,row.id,JSON.stringify({type,category,description,account,amount})]);return row});return NextResponse.json(result,{status:201})
+}catch(error:any){console.error("finance.post",error);void logSystemError("finance.post", error);return NextResponse.json({error:error?.message||"Maliyyə əməliyyatı saxlanmadı"},{status:error?.statusCode||500})}finally{await sql.end({timeout:2})}}

@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790086812933,
+      "tag": "0000_lyrical_kingpin",
+      "breakpoints": true
+    }
+  ]
+}

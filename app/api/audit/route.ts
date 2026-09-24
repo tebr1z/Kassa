@@ -1,0 +1,8 @@
+import { NextResponse } from "next/server";
+import { logSystemError } from "@/lib/log-error";
+import postgres from "postgres";
+
+export const runtime="nodejs";
+export const dynamic="force-dynamic";
+
+export async function GET(request:Request){if(!process.env.DATABASE_URL)return NextResponse.json({error:"DATABASE_URL yoxdur"},{status:500});const sql=postgres(process.env.DATABASE_URL,{max:1,prepare:false,connect_timeout:10});try{const url=new URL(request.url),search=String(url.searchParams.get("search")||"").trim(),action=String(url.searchParams.get("action")||"").trim(),scope=String(url.searchParams.get("scope")||"");const cashierScope=scope==="cashier"?" and a.action in ('sale.completed','sale.returned','shift.opened','shift.closed')":"";const rows=await sql.unsafe(`select a.id,a.action,a.entity_type,a.entity_id,a.before_json,a.after_json,a.created_at,coalesce(u.full_name,'Sistem') user_name, coalesce(u.role,'') user_role from audit_logs a left join users u on u.id=a.user_id where ($1='' or a.action=$1) and ($2='' or coalesce(u.full_name,'') ilike '%'||$2||'%' or a.action ilike '%'||$2||'%' or a.entity_type ilike '%'||$2||'%')${cashierScope} order by a.created_at desc limit 200`,[action,search]);const actions=await sql.unsafe("select distinct action from audit_logs order by action");return NextResponse.json({rows:rows.map(row=>({id:row.id,action:row.action,entityType:row.entity_type,entityId:row.entity_id,userName:row.user_name,before:row.before_json,after:row.after_json,createdAt:row.created_at})),actions:actions.map(row=>row.action)})}catch(error){console.error("audit.get",error);void logSystemError("audit.get", error);return NextResponse.json({error:"Əməliyyat tarixçəsi yüklənmədi"},{status:500})}finally{await sql.end({timeout:2})}}
