@@ -5,6 +5,8 @@ import postgres from "postgres";
 
 type Rule={prefix:string;read:string[];write:string[]};
 const rules:Rule[]=[
+  {prefix:"/api/online-orders",read:["admin","manager","online_manager","online_assistant"],write:["admin","manager","online_manager","online_assistant"]},
+  {prefix:"/api/store-admin",read:["admin"],write:["admin"]},
   {prefix:"/api/dashboard",read:["admin","manager","cashier","warehouse","accountant"],write:[]},
   {prefix:"/api/products",read:["admin","manager","cashier","warehouse"],write:["admin","manager","warehouse"]},
   {prefix:"/api/warehouses",read:["admin","manager","warehouse"],write:["admin","manager","warehouse"]},
@@ -28,6 +30,8 @@ const rules:Rule[]=[
 ];
 
 export async function proxy(request:NextRequest){
+  if(["/api/customer-account","/api/my-orders"].includes(request.nextUrl.pathname))return NextResponse.next();
+  if(request.nextUrl.pathname==="/api/catalog"||request.nextUrl.pathname==="/api/customer-orders")return NextResponse.next();
   if(request.nextUrl.pathname.startsWith("/api/auth"))return NextResponse.next();
   const rule=rules.find(item=>request.nextUrl.pathname.startsWith(item.prefix));
   if(!rule)return NextResponse.json({error:"API marşrutu üçün icazə qaydası yoxdur"},{status:403});

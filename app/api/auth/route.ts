@@ -9,7 +9,7 @@ export const runtime="nodejs";
 export const dynamic="force-dynamic";
 const scrypt=promisify(scryptCallback),cookieName="birkassa_session";
 const connection=()=>{if(!process.env.DATABASE_URL)throw new Error("DATABASE_URL təyin edilməyib");return postgres(process.env.DATABASE_URL,{max:1,prepare:false,connect_timeout:10})};
-const permissions:Record<string,string[]>={admin:["*"],manager:["İdarə paneli","Satış / POS","Məhsullar","Anbar","Sifarişlər","Satınalma","Maliyyə","İnsan resursları","Hesabatlar","Nəzarət jurnalı"],cashier:["İdarə paneli","Satış / POS","Sifarişlər"],warehouse:["İdarə paneli","Məhsullar","Anbar","Satınalma"],accountant:["İdarə paneli","Maliyyə","Hesabatlar"]};
+const permissions:Record<string,string[]>={online_manager:["Onlayn sifarişlər"],online_assistant:["Onlayn sifarişlər"],admin:["*"],manager:["İdarə paneli","Satış / POS","Məhsullar","Anbar","Sifarişlər","Satınalma","Maliyyə","İnsan resursları","Hesabatlar","Nəzarət jurnalı"],cashier:["İdarə paneli","Satış / POS","Sifarişlər"],warehouse:["İdarə paneli","Məhsullar","Anbar","Satınalma"],accountant:["İdarə paneli","Maliyyə","Hesabatlar"]};
 async function hashPin(pin:string,salt=randomBytes(16).toString("hex")){const derived=await scrypt(pin,salt,64) as Buffer;return`${salt}:${derived.toString("hex")}`}
 async function verifyPin(pin:string,stored:string){const [salt,key]=stored.split(":");if(!salt||!key)return false;const derived=await scrypt(pin,salt,64) as Buffer,expected=Buffer.from(key,"hex");return derived.length===expected.length&&timingSafeEqual(derived,expected)}
 const publicUser=(row:any)=>({id:row.id,fullName:row.full_name,role:row.role,permissions:permissions[row.role]||[]});
