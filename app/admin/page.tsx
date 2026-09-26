@@ -64,10 +64,7 @@ export default function Home() {
     {notice && <div className="toast" role="status">{notice}</div>}
     <aside className={`sidebar ${mobileNav?"sidebar-open":""}`}>
       <div className="brand"><div className="brand-mark"><Store size={22}/></div><div><strong>BirKassa</strong><span>ticarət sistemi</span></div><button className="mobile-close" onClick={()=>setMobileNav(false)} aria-label="Menyunu bağla"><X/></button></div>
-      <nav aria-label="Əsas menyu"><p className="nav-label">İŞ SAHƏSİ</p>{allowedNav.map(([label,Icon])=><button key={label} className={active===label?"nav-item active":"nav-item"} onClick={()=>selectSection(label)}><Icon size={19}/><span>{label}</span>{label==="Anbar"&&<em>{dashboard?.alerts?.length||0}</em>}</button>)}</nav>
-      <a href="/admin/online" className="nav-item">Onlayn sifarişlər</a>
-      <a href="/" className="nav-item">Müştəri kataloqu ↗</a>
-      {auth.user.role==="admin"&&<a href="/admin/store" className="nav-item">Sayt və brend · Fotolar</a>}
+      <nav aria-label="Əsas menyu"><p className="nav-label">İŞ SAHƏSİ</p>{allowedNav.map(([label,Icon])=><button key={label} className={active===label?"nav-item active":"nav-item"} onClick={()=>selectSection(label)}><Icon size={19}/><span>{label}</span>{label==="Anbar"&&<em>{dashboard?.alerts?.length||0}</em>}</button>)}<p className="nav-label">ONLAYN MAĞAZA</p><a href="/admin/online" className="nav-item">Onlayn sifarişlər</a><a href="/" className="nav-item">Müştəri kataloqu ↗</a>{auth.user.role==="admin"&&<a href="/admin/store" className="nav-item">Sayt, brend və Cloudinary</a>}</nav>
       <div className="sidebar-footer"><div className="store-status"><span className="status-dot"/><div><strong>{dashboard?.branchName||"Mağaza"}</strong><small>{auth.user.fullName}</small></div></div><button><ChevronDown size={17}/></button></div>
     </aside>
     <section className="workspace">
