@@ -1,3 +1,4 @@
+import "server-only";
 import postgres from "postgres";
 export function storeDb() {
  if(!process.env.DATABASE_URL) throw new Error("Database unavailable");

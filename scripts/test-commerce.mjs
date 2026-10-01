@@ -1,0 +1,17 @@
+import assert from "node:assert/strict";
+import {readFile} from "node:fs/promises";
+import ts from "typescript";
+const source=await readFile(new URL("../lib/commerce.ts",import.meta.url),"utf8");
+const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText;
+const {sellingPrice,couponDiscount,relatedProducts}=await import("data:text/javascript;base64,"+Buffer.from(js).toString("base64"));
+assert.equal(sellingPrice({sale_price:"10.00",discount_price:"8.50"}),8.5);
+assert.equal(sellingPrice({sale_price:"10.00",discount_price:null}),10);
+assert.equal(sellingPrice({sale_price:"10.00",discount_price:"12"}),10);
+assert.equal(couponDiscount(19.99,15),3);
+assert.equal(couponDiscount(100,10),10);
+const product=(id,category,price,name=id)=>({id,name,category,price,available:true});
+const sourceProduct=product("a","Süd",5,"Təzə süd");
+const recommendations=relatedProducts(sourceProduct,[sourceProduct,product("b","Süd",5.2),product("c","Çay",5),{...product("d","Süd",5),available:false},product("e","Süd",10)]);
+assert.deepEqual(recommendations.map(p=>p.id),["b","e","c"]);
+assert.equal(relatedProducts(sourceProduct,[]).length,0);
+console.log("Commerce: 7 assertions passed (pricing, coupon rounding, related ranking, stock exclusion).");

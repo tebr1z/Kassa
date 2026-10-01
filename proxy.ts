@@ -29,11 +29,27 @@ const rules:Rule[]=[
   {prefix:"/api/client-errors",read:[],write:["admin","manager","cashier","warehouse","accountant"]},
 ];
 
+function forward(request:NextRequest,user?:{id:string;role:string}){
+ const headers=new Headers(request.headers);
+ headers.delete("x-birkassa-user-id");headers.delete("x-birkassa-role");
+ if(user){headers.set("x-birkassa-user-id",user.id);headers.set("x-birkassa-role",user.role);}
+ const response=NextResponse.next({request:{headers}});
+ response.headers.set("Cache-Control","private, no-store");
+ response.headers.set("X-Content-Type-Options","nosniff");
+ return response;
+}
 export async function proxy(request:NextRequest){
-  if(["/api/customer-account","/api/my-orders"].includes(request.nextUrl.pathname))return NextResponse.next();
-  if(request.nextUrl.pathname==="/api/catalog"||request.nextUrl.pathname==="/api/customer-orders")return NextResponse.next();
-  if(request.nextUrl.pathname.startsWith("/api/auth"))return NextResponse.next();
-  const rule=rules.find(item=>request.nextUrl.pathname.startsWith(item.prefix));
+ if(!["GET","HEAD","OPTIONS"].includes(request.method)){
+  const origin=request.headers.get("origin");
+  const ownOrigin=request.nextUrl.protocol+"//"+request.headers.get("host");
+  if(request.headers.get("sec-fetch-site")==="cross-site"||(origin&&origin!==ownOrigin)){
+   return NextResponse.json({error:"Başqa saytdan göndərilən sorğu qəbul edilmir."},{status:403});
+  }
+ }
+  if(["/api/customer-account","/api/my-orders","/api/contact","/api/coupon"].includes(request.nextUrl.pathname))return forward(request);
+  if(request.nextUrl.pathname==="/api/catalog"||request.nextUrl.pathname==="/api/customer-orders")return forward(request);
+  if(request.nextUrl.pathname==="/api/auth")return forward(request);
+  const rule=rules.find(item=>request.nextUrl.pathname===item.prefix||request.nextUrl.pathname.startsWith(item.prefix+"/"));
   if(!rule)return NextResponse.json({error:"API marşrutu üçün icazə qaydası yoxdur"},{status:403});
   const token=request.cookies.get("birkassa_session")?.value;
   if(!token)return NextResponse.json({error:"Sistemə daxil olmaq lazımdır"},{status:401});
@@ -45,8 +61,7 @@ export async function proxy(request:NextRequest){
     if(!session)return NextResponse.json({error:"Sessiyanın vaxtı bitib. Yenidən daxil olun"},{status:401});
     const roles=request.method==="GET"?rule.read:rule.write;
     if(!roles.includes(session.role))return NextResponse.json({error:"Bu əməliyyat üçün səlahiyyətiniz yoxdur"},{status:403});
-    const headers=new Headers(request.headers);headers.set("x-birkassa-user-id",session.id);headers.set("x-birkassa-role",session.role);
-    return NextResponse.next({request:{headers}});
+    return forward(request,{id:session.id,role:session.role});
   }catch(error){console.error("permission.proxy",error);void logSystemError("permission.proxy", error);return NextResponse.json({error:"İcazə yoxlanmadı"},{status:500})}finally{await sql.end({timeout:2})}
 }
 

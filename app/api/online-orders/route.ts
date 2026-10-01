@@ -3,7 +3,7 @@ import {z} from "zod";
 export const dynamic="force-dynamic";
 export async function GET(request:Request){
  const sql=storeDb();try{
- const rows=await sql.unsafe("select o.id,o.order_no,o.status,o.fulfillment,o.delivery_address,o.delivery_stage,o.total,o.note,o.created_at,c.full_name,c.phone,(select json_agg(json_build_object('name',p.name,'quantity',i.quantity)) from sales_order_items i join products p on p.id=i.product_id where i.sales_order_id=o.id) items from sales_orders o join customers c on c.id=o.customer_id where o.source='catalog' order by o.created_at desc limit 200");
+ const rows=await sql.unsafe("select o.id,o.order_no,o.status,o.fulfillment,o.delivery_address,o.delivery_stage,o.total,o.coupon_code,o.coupon_discount,o.note,o.created_at,c.full_name,c.phone,(select json_agg(json_build_object('name',p.name,'quantity',i.quantity)) from sales_order_items i join products p on p.id=i.product_id where i.sales_order_id=o.id) items from sales_orders o join customers c on c.id=o.customer_id where o.source='catalog' order by o.created_at desc limit 200");
  return Response.json({rows,canCancel:request.headers.get('x-birkassa-role')!=='online_assistant'});
  }finally{await sql.end()}
 }

@@ -39,18 +39,26 @@ export async function POST(request: Request) {
     const result = await sql.begin(async (tx) => {
       const [warehouse] = await tx.unsafe(salesWarehouseSql(request.headers.get("x-birkassa-user-id") || ""));
       const userId=request.headers.get("x-birkassa-user-id");
-      const [cashier] = await tx.unsafe("select id from users where id=$1 and is_active=true",[userId]);
+      const [cashier] = await tx.unsafe("select id,full_name from users where id=$1 and is_active=true",[userId]);
       if (!cashier) throw Object.assign(new Error("İstifadəçi sessiyası tapılmadı"), { statusCode: 401 });
       if (!warehouse) throw Object.assign(new Error("Kassirə mağaza və satış anbarı təyin edin"), { statusCode: 409 });
 
       const [shift] = await tx.unsafe(
-        "select id from cashier_shifts where cashier_id=$1 and closed_at is null order by opened_at desc limit 1",
+        "select id,branch_id from cashier_shifts where cashier_id=$1 and closed_at is null order by opened_at desc limit 1",
         [cashier.id],
       );
       if (!shift) throw Object.assign(new Error("Satış üçün əvvəlcə kassa növbəsini açın"), { statusCode: 409 });
 
+      let linkedOrder: {id:string;status:string;customer_id:string;source:string;coupon_discount:string}|undefined;
+      let orderLines: {product_id:string;quantity:string;unit_price:string}[]=[];
+      if(body.salesOrderId){
+       [linkedOrder]=await tx.unsafe("select id,status,customer_id,source,coupon_discount from sales_orders where id=$1 for update",[body.salesOrderId]) as unknown as typeof linkedOrder[];
+       if(!linkedOrder||linkedOrder.status!=="ready")throw Object.assign(new Error("Yalnız hazır sifariş ödənilə bilər"),{statusCode:409});
+       orderLines=await tx.unsafe("select product_id,quantity,unit_price from sales_order_items where sales_order_id=$1",[linkedOrder.id]) as unknown as typeof orderLines;
+       if(orderLines.length!==merged.size||orderLines.some(l=>merged.get(l.product_id)!==Number(l.quantity)))throw Object.assign(new Error("Sifariş məhsulları və miqdarı dəyişdirilə bilməz"),{statusCode:409});
+      }
       const lines: Array<{ id:string; name:string; quantity:number; price:number; cost:number; total:number; locationId:string|null }> = [];
-      for (const [productId, quantity] of merged) {
+      for (const [productId, quantity] of [...merged].sort()) {
         const [product] = await tx.unsafe(
           "select id, name, sale_price, cost_price from products where id=$1 and is_active=true for update",
           [productId],
@@ -68,18 +76,18 @@ export async function POST(request: Request) {
           "select location_id from stock_movements where product_id=$1 and warehouse_id=$2 and location_id is not null order by created_at desc limit 1",
           [product.id, warehouse.id],
         );
-        const price = Number(product.sale_price);
+        const price = linkedOrder?Number(orderLines.find(l=>l.product_id===productId)!.unit_price):Number(product.sale_price);
         lines.push({ id: product.id, name: product.name, quantity, price, cost: Number(product.cost_price), total: price * quantity, locationId: location?.location_id || null });
       }
 
       const subtotal = Number(lines.reduce((sum, line) => sum + line.total, 0).toFixed(2));
-      const discount=Number(Number(body.discount||0).toFixed(2));
+      const discount=linkedOrder?.source==="catalog"?Number(linkedOrder.coupon_discount):Number(Number(body.discount||0).toFixed(2));
       if(!Number.isFinite(discount)||discount<0||discount>subtotal)throw Object.assign(new Error("Endirim məbləği düzgün deyil"),{statusCode:400});
       const [discountRule]=await tx.unsafe("select value from system_settings where key='max_discount_percent'");
       const maxPercent=Number(discountRule?.value??10);
       const discountPercent=subtotal?discount/subtotal*100:0;
       let approvedBy:string|null=null;
-      if(discountPercent>maxPercent){
+      if(discountPercent>maxPercent&&linkedOrder?.source!=="catalog"){
         const manager=await findManagerByPin(tx,String(body.managerPin||""));
         if(!manager)throw Object.assign(new Error(`Endirim ${maxPercent}% limitini keçir. Rəhbər PIN-i lazımdır`),{statusCode:403});
         approvedBy=manager.id;
@@ -95,17 +103,22 @@ export async function POST(request: Request) {
       const cashAmount=paymentMethod==='cash'?total:paymentMethod==='mixed'?Number(body.cashAmount):0;
       const cardAmount=paymentMethod==='card'?total:paymentMethod==='mixed'?Number(body.cardAmount):0;
       if(!Number.isFinite(cashAmount)||!Number.isFinite(cardAmount)||cashAmount<0||cardAmount<0||Math.abs(cashAmount+cardAmount-total)>.009)throw Object.assign(new Error("Nağd və kart məbləğlərinin cəmi yekuna bərabər olmalıdır"),{statusCode:400});
+      const [brand]=await tx.unsafe("select name,phone,address from storefront_config where id=1");
+      const [branch]=await tx.unsafe("select name,address from branches where id=$1",[shift.branch_id]);
+      const [register]=await tx.unsafe("select name from cash_registers where branch_id=$1 and is_active=true order by created_at limit 1",[shift.branch_id]);
+      const receiptStore={name:brand?.name||branch?.name||"Mağaza",phone:brand?.phone||"",address:brand?.address||branch?.address||"",branch:branch?.name||"",register:register?.name||"Kassa",cashier:cashier.full_name};
+      await tx.unsafe("select pg_advisory_xact_lock(hashtext('birkassa.receipt-number'))");
       const [{ next_no: nextNo }] = await tx.unsafe("select coalesce(max((regexp_replace(receipt_no, '[^0-9]', '', 'g'))::bigint),0)+1 as next_no from sales");
       const receiptNo = `#${String(nextNo).padStart(6, '0')}`;
       const [sale] = await tx.unsafe(
-        "insert into sales (receipt_no, shift_id, cashier_id, customer_id, sales_order_id, subtotal, discount, total) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id, created_at",
-        [receiptNo, shift.id, cashier.id, body.customerId||null, salesOrderId, subtotal,discount,total],
+        "insert into sales (receipt_no, shift_id, cashier_id, customer_id, sales_order_id, subtotal, discount, total, receipt_store) values ($1,$2,$3,$4,$5,$6,$7,$8,$9::text::jsonb) returning id, created_at",
+        [receiptNo, shift.id, cashier.id, linkedOrder?.customer_id||body.customerId||null, salesOrderId, subtotal,discount,total,JSON.stringify(receiptStore)],
       );
 
       for (const line of lines) {
         await tx.unsafe(
-          "insert into sale_items (sale_id, product_id, quantity, unit_price, cost_snapshot, line_total) values ($1,$2,$3,$4,$5,$6)",
-          [sale.id, line.id, line.quantity, line.price, line.cost, line.total],
+          "insert into sale_items (sale_id, product_id, quantity, unit_price, cost_snapshot, line_total, product_name_snapshot) values ($1,$2,$3,$4,$5,$6,$7)",
+          [sale.id, line.id, line.quantity, line.price, line.cost, line.total,line.name],
         );
         await tx.unsafe(
           `insert into stock_movements
@@ -127,7 +140,7 @@ export async function POST(request: Request) {
     return NextResponse.json(result, { status: 201 });
   } catch (error: any) {
     console.error("sale.create", error);void logSystemError("sale.create", error);
-    return NextResponse.json({ error: error?.message || "Satış tamamlanmadı" }, { status: error?.statusCode || 500 });
+    return NextResponse.json({ error: error?.statusCode ? error.message : "Satış tamamlanmadı" }, { status: error?.statusCode || 500 });
   } finally {
     await sql.end({ timeout: 2 });
   }
