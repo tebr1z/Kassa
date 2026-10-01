@@ -13,7 +13,7 @@ export async function POST(request:Request){
  subtotal=Number(subtotal.toFixed(2));
  if(!coupon||coupon.used>=coupon.usage_limit)throw new Error("Kupon etibarsızdır və ya limiti bitib.");
  if(subtotal<Number(coupon.minimum))throw new Error("Minimum sifariş: "+Number(coupon.minimum).toFixed(2)+" ₼");
- const discount=couponDiscount(subtotal,Number(coupon.percent));
+ const discount=couponDiscount(subtotal,Number(coupon.percent),coupon.max_discount==null?null:Number(coupon.max_discount));
  return Response.json({code:coupon.code,discount,total:Number((subtotal-discount).toFixed(2))});
  }catch(e){return Response.json({error:e instanceof Error&&!("code" in e)?e.message:"Kupon yoxlanmadı."},{status:400});}finally{await sql.end();}
 }

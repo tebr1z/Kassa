@@ -2,7 +2,11 @@ export function sellingPrice(product:{sale_price:unknown;discount_price?:unknown
  const regular=Number(product.sale_price), discount=Number(product.discount_price);
  return discount>0&&discount<regular?discount:regular;
 }
-export function couponDiscount(subtotal:number,percent:number){return Math.round(subtotal*percent)/100;}
+export function couponDiscount(subtotal:number,percent:number,maxDiscount?:number|null){
+ const amount=Math.round(subtotal*percent)/100;
+ if(maxDiscount==null||!(maxDiscount>0))return amount;
+ return Math.min(amount,Number(maxDiscount.toFixed(2)));
+}
 export type CatalogProduct={id:string;name:string;category:string;unit:string;price:number;originalPrice:number;image:string;available:boolean;description:string;specifications:string};
 export function relatedProducts(product:CatalogProduct,products:CatalogProduct[]){
  const words=new Set(product.name.toLocaleLowerCase("az").split(/\s+/).filter(w=>w.length>2));

@@ -5,7 +5,7 @@ import {z} from "zod";
 import {customerAccount,customerCookie} from "@/lib/customer-session";
 import {storeDb} from "@/lib/store-db";
 export const dynamic="force-dynamic";
-export async function GET(){const a=await customerAccount();return NextResponse.json({user:a?{id:a.id,name:a.full_name,email:a.email,phone:a.phone}:null})}
+export async function GET(){const a=await customerAccount();return NextResponse.json({user:a?{id:a.id,name:a.full_name,email:a.email,phone:a.phone,address:a.address||"",lat:a.address_lat==null?null:Number(a.address_lat),lng:a.address_lng==null?null:Number(a.address_lng)}:null})}
 export async function POST(request:Request){
  const b=z.object({action:z.enum(["register","login"]),email:z.string().email().max(200).transform(s=>s.trim().toLowerCase()),password:z.string().min(8).max(128),name:z.string().trim().min(2).max(100).optional(),phone:z.string().regex(/^[+0-9 ()-]{7,25}$/).optional()}).safeParse(await request.json().catch(()=>null));
  if(!b.success)return NextResponse.json({error:"E-poçt və ən azı 8 simvolluq şifrə daxil edin."},{status:400});
@@ -27,6 +27,24 @@ export async function POST(request:Request){
  await sql.unsafe("insert into customer_sessions(token_hash,account_id,expires_at) values($1,$2,$3)",[createHash("sha256").update(token).digest("hex"),accountId,expires]);
  const r=NextResponse.json({ok:true});r.cookies.set(customerCookie,token,{httpOnly:true,sameSite:"lax",secure:process.env.NODE_ENV==="production",path:"/",expires});return r;
  }catch{return NextResponse.json({error:"Hesab yaradıla bilmədi. E-poçt artıq istifadə edilirsə giriş edin."},{status:400})}finally{await sql.end()}
+}
+const profile=z.object({name:z.string().trim().min(2).max(100),phone:z.string().regex(/^[+0-9 ()-]{7,25}$/),address:z.string().trim().max(300),lat:z.number().gte(-90).lte(90).nullable(),lng:z.number().gte(-180).lte(180).nullable(),currentPassword:z.string().max(128).optional(),newPassword:z.string().min(8).max(128).optional()});
+export async function PATCH(request:Request){
+ const account=await customerAccount();if(!account)return NextResponse.json({error:"Hesaba daxil olun."},{status:401});
+ const parsed=profile.safeParse(await request.json().catch(()=>null));
+ if(!parsed.success)return NextResponse.json({error:"Ad, telefon və ünvanı düzgün yazın. Yeni şifrə ən azı 8 simvol olmalıdır."},{status:400});
+ const d=parsed.data;if((d.lat==null)!==(d.lng==null))return NextResponse.json({error:"Ünvanı xəritədən seçin."},{status:400});
+ const sql=storeDb();try{
+  if(d.newPassword){
+   const [row]=await sql.unsafe("select password_hash from customer_accounts where id=$1",[account.id]);
+   const [salt,hash]=(row?.password_hash||"").split(":");const derived=scryptSync(d.currentPassword||"",salt||"dummy",64),expected=Buffer.from(hash||"","hex");
+   if(!salt||expected.length!==derived.length||!timingSafeEqual(expected,derived))return NextResponse.json({error:"Cari şifrə yanlışdır."},{status:400});
+   const nextSalt=randomBytes(16).toString("hex");
+   await sql.unsafe("update customer_accounts set password_hash=$1 where id=$2",[nextSalt+":"+scryptSync(d.newPassword,nextSalt,64).toString("hex"),account.id]);
+  }
+  await sql.unsafe("update customers set full_name=$1,phone=$2,address=$3,address_lat=$4,address_lng=$5 where id=$6",[d.name,d.phone,d.address,d.lat,d.lng,account.customer_id]);
+  return NextResponse.json({ok:true});
+ }catch{return NextResponse.json({error:"Hesab ayarları saxlanmadı."},{status:400});}finally{await sql.end()}
 }
 export async function DELETE(){
  const token=(await cookies()).get(customerCookie)?.value;const sql=storeDb();try{if(token)await sql.unsafe("delete from customer_sessions where token_hash=$1",[createHash("sha256").update(token).digest("hex")]);const r=NextResponse.json({ok:true});r.cookies.set(customerCookie,"",{path:"/",expires:new Date(0)});return r}finally{await sql.end()}

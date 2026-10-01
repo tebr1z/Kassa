@@ -37,7 +37,7 @@ export async function POST(request:Request){
   if(b.coupon){
    const [coupon]=await tx.unsafe("select * from commerce_coupons where code=$1 and is_active=true and expires_at>now() for update",[b.coupon]);
    if(!coupon||coupon.used>=coupon.usage_limit||subtotal<Number(coupon.minimum))throw checkoutRejection("Kupon etibarsızdır, limiti bitib və ya minimum məbləğ ödənmir.");
-   discount=couponDiscount(subtotal,Number(coupon.percent));
+   discount=couponDiscount(subtotal,Number(coupon.percent),coupon.max_discount==null?null:Number(coupon.max_discount));
    await tx.unsafe("update commerce_coupons set used=used+1 where id=$1",[coupon.id]);
   }
   if(b.expectedTotal!==undefined&&Math.abs(b.expectedTotal-Number((subtotal-discount).toFixed(2)))>0.009)throw checkoutRejection("Qiymət yenilənib. Səbəti yeniləyib kuponu təkrar tətbiq edin.");
