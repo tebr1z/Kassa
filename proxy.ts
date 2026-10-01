@@ -46,7 +46,7 @@ export async function proxy(request:NextRequest){
    return NextResponse.json({error:"Başqa saytdan göndərilən sorğu qəbul edilmir."},{status:403});
   }
  }
-  if(["/api/customer-account","/api/my-orders","/api/contact","/api/coupon"].includes(request.nextUrl.pathname))return forward(request);
+  if(["/api/customer-account","/api/my-orders","/api/contact","/api/coupon","/api/account-chat"].includes(request.nextUrl.pathname))return forward(request);
   if(request.nextUrl.pathname==="/api/catalog"||request.nextUrl.pathname==="/api/customer-orders")return forward(request);
   if(request.nextUrl.pathname==="/api/auth")return forward(request);
   const rule=rules.find(item=>request.nextUrl.pathname===item.prefix||request.nextUrl.pathname.startsWith(item.prefix+"/"));

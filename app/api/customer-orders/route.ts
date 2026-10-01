@@ -1,7 +1,10 @@
+import {randomInt} from "node:crypto";
 import {storeDb} from "@/lib/store-db";
 import {customerAccount} from "@/lib/customer-session";
 import {z} from "zod";
 import {sellingPrice,couponDiscount} from "@/lib/commerce";
+const orderAlphabet="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function shortOrderNo(){let code="";for(let i=0;i<6;i++)code+=orderAlphabet[randomInt(orderAlphabet.length)];return "S-"+code;}
 export const dynamic="force-dynamic";
 const schema=z.object({requestKey:z.string().uuid(),expectedTotal:z.number().min(0).optional(),coupon:z.string().trim().toUpperCase().max(30).default(""),fulfillment:z.enum(["pickup","delivery"]),address:z.string().max(500),name:z.string().trim().min(2).max(100),phone:z.string().trim().regex(/^[+0-9 ()-]{7,25}$/),note:z.string().max(1000),items:z.array(z.object({id:z.string().uuid(),quantity:z.number().int().min(1).max(100)})).min(1).max(50)});
 function checkoutRejection(message:string){return Object.assign(new Error(message),{statusCode:400});}
@@ -42,10 +45,15 @@ export async function POST(request:Request){
   }
   if(b.expectedTotal!==undefined&&Math.abs(b.expectedTotal-Number((subtotal-discount).toFixed(2)))>0.009)throw checkoutRejection("Qiymət yenilənib. Səbəti yeniləyib kuponu təkrar tətbiq edin.");
   const c={id:account.customer_id};
-  const orderNo="WEB-"+b.requestKey;
-  const [o]=await tx.unsafe("insert into sales_orders(order_no,customer_id,total,note,source,request_key,account_id,fulfillment,delivery_address,coupon_code,coupon_discount) values($1,$2,$3,$4,'catalog',$5,$6,$7,$8,$9,$10) returning id,order_no",[orderNo,c.id,Number((subtotal-discount).toFixed(2)),b.note,b.requestKey,account.id,b.fulfillment,b.address,b.coupon||null,discount]);
+  let o:{id:string;order_no:string}|undefined;
+  for(let attempt=0;attempt<8&&!o;attempt++){
+   const orderNo=shortOrderNo();
+   try{const [row]=await tx.savepoint(sp=>sp.unsafe("insert into sales_orders(order_no,customer_id,total,note,source,request_key,account_id,fulfillment,delivery_address,coupon_code,coupon_discount) values($1,$2,$3,$4,'catalog',$5,$6,$7,$8,$9,$10) returning id,order_no",[orderNo,c.id,Number((subtotal-discount).toFixed(2)),b.note,b.requestKey,account.id,b.fulfillment,b.address,b.coupon||null,discount]));o=row;}
+   catch(error){if(!(error instanceof Error)||!("code" in error)||error.code!=="23505")throw error;}
+  }
+  if(!o)throw checkoutRejection("Sifariş nömrəsi yaradıla bilmədi. Yenidən cəhd edin.");
   for(const l of lines)await tx.unsafe("insert into sales_order_items(sales_order_id,product_id,quantity,unit_price,line_total) values($1,$2,$3,$4,$5)",[o.id,l.id,l.quantity,l.price,l.total]);
-  await tx.unsafe("insert into audit_logs(action,entity_type,entity_id,after_json) values('order.catalog_created','sales_order',$1,$2)",[o.id,JSON.stringify({orderNo})]);
+  await tx.unsafe("insert into audit_logs(action,entity_type,entity_id,after_json) values('order.catalog_created','sales_order',$1,$2)",[o.id,JSON.stringify({orderNo:o.order_no})]);
   return {order_no:o.order_no};
  });
  return Response.json(result,{status:201});
