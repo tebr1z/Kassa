@@ -2,6 +2,7 @@ import {storeDb} from "@/lib/store-db";
 import {customerAccount} from "@/lib/customer-session";
 import {z} from "zod";
 import {sellingPrice,couponDiscount} from "@/lib/commerce";
+import {notifyCatalogOrder,vexiraSettings,whatsappPhone} from "@/lib/vexira";
 export const dynamic="force-dynamic";
 const schema=z.object({requestKey:z.string().uuid(),expectedTotal:z.number().min(0).optional(),coupon:z.string().trim().toUpperCase().max(30).default(""),fulfillment:z.enum(["pickup","delivery"]),address:z.string().max(500),name:z.string().trim().min(2).max(100),phone:z.string().trim().regex(/^[+0-9 ()-]{7,25}$/),note:z.string().max(1000),items:z.array(z.object({id:z.string().uuid(),quantity:z.number().int().min(1).max(100)})).min(1).max(50)});
 function checkoutRejection(message:string){return Object.assign(new Error(message),{statusCode:400});}
@@ -20,18 +21,19 @@ export async function POST(request:Request){
  const result=await sql.begin(async tx=>{
   await tx.unsafe("select pg_advisory_xact_lock(hashtext($1))",[b.requestKey]);
   const [existing]=await tx.unsafe("select order_no from sales_orders where request_key=$1 and account_id=$2",[b.requestKey,account.id]);
-  if(existing)return existing;
+  if(existing)return {created:false as const,order_no:existing.order_no};
   await tx.unsafe("select pg_advisory_xact_lock(hashtext($1))",[account.id]);
   const [recent]=await tx.unsafe("select count(*)::int n from sales_orders o where o.source='catalog' and o.account_id=$1 and o.created_at>now()-interval '10 minutes'",[account.id]);
   if(recent.n>=3)throw checkoutRejection("Bir neçə dəqiqə sonra yenidən cəhd edin.");
   const grouped=new Map<string,number>();for(const item of b.items)grouped.set(item.id,(grouped.get(item.id)||0)+item.quantity);
   const lines=[];
   for(const [id,quantity] of [...grouped].sort()){
-   const [p]=await tx.unsafe("select id,sale_price,discount_price from products where id=$1 and is_active=true for share",[id]);
+   const [p]=await tx.unsafe("select id,name,sale_price,discount_price from products where id=$1 and is_active=true for share",[id]);
    if(!p)throw checkoutRejection("Məhsul artıq mövcud deyil.");
    const [stock]=await tx.unsafe("select coalesce(sum(quantity),0) n from stock_movements where product_id=$1",[id]);
    if(quantity>100||Number(stock.n)<quantity)throw checkoutRejection("Seçilmiş miqdar üçün mövcudluq təsdiqlənmədi. Səbəti yeniləyin.");
-   lines.push({id,quantity,price:sellingPrice({sale_price:p.sale_price,discount_price:p.discount_price}),total:Math.round(quantity*sellingPrice({sale_price:p.sale_price,discount_price:p.discount_price})*100)/100});
+   const price=sellingPrice({sale_price:p.sale_price,discount_price:p.discount_price});
+   lines.push({id,name:String(p.name),quantity,price,total:Math.round(quantity*price*100)/100});
   }
   const subtotal=Number(lines.reduce((s,l)=>s+l.total,0).toFixed(2));let discount=0;
   if(b.coupon){
@@ -46,9 +48,10 @@ export async function POST(request:Request){
   const [o]=await tx.unsafe("insert into sales_orders(order_no,customer_id,total,note,source,request_key,account_id,fulfillment,delivery_address,coupon_code,coupon_discount) values($1,$2,$3,$4,'catalog',$5,$6,$7,$8,$9,$10) returning id,order_no",[seq.order_no,c.id,Number((subtotal-discount).toFixed(2)),b.note,b.requestKey,account.id,b.fulfillment,b.address,b.coupon||null,discount]);
   for(const l of lines)await tx.unsafe("insert into sales_order_items(sales_order_id,product_id,quantity,unit_price,line_total) values($1,$2,$3,$4,$5)",[o.id,l.id,l.quantity,l.price,l.total]);
   await tx.unsafe("insert into audit_logs(action,entity_type,entity_id,after_json) values('order.catalog_created','sales_order',$1,$2)",[o.id,JSON.stringify({orderNo:o.order_no})]);
-  return {order_no:o.order_no};
+  return {created:true as const,order_no:o.order_no,total:Number((subtotal-discount).toFixed(2)),name:b.name,phone:b.phone,fulfillment:b.fulfillment,address:b.address,lines:lines.map(line=>({name:line.name,quantity:line.quantity}))};
  });
- return Response.json(result,{status:201});
+ if(result.created){const settings=await vexiraSettings();let storePhones=settings.phones;if(!storePhones.length){const [brand]=await sql.unsafe("select whatsapp from storefront_config where id=1");const fallback=whatsappPhone(String(brand?.whatsapp||""));storePhones=fallback?[fallback]:[];}await notifyCatalogOrder({orderNo:result.order_no,total:result.total,name:result.name,phone:result.phone,fulfillment:result.fulfillment,address:result.address,lines:result.lines,storePhones}).catch(()=>{});}
+ return Response.json({order_no:result.order_no},{status:201});
  }catch(e){const rejected=e instanceof Error&&"statusCode" in e&&e.statusCode===400;return Response.json({error:rejected?e.message:"Nəticəni təsdiqləmək mümkün olmadı. Eyni sifarişi yenidən yoxlayın."},{status:rejected?400:503})}
  finally{await sql.end()}
 }

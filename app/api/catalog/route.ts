@@ -4,7 +4,7 @@ export const dynamic="force-dynamic";
 export async function GET(){
  const sql=storeDb();
  try{
-  const [brand]=await sql.unsafe("select name,kind,description,about,logo,phone,address,whatsapp from storefront_config where id=1");
+  const [brand]=await sql.unsafe("select name,kind,description,about,logo,phone,address,whatsapp,featured_product_id as \"featuredProductId\" from storefront_config where id=1");
   const products=await sql.unsafe("select p.id,p.name,p.category,p.unit,p.sale_price,p.discount_price,p.description,p.specifications,p.image_url as image,coalesce((select sum(quantity) from stock_movements where product_id=p.id),0)>0 as available from products p where p.is_active=true and coalesce((select sum(quantity) from stock_movements where product_id=p.id),0)>0 order by p.name");
   // Explicit public DTO: never serialize stock, cost, SKU, locations or raw rows.
   const publicProducts=products.map(p=>({id:p.id,name:p.name,category:p.category||"",unit:p.unit,

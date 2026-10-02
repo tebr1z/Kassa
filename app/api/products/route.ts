@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { logSystemError } from "@/lib/log-error";
 import postgres from "postgres";
 import { salesWarehouseSql } from "@/lib/warehouse";
+import { ensurePrimaryBarcodes, savePrimaryBarcode } from "@/lib/barcode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,7 @@ function connection() {
 export async function GET(request: Request) {
   const sql = connection();
   try {
+    await ensurePrimaryBarcodes(sql);
     const rows = await sql.unsafe(`
       select p.id, p.name, p.sku, p.category, p.sale_price, p.cost_price,
              p.min_stock, coalesce(b.barcode, '') as barcode,coalesce(bc.barcodes,'[]'::jsonb) barcodes,coalesce(ph.history,'[]'::jsonb) price_history,
@@ -51,7 +53,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PATCH(request:Request){const sql=connection();try{const body=await request.json() as {action?:string;productId?:string;name?:string;sku?:string;category?:string;salePrice?:number|string;costPrice?:number|string;minStock?:number|string;additionalBarcode?:string};const userId=request.headers.get("x-birkassa-user-id");if(!body.productId||!userId)return NextResponse.json({error:"Məhsul və ya istifadəçi tapılmadı"},{status:400});const productId=body.productId;const result=await sql.begin(async tx=>{const [product]=await tx.unsafe("select * from products where id=$1 for update",[productId]);if(!product)throw Object.assign(new Error("Məhsul tapılmadı"),{statusCode:404});if(body.action==='deactivate'){await tx.unsafe("update products set is_active=false where id=$1",[product.id]);await tx.unsafe("insert into audit_logs (user_id,action,entity_type,entity_id,before_json,after_json) values ($1,'product.deactivated','product',$2,$3,$4)",[userId,product.id,JSON.stringify({isActive:true}),JSON.stringify({isActive:false})]);return{id:product.id,isActive:false}}const salePrice=Number(body.salePrice),costPrice=Number(body.costPrice),minStock=Number(body.minStock||0),name=String(body.name||'').trim(),sku=String(body.sku||'').trim();if(name.length<2||!sku||!Number.isFinite(salePrice)||salePrice<=0||!Number.isFinite(costPrice)||costPrice<0||!Number.isFinite(minStock)||minStock<0)throw Object.assign(new Error("Məhsul məlumatlarını düzgün yazın"),{statusCode:400});if(salePrice!==Number(product.sale_price)||costPrice!==Number(product.cost_price))await tx.unsafe("insert into product_price_history (product_id,old_sale_price,new_sale_price,old_cost_price,new_cost_price,changed_by) values ($1,$2,$3,$4,$5,$6)",[product.id,product.sale_price,salePrice,product.cost_price,costPrice,userId]);await tx.unsafe("update products set name=$1,sku=$2,category=$3,sale_price=$4,cost_price=$5,min_stock=$6,discount_price=case when discount_price >= $4 then null else discount_price end where id=$7",[name,sku,body.category||null,salePrice,costPrice,minStock,product.id]);const extra=String(body.additionalBarcode||'').trim();if(extra)await tx.unsafe("insert into product_barcodes (product_id,barcode,is_primary) values ($1,$2,false)",[product.id,extra]);await tx.unsafe("insert into audit_logs (user_id,action,entity_type,entity_id,before_json,after_json) values ($1,'product.updated','product',$2,$3,$4)",[userId,product.id,JSON.stringify({name:product.name,salePrice:Number(product.sale_price),costPrice:Number(product.cost_price)}),JSON.stringify({name,salePrice,costPrice,additionalBarcode:extra||null})]);return{id:product.id,name,salePrice,costPrice}});return NextResponse.json(result)}catch(error:any){console.error("products.patch",error);void logSystemError("products.patch", error);const duplicate=error?.code==='23505';return NextResponse.json({error:duplicate?"SKU və ya barkod artıq mövcuddur":error?.message||"Məhsul yenilənmədi"},{status:duplicate?409:error?.statusCode||500})}finally{await sql.end({timeout:2})}}
+export async function PATCH(request:Request){const sql=connection();try{const body=await request.json() as {action?:string;productId?:string;name?:string;sku?:string;category?:string;salePrice?:number|string;costPrice?:number|string;minStock?:number|string;barcode?:string;additionalBarcode?:string};const userId=request.headers.get("x-birkassa-user-id");if(!body.productId||!userId)return NextResponse.json({error:"Məhsul və ya istifadəçi tapılmadı"},{status:400});const productId=body.productId;const result=await sql.begin(async tx=>{const [product]=await tx.unsafe("select * from products where id=$1 for update",[productId]);if(!product)throw Object.assign(new Error("Məhsul tapılmadı"),{statusCode:404});if(body.action==='deactivate'){await tx.unsafe("update products set is_active=false where id=$1",[product.id]);await tx.unsafe("insert into audit_logs (user_id,action,entity_type,entity_id,before_json,after_json) values ($1,'product.deactivated','product',$2,$3,$4)",[userId,product.id,JSON.stringify({isActive:true}),JSON.stringify({isActive:false})]);return{id:product.id,isActive:false}}const salePrice=Number(body.salePrice),costPrice=Number(body.costPrice),minStock=Number(body.minStock||0),name=String(body.name||'').trim(),sku=String(body.sku||'').trim();if(name.length<2||!sku||!Number.isFinite(salePrice)||salePrice<=0||!Number.isFinite(costPrice)||costPrice<0||!Number.isFinite(minStock)||minStock<0)throw Object.assign(new Error("Məhsul məlumatlarını düzgün yazın"),{statusCode:400});if(salePrice!==Number(product.sale_price)||costPrice!==Number(product.cost_price))await tx.unsafe("insert into product_price_history (product_id,old_sale_price,new_sale_price,old_cost_price,new_cost_price,changed_by) values ($1,$2,$3,$4,$5,$6)",[product.id,product.sale_price,salePrice,product.cost_price,costPrice,userId]);await tx.unsafe("update products set name=$1,sku=$2,category=$3,sale_price=$4,cost_price=$5,min_stock=$6,discount_price=case when discount_price >= $4 then null else discount_price end where id=$7",[name,sku,body.category||null,salePrice,costPrice,minStock,product.id]);await savePrimaryBarcode(tx,product.id,String(body.barcode||""));const extra=String(body.additionalBarcode||'').trim();if(extra)await tx.unsafe("insert into product_barcodes (product_id,barcode,is_primary) values ($1,$2,false)",[product.id,extra]);await tx.unsafe("insert into audit_logs (user_id,action,entity_type,entity_id,before_json,after_json) values ($1,'product.updated','product',$2,$3,$4)",[userId,product.id,JSON.stringify({name:product.name,salePrice:Number(product.sale_price),costPrice:Number(product.cost_price)}),JSON.stringify({name,salePrice,costPrice,additionalBarcode:extra||null})]);return{id:product.id,name,salePrice,costPrice}});return NextResponse.json(result)}catch(error:any){console.error("products.patch",error);void logSystemError("products.patch", error);const duplicate=error?.code==='23505';return NextResponse.json({error:duplicate?"SKU və ya barkod artıq mövcuddur":error?.message||"Məhsul yenilənmədi"},{status:duplicate?409:error?.statusCode||500})}finally{await sql.end({timeout:2})}}
 
 export async function POST(request: Request) {
   const sql = connection();
@@ -61,7 +63,7 @@ export async function POST(request: Request) {
       salePrice?: number | string; costPrice?: number | string; minStock?: number | string;
     };
     const { name, sku, barcode, category, salePrice, costPrice, minStock = 0 } = body;
-    if (!name || !sku || !barcode || Number(salePrice) <= 0 || Number(costPrice) < 0) {
+    if (!name || !sku || Number(salePrice) <= 0 || Number(costPrice) < 0) {
       return NextResponse.json({ error: "Məhsul məlumatları natamamdır" }, { status: 400 });
     }
     const result = await sql.begin(async (tx) => {
@@ -71,10 +73,7 @@ export async function POST(request: Request) {
          returning id, sku, name`,
         [String(sku).trim(), String(name).trim(), category || null, Number(salePrice), Number(costPrice), Number(minStock)],
       );
-      await tx.unsafe(
-        `insert into product_barcodes (product_id, barcode, is_primary) values ($1, $2, true)`,
-        [product.id, String(barcode).trim()],
-      );
+      await savePrimaryBarcode(tx, product.id, String(barcode || ""));
       return product;
     });
     return NextResponse.json(result, { status: 201 });

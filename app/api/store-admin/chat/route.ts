@@ -6,12 +6,12 @@ export async function GET(request:Request){
  const sql=storeDb();try{
   if(ticketId){
    if(!/^[0-9a-f-]{36}$/i.test(ticketId))return Response.json({error:"Bilet düzgün deyil."},{status:400});
-   const [ticket]=await sql.unsafe(`select t.*,c.full_name as "name",a.email,c.phone from support_tickets t join customer_accounts a on a.id=t.account_id join customers c on c.id=a.customer_id where t.id=$1`,[ticketId]);
+   const [ticket]=await sql.unsafe(`select t.*,coalesce(t.guest_name,c.full_name) as "name",coalesce(a.email,'') as email,coalesce(t.guest_phone,c.phone) as phone from support_tickets t left join customer_accounts a on a.id=t.account_id left join customers c on c.id=a.customer_id where t.id=$1`,[ticketId]);
    if(!ticket)return Response.json({error:"Bilet tapılmadı."},{status:404});
    const messages=await sql.unsafe("select id,sender,body,edited_at,created_at from support_ticket_messages where ticket_id=$1 order by created_at",[ticketId]);
    return Response.json({ticket,messages});
   }
-  const tickets=await sql.unsafe(`select t.id,t.ticket_no,t.account_id,t.subject,t.kind,t.status,t.updated_at,c.full_name as "name",a.email,c.phone,(select body from support_ticket_messages m where m.ticket_id=t.id order by m.created_at desc limit 1) last_body from support_tickets t join customer_accounts a on a.id=t.account_id join customers c on c.id=a.customer_id order by c.full_name, t.updated_at desc limit 200`);
+  const tickets=await sql.unsafe(`select t.id,t.ticket_no,t.account_id,t.subject,t.kind,t.status,t.updated_at,coalesce(t.guest_name,c.full_name) as "name",coalesce(a.email,'') as email,coalesce(t.guest_phone,c.phone) as phone,(select body from support_ticket_messages m where m.ticket_id=t.id order by m.created_at desc limit 1) last_body from support_tickets t left join customer_accounts a on a.id=t.account_id left join customers c on c.id=a.customer_id order by t.updated_at desc limit 200`);
   return Response.json({tickets});
  }catch{return Response.json({error:"Biletlər yüklənmədi."},{status:503});}finally{await sql.end();}
 }
