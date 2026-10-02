@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
-import {useCallback,useEffect,useRef,useState} from "react";
+import {useCallback,useEffect,useRef,useState,type KeyboardEvent} from "react";
 import {ArrowRight,Check,MapPin,Package,Search,ShoppingBag,Store,Truck,UserRound} from "lucide-react";
-import {productModel,productSearchScore,type CatalogProduct,type HeroSlide} from "@/lib/commerce";
+import {labelMatches,productModel,productSearchScore,type CatalogProduct,type HeroSlide} from "@/lib/commerce";
 import {readCart,saveCart,type CustomerCart} from "@/lib/storefront-cart";
 import ProductView from "./product-view";
 import HeroSlider from "./hero-slider";
@@ -33,8 +33,12 @@ function SearchField({products,query,onQuery}:{products:CatalogProduct[];query:s
   {open&&!!matches.length&&<ul id="search-results" className="sf-search-results" role="listbox">{matches.map(({product})=> <li key={product.id}><Link href={"/products/"+product.id} onClick={()=>setOpen(false)}><span className="sf-search-thumb">{product.image?<img src={product.image} alt=""/>:<Package size={22}/>}</span><span><strong>{product.name}</strong><small>{product.category||"Digər"} · {productModel(product.name)}</small></span><b>{money(product.price)} AZN</b></Link></li>)}</ul>}
  </div>;
 }
-function OptionMenu({label,value,options,open,onToggle,onClose,onChange}:{label:string;value:string;options:string[];open:boolean;onToggle:()=>void;onClose:()=>void;onChange:(value:string)=>void}){
- const root=useRef<HTMLDivElement>(null);
+function OptionMenu({label,value,options,open,searchable=false,onToggle,onClose,onChange}:{label:string;value:string;options:string[];open:boolean;searchable?:boolean;onToggle:()=>void;onClose:()=>void;onChange:(value:string)=>void}){
+ const root=useRef<HTMLDivElement>(null),inputRef=useRef<HTMLInputElement>(null),listRef=useRef<HTMLUListElement>(null);
+ const [filter,setFilter]=useState(""),[active,setActive]=useState(0);
+ const shown=searchable&&filter.trim()?options.filter(item=>item!=="Hamısı"&&labelMatches(item,filter)):options;
+ useEffect(()=>{if(!open){setFilter("");setActive(0);return;}if(searchable){const frame=requestAnimationFrame(()=>inputRef.current?.focus());return()=>cancelAnimationFrame(frame);}},[open,searchable]);
+ useEffect(()=>{listRef.current?.querySelector<HTMLButtonElement>("[data-active='true']")?.scrollIntoView({block:"nearest"});},[active,filter,open]);
  useEffect(()=>{
   if(!open)return;
   function outside(event:MouseEvent){if(!root.current?.contains(event.target as Node))onClose();}
@@ -43,9 +47,15 @@ function OptionMenu({label,value,options,open,onToggle,onClose,onChange}:{label:
   document.addEventListener("keydown",onKey);
   return()=>{document.removeEventListener("mousedown",outside);document.removeEventListener("keydown",onKey);};
  },[open,onClose]);
+ function pick(item:string){onChange(item);onClose();}
+ function onSearchKey(event:KeyboardEvent<HTMLInputElement>){
+  if(event.key==="ArrowDown"){event.preventDefault();setActive(index=>Math.min(shown.length-1,index+1));}
+  if(event.key==="ArrowUp"){event.preventDefault();setActive(index=>Math.max(0,index-1));}
+  if(event.key==="Enter"&&shown[active]){event.preventDefault();pick(shown[active]);}
+ }
  return <div className={"sf-option"+(value!=="Hamısı"?" is-set":"")+(open?" is-open":"")} ref={root}>
   <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={onToggle}><span>{label}</span><strong>{value}</strong></button>
-  {open&&<ul className="sf-option-list" role="listbox" aria-label={label}>{options.map(item=><li key={item}><button type="button" role="option" aria-selected={item===value} onClick={()=>{onChange(item);onClose();}}>{item}{item===value&&<Check size={15}/>}</button></li>)}</ul>}
+  {open&&<div className="sf-option-panel">{searchable&&<label className="sf-option-search"><Search size={16}/><input ref={inputRef} aria-label={label+" axtar"} aria-controls={label+"-options"} placeholder={label+" axtarın"} value={filter} onChange={event=>{setFilter(event.target.value);setActive(0);}} onKeyDown={onSearchKey}/></label>}<ul id={searchable?label+"-options":undefined} className="sf-option-list" role="listbox" aria-label={label} ref={listRef}>{shown.map((item,index)=><li key={item}><button type="button" role="option" data-active={searchable&&index===active} aria-selected={item===value} onMouseEnter={()=>setActive(index)} onClick={()=>pick(item)}>{item}{item===value&&<Check size={15}/>}</button></li>)}{searchable&&filter.trim()&&!shown.length&&<li className="sf-option-empty">Uyğun {label.toLocaleLowerCase("az")} yoxdur</li>}</ul></div>}
  </div>;
 }
 export default function Storefront({productId}:{productId?:string}){
@@ -73,7 +83,7 @@ export default function Storefront({productId}:{productId?:string}){
  function add(id:string){change(id,1);setNotice("Məhsul səbətinizə əlavə edildi.");}
  function committed(items:{id:string;quantity:number}[]){setCart(current=>{const next={...current};for(const item of items){const quantity=Math.max(0,(next[item.id]||0)-item.quantity);if(quantity)next[item.id]=quantity;else delete next[item.id];}saveCart(next);return next;});}
  const count=Object.values(cart).reduce((a,b)=>a+b,0);
- const categories=["Hamısı",...new Set(products.map(p=>p.category||"Digər"))];
+ const categories=["Hamısı",...[...new Set(products.map(p=>p.category||"Digər"))].sort((a,b)=>a.localeCompare(b,"az"))];
  const scoped=products.filter(p=>category==="Hamısı"||(p.category||"Digər")===category);
  const models=["Hamısı",...new Set(scoped.map(p=>productModel(p.name)))].sort((a,b)=>a==="Hamısı"?-1:b==="Hamısı"?1:a.localeCompare(b,"az"));
  const needle=query.trim();
@@ -100,7 +110,7 @@ export default function Storefront({productId}:{productId?:string}){
    <HeroSlider slides={slides} products={products} description={brand?.description}/>
    <div className="sf-benefits"><div><Store/><span><strong>Mağazadan götürün</strong><small>Hazır olduqda gəlib təhvil alın</small></span></div><div><Truck/><span><strong>Ünvana sifariş edin</strong><small>Təhvil üsulunu səbətdə seçin</small></span></div><div><ShoppingBag/><span><strong>Hər addımı izləyin</strong><small>Sifarişiniz şəxsi kabinetinizdə</small></span></div></div>
    <section id="catalog" className="sf-catalog"><div className="sf-section-head"><div><span className="sf-eyebrow">KATALOQ</span><h2>{brand?.kind==="restaurant"?"Bu gün nə seçirsiniz?":"Axtardığınız seçimlər"}</h2></div></div>
-   <div className="sf-filters"><SearchField products={products} query={query} onQuery={setQuery}/><div className="sf-filter-picks"><OptionMenu label="Kateqoriya" value={category} options={categories} open={menu==="category"} onToggle={()=>setMenu(current=>current==="category"?"":"category")} onClose={closeMenu} onChange={chooseCategory}/><OptionMenu label="Model" value={models.includes(model)?model:"Hamısı"} options={models} open={menu==="model"} onToggle={()=>setMenu(current=>current==="model"?"":"model")} onClose={closeMenu} onChange={setModel}/></div></div>
+   <div className="sf-filters"><SearchField products={products} query={query} onQuery={setQuery}/><div className="sf-filter-picks"><OptionMenu label="Kateqoriya" value={category} options={categories} searchable open={menu==="category"} onToggle={()=>setMenu(current=>current==="category"?"":"category")} onClose={closeMenu} onChange={chooseCategory}/><OptionMenu label="Model" value={models.includes(model)?model:"Hamısı"} options={models} searchable open={menu==="model"} onToggle={()=>setMenu(current=>current==="model"?"":"model")} onClose={closeMenu} onChange={setModel}/></div></div>
    {!!picks.length&&<section className="sf-popular" aria-label="Populyar məhsullar"><div className="sf-section-head"><div><span className="sf-eyebrow">SEÇİLMİŞLƏR</span><h2>Populyar məhsullar</h2></div></div><div className="sf-grid">{picks.map(p=><ProductCard key={p.id} product={p} pinned={p.id===featured?.id} inCart={cart[p.id]||0} onAdd={()=>add(p.id)} onOpen={()=>setOpen(true)}/>)}</div></section>}
    <div className="sf-catalog-tools"><span>{loaded?visible.length+" məhsul":"Məhsullar yüklənir…"}</span><label>Sırala<select value={sort} onChange={e=>setSort(e.target.value)}><option value="name">Ada görə</option><option value="low">Əvvəl ucuz</option><option value="high">Əvvəl baha</option><option value="sale">Əvvəl endirimli</option></select></label></div>
    <div className="sf-grid">{visible.map(p=><ProductCard key={p.id} product={p} inCart={cart[p.id]||0} onAdd={()=>add(p.id)} onOpen={()=>setOpen(true)}/>)}</div>

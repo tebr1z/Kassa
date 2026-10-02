@@ -63,6 +63,14 @@ export function productSearchScore(product:{name:string;category?:string},query:
  }
  return score;
 }
+export function labelMatches(label:string,query:string){
+ const needle=foldSearch(query);
+ if(!needle)return true;
+ const hay=foldSearch(label);
+ if(hay.includes(needle))return true;
+ const words=hay.split(" ").filter(Boolean);
+ return needle.split(" ").filter(Boolean).every(token=>words.some(word=>tokenNear(token,word)));
+}
 export function relatedProducts(product:CatalogProduct,products:CatalogProduct[]){
  const words=new Set(product.name.toLocaleLowerCase("az").split(/\s+/).filter(w=>w.length>2));
  const score=(p:CatalogProduct)=>(p.category&&p.category===product.category?10:0)+p.name.toLocaleLowerCase("az").split(/\s+/).filter(w=>words.has(w)).length*3+1/(1+Math.abs(p.price-product.price));

@@ -25,8 +25,9 @@ export function whatsappPhone(value:string){
 export async function sendWhatsApp(phone:string,message:string){
  const key=await vexiraKey();const to=whatsappPhone(phone);
  if(!key||!to)return false;
- const response=await fetch("https://api.vexirahost.com/api/v1/whatsapp/messages",{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":key},body:JSON.stringify({phone:to,message:message.slice(0,1000)}),signal:AbortSignal.timeout(8000)});
- if(!response.ok)throw Object.assign(new Error("Vexira mesajı göndərilmədi."),{statusCode:502});
+ const response=await fetch("https://api.vexirahost.com/api/v1/whatsapp/messages",{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":key},body:JSON.stringify({phone:to,message:message.slice(0,1000)}),signal:AbortSignal.timeout(15000)});
+ const detail=(await response.text()).replace(/\s+/g," ").slice(0,180);
+ if(!response.ok||/"success"\s*:\s*false/.test(detail))throw Object.assign(new Error("Vexira mesajı göndərilmədi ("+response.status+"). "+detail),{statusCode:502});
  return true;
 }
 export async function notifyCatalogOrder(order:{orderNo:string;total:number;name:string;phone:string;fulfillment:"pickup"|"delivery";address:string;lines:{name:string;quantity:number}[];storePhones:string[]}){
