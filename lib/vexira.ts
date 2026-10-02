@@ -33,13 +33,9 @@ export async function sendWhatsApp(phone:string,message:string){
 export async function notifyCatalogOrder(order:{orderNo:string;total:number;name:string;phone:string;fulfillment:"pickup"|"delivery";address:string;lines:{name:string;quantity:number}[];storePhones:string[]}){
  if(!await vexiraKey())return;
  const items=order.lines.slice(0,8).map(line=>line.name+" × "+line.quantity).join("\n");
- const place=order.fulfillment==="delivery"?"Ünvan: "+order.address:"Mağazadan götürmə";
+ const place=order.fulfillment==="delivery"?"Ünvan: "+order.address:"Mağazadan təhvil";
  const staff=[...new Set(order.storePhones.map(whatsappPhone).filter((phone):phone is string=>!!phone))];
  const customerPhone=whatsappPhone(order.phone);
  const storeMessage=`Yeni sifariş #${order.orderNo}\n${order.name}\n${customerPhone||order.phone}\n${order.total.toFixed(2)} AZN\n${place}\n${items}`;
- const customerMessage=`Salam ${order.name}. Sifarişiniz qəbul olundu.\nNömrə: ${order.orderNo}\nMəbləğ: ${order.total.toFixed(2)} AZN\n${place}\nÖdəniş təhvil zamanı.`;
- const jobs:Promise<unknown>[]=[];
- for(const phone of staff)jobs.push(sendWhatsApp(phone,storeMessage).catch(error=>logSystemError("vexira.order",error)));
- if(customerPhone&&!staff.includes(customerPhone))jobs.push(sendWhatsApp(customerPhone,customerMessage).catch(error=>logSystemError("vexira.order",error)));
- await Promise.all(jobs);
+ await Promise.all(staff.map(phone=>sendWhatsApp(phone,storeMessage).catch(error=>logSystemError("vexira.order",error))));
 }
