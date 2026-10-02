@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import {useCallback,useEffect,useRef,useState,type KeyboardEvent} from "react";
+import {useCallback,useEffect,useRef,useState,type KeyboardEvent as ReactKeyboardEvent} from "react";
 import {ArrowRight,Check,MapPin,Package,Search,ShoppingBag,Store,Truck,UserRound} from "lucide-react";
 import {labelMatches,productModel,productSearchScore,type CatalogProduct,type HeroSlide} from "@/lib/commerce";
 import {readCart,saveCart,type CustomerCart} from "@/lib/storefront-cart";
@@ -48,7 +48,7 @@ function OptionMenu({label,value,options,open,searchable=false,onToggle,onClose,
   return()=>{document.removeEventListener("mousedown",outside);document.removeEventListener("keydown",onKey);};
  },[open,onClose]);
  function pick(item:string){onChange(item);onClose();}
- function onSearchKey(event:KeyboardEvent<HTMLInputElement>){
+ function onSearchKey(event:ReactKeyboardEvent<HTMLInputElement>){
   if(event.key==="ArrowDown"){event.preventDefault();setActive(index=>Math.min(shown.length-1,index+1));}
   if(event.key==="ArrowUp"){event.preventDefault();setActive(index=>Math.max(0,index-1));}
   if(event.key==="Enter"&&shown[active]){event.preventDefault();pick(shown[active]);}
