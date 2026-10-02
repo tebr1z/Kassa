@@ -1,12 +1,13 @@
-type Query = { unsafe: (query: string, params?: unknown[]) => Promise<{ [key: string]: unknown }[]> };
-type Sql = { unsafe: Query["unsafe"]; begin: (fn: (tx: Query) => Promise<void>) => Promise<unknown> };
+import type postgres from "postgres";
+
+type Db = postgres.Sql | postgres.TransactionSql;
 
 export function ean13(body12: string) {
   const sum = [...body12].reduce((total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
   return body12 + String((10 - (sum % 10)) % 10);
 }
 
-export async function nextInternalBarcodes(tx: Query, count: number) {
+export async function nextInternalBarcodes(tx: Db, count: number) {
   const [row] = await tx.unsafe("select coalesce(max(substring(barcode from 4 for 9)::bigint),0)::text as n from product_barcodes where barcode ~ '^200[0-9]{10}$'");
   let serial = Number(row?.n || 0);
   const codes: string[] = [];
@@ -18,7 +19,7 @@ export async function nextInternalBarcodes(tx: Query, count: number) {
   return codes;
 }
 
-export async function ensurePrimaryBarcodes(sql: Sql) {
+export async function ensurePrimaryBarcodes(sql: postgres.Sql) {
   const [gap] = await sql.unsafe("select 1 as gap from products p where not exists (select 1 from product_barcodes b where b.product_id=p.id and b.is_primary) limit 1");
   if (!gap) return;
   await sql.begin(async (tx) => {
@@ -35,7 +36,7 @@ export async function ensurePrimaryBarcodes(sql: Sql) {
   });
 }
 
-export async function savePrimaryBarcode(tx: Query, productId: string, barcode: string) {
+export async function savePrimaryBarcode(tx: Db, productId: string, barcode: string) {
   const value = barcode.trim();
   const [primary] = await tx.unsafe("select id, barcode from product_barcodes where product_id=$1 and is_primary=true", [productId]);
   if (!value) {
