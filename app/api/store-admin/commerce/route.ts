@@ -3,7 +3,8 @@ import {storeDb} from "@/lib/store-db";
 import {ensurePrimaryBarcodes,savePrimaryBarcode} from "@/lib/barcode";
 import {z} from "zod";
 import {mediaUrl} from "@/lib/desktop-media";
-const optionFields=z.object({label:z.string().trim().min(1).max(120),size:z.string().trim().max(80).default(''),color:z.string().trim().max(80).default(''),kind:z.string().trim().max(80).default(''),price:z.number().positive().max(1000000).nullable(),cost_price:z.number().finite().min(0).max(1000000).nullable().default(null),position:z.number().int().min(0).max(1000).default(0),is_active:z.boolean(),attributes:z.record(z.string().trim().min(1).max(60),z.string().trim().min(1).max(120)).default({}).refine(value=>Object.keys(value).length<=12)});
+import {productOptionInput as optionFields,productOptionList} from '@/lib/product-option-input';
+import {saveProductOptions} from '@/lib/save-product-options';
 export const dynamic="force-dynamic";
 async function handleGET(){
  const sql=storeDb();try{
@@ -16,7 +17,7 @@ async function handleGET(){
  return Response.json({local,canManageProducts:true,products,coupons,messages});
  }catch{return Response.json({error:"Məlumatlar yüklənmədi."},{status:503});}finally{await sql.end();}
 }
-const product=z.object({action:z.literal("product"),id:z.string().uuid().optional(),name:z.string().trim().min(2).max(200),sku:z.string().trim().min(1).max(100),category:z.string().trim().max(100),unit:z.string().trim().min(1).max(30),sale_price:z.number().positive().max(1000000),cost_price:z.number().min(0).max(1000000),description:z.string().max(5000),specifications:z.string().max(3000),discount_price:z.number().positive().nullable(),is_active:z.boolean(),barcode:z.string().trim().max(64).optional().default(""),options:z.array(optionFields).max(100).optional()}).refine(p=>p.discount_price===null||p.discount_price<p.sale_price);
+const product=z.object({action:z.literal("product"),id:z.string().uuid().optional(),name:z.string().trim().min(2).max(200),sku:z.string().trim().min(1).max(100),category:z.string().trim().max(100),unit:z.string().trim().min(1).max(30),sale_price:z.number().positive().max(1000000),cost_price:z.number().min(0).max(1000000),description:z.string().max(5000),specifications:z.string().max(3000),discount_price:z.number().positive().nullable(),is_active:z.boolean(),barcode:z.string().trim().max(64).optional().default(""),options:productOptionList.optional()}).refine(p=>p.discount_price===null||p.discount_price<p.sale_price);
 const option=optionFields.extend({action:z.literal('option'),id:z.string().uuid().optional(),product_id:z.string().uuid()});
 const coupon=z.object({action:z.literal("coupon"),id:z.string().uuid().optional(),code:z.string().trim().toUpperCase().regex(/^[A-Z0-9_-]{3,30}$/),percent:z.number().int().min(1).max(90),minimum:z.number().min(0).max(1000000),max_discount:z.number().positive().max(1000000).nullable(),expires_at:z.string().datetime(),usage_limit:z.number().int().min(1).max(1000000),is_active:z.boolean()});
 const schema=z.union([product,option,coupon,z.object({action:z.literal("read"),id:z.string().uuid()}),z.object({action:z.literal('delete-product'),id:z.string().uuid(),confirm:z.literal('SİL')})]);
@@ -33,7 +34,7 @@ async function handlePOST(request:Request){
  if(Number(old.sale_price)!==b.sale_price||Number(old.cost_price)!==b.cost_price)await tx.unsafe("insert into product_price_history(product_id,old_sale_price,new_sale_price,old_cost_price,new_cost_price,changed_by) values($1,$2,$3,$4,$5,$6)",[b.id,old.sale_price,b.sale_price,old.cost_price,b.cost_price,request.headers.get("x-birkassa-user-id")]);
  }else{const [row]=await tx.unsafe("insert into products(name,sku,category,unit,sale_price,cost_price,description,specifications,discount_price,is_active) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id",values);entityId=row.id;}
  await savePrimaryBarcode(tx,entityId,b.barcode);
- if(!b.id&&b.options)for(const item of b.options)await tx.unsafe('insert into product_options(product_id,label,size,color,kind,price,position,is_active,attributes,cost_price) values($1,$2,$3,$4,$5,$6,$7,$8,$9::text::jsonb,$10)',[entityId,item.label,item.size,item.color,item.kind,item.price,item.position,item.is_active,JSON.stringify(item.attributes),item.cost_price]);
+ if(b.options!==undefined)await saveProductOptions(tx,entityId,b.options);
  }else if(b.action==="option"){
  const [parent]=await tx.unsafe('select id from products where id=$1 and deleted_at is null for update',[b.product_id]);if(!parent)throw new Error('Məhsul tapılmadı.');
  const values=[b.product_id,b.label,b.size,b.color,b.kind,b.price,b.position,b.is_active,JSON.stringify(b.attributes),b.cost_price];

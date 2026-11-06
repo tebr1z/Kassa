@@ -4,9 +4,14 @@ import { logSystemError } from "@/lib/log-error";
 import postgres from "postgres";
 import { salesWarehouseSql } from "@/lib/warehouse";
 import { ensurePrimaryBarcodes, savePrimaryBarcode } from "@/lib/barcode";
+import {z} from 'zod';
+import {productOptionList} from '@/lib/product-option-input';
+import {saveProductOptions} from '@/lib/save-product-options';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+type PublicOption={id:string;label:string;size:string;color:string;kind:string;attributes:Record<string,string>;price:number|string|null};
+type PriceHistory={oldSalePrice:string|number;newSalePrice:string|number;oldCostPrice:string|number;newCostPrice:string|number;changedAt:string};
 
 function connection() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL təyin edilməyib");
@@ -33,6 +38,7 @@ async function handleGET(request: Request) {
       group by p.id, b.barcode,bc.barcodes,ph.history,po.options
       order by p.name
     `);
+    const editable=request.headers.get('x-birkassa-role')==='admin'?await sql.unsafe('select product_id,id,label,size,color,kind,price,cost_price,position,is_active,attributes from product_options order by position,created_at'):[];
     return NextResponse.json(rows.map((row) => ({
       id: row.id,
       name: row.name,
@@ -45,8 +51,9 @@ async function handleGET(request: Request) {
       price: Number(row.sale_price),
       cost: request.headers.get("x-birkassa-role")==="cashier"?0:Number(row.cost_price),
       barcodes: row.barcodes,
-      options:(row.options||[]).map((option:any)=>({...option,price:option.price==null?null:Number(option.price)})),
-      priceHistory: (request.headers.get("x-birkassa-role")==="cashier"?[]:row.price_history).map((item:any)=>({...item,oldSalePrice:Number(item.oldSalePrice),newSalePrice:Number(item.newSalePrice),oldCostPrice:Number(item.oldCostPrice),newCostPrice:Number(item.newCostPrice)})),
+      options:((row.options||[]) as PublicOption[]).map(option=>({...option,price:option.price==null?null:Number(option.price)})),
+      ...(request.headers.get('x-birkassa-role')==='admin'?{editableOptions:editable.filter(o=>o.product_id===row.id).map(o=>({id:o.id,label:o.label,size:o.size,color:o.color,kind:o.kind,price:o.price,cost_price:o.cost_price,position:o.position,is_active:o.is_active,attributes:o.attributes}))}:{}),
+      priceHistory: ((request.headers.get("x-birkassa-role")==="cashier"?[]:row.price_history) as PriceHistory[]).map(item=>({...item,oldSalePrice:Number(item.oldSalePrice),newSalePrice:Number(item.newSalePrice),oldCostPrice:Number(item.oldCostPrice),newCostPrice:Number(item.newCostPrice)})),
     })));
   } catch (error) {
     console.error("products.get", error);void logSystemError("products.get", error);
@@ -56,37 +63,60 @@ async function handleGET(request: Request) {
   }
 }
 
-async function handlePATCH(request:Request){const sql=connection();try{const body=await request.json() as {action?:string;productId?:string;name?:string;sku?:string;category?:string;salePrice?:number|string;costPrice?:number|string;minStock?:number|string;barcode?:string;additionalBarcode?:string};const userId=request.headers.get("x-birkassa-user-id");if(!body.productId||!userId)return NextResponse.json({error:"Məhsul və ya istifadəçi tapılmadı"},{status:400});const productId=body.productId;const result=await sql.begin(async tx=>{const [product]=await tx.unsafe("select * from products where id=$1 for update",[productId]);if(!product)throw Object.assign(new Error("Məhsul tapılmadı"),{statusCode:404});if(body.action==='deactivate'){await tx.unsafe("update products set is_active=false where id=$1",[product.id]);await tx.unsafe("insert into audit_logs (user_id,action,entity_type,entity_id,before_json,after_json) values ($1,'product.deactivated','product',$2,$3,$4)",[userId,product.id,JSON.stringify({isActive:true}),JSON.stringify({isActive:false})]);return{id:product.id,isActive:false}}const salePrice=Number(body.salePrice),costPrice=Number(body.costPrice),minStock=Number(body.minStock||0),name=String(body.name||'').trim(),sku=String(body.sku||'').trim();if(name.length<2||!sku||!Number.isFinite(salePrice)||salePrice<=0||!Number.isFinite(costPrice)||costPrice<0||!Number.isFinite(minStock)||minStock<0)throw Object.assign(new Error("Məhsul məlumatlarını düzgün yazın"),{statusCode:400});if(salePrice!==Number(product.sale_price)||costPrice!==Number(product.cost_price))await tx.unsafe("insert into product_price_history (product_id,old_sale_price,new_sale_price,old_cost_price,new_cost_price,changed_by) values ($1,$2,$3,$4,$5,$6)",[product.id,product.sale_price,salePrice,product.cost_price,costPrice,userId]);await tx.unsafe("update products set name=$1,sku=$2,category=$3,sale_price=$4,cost_price=$5,min_stock=$6,discount_price=case when discount_price >= $4 then null else discount_price end where id=$7",[name,sku,body.category||null,salePrice,costPrice,minStock,product.id]);await savePrimaryBarcode(tx,product.id,String(body.barcode||""));const extra=String(body.additionalBarcode||'').trim();if(extra)await tx.unsafe("insert into product_barcodes (product_id,barcode,is_primary) values ($1,$2,false)",[product.id,extra]);await tx.unsafe("insert into audit_logs (user_id,action,entity_type,entity_id,before_json,after_json) values ($1,'product.updated','product',$2,$3,$4)",[userId,product.id,JSON.stringify({name:product.name,salePrice:Number(product.sale_price),costPrice:Number(product.cost_price)}),JSON.stringify({name,salePrice,costPrice,additionalBarcode:extra||null})]);return{id:product.id,name,salePrice,costPrice}});return NextResponse.json(result)}catch(error:any){console.error("products.patch",error);void logSystemError("products.patch", error);const duplicate=error?.code==='23505';return NextResponse.json({error:duplicate?"SKU və ya barkod artıq mövcuddur":error?.message||"Məhsul yenilənmədi"},{status:duplicate?409:error?.statusCode||500})}finally{await sql.end({timeout:2})}}
-
-async function handlePOST(request: Request) {
-  const sql = connection();
-  try {
-    const body = await request.json() as {
-      name?: string; sku?: string; barcode?: string; category?: string;
-      salePrice?: number | string; costPrice?: number | string; minStock?: number | string;
-    };
-    const { name, sku, barcode, category, salePrice, costPrice, minStock = 0 } = body;
-    if (!name || !sku || Number(salePrice) <= 0 || Number(costPrice) < 0) {
-      return NextResponse.json({ error: "Məhsul məlumatları natamamdır" }, { status: 400 });
-    }
-    const result = await sql.begin(async (tx) => {
-      const [product] = await tx.unsafe(
-        `insert into products (sku, name, category, sale_price, cost_price, min_stock)
-         values ($1, $2, $3, $4, $5, $6)
-         returning id, sku, name`,
-        [String(sku).trim(), String(name).trim(), category || null, Number(salePrice), Number(costPrice), Number(minStock)],
-      );
-      await savePrimaryBarcode(tx, product.id, String(barcode || ""));
-      return product;
-    });
-    return NextResponse.json(result, { status: 201 });
-  } catch (error: any) {
-    console.error("products.post", error);void logSystemError("products.post", error);
-    const duplicate = error?.code === "23505";
-    return NextResponse.json({ error: duplicate ? "SKU və ya barkod artıq mövcuddur" : "Məhsul saxlanmadı" }, { status: duplicate ? 409 : 500 });
-  } finally {
-    await sql.end({ timeout: 2 });
-  }
+const productInput=z.object({
+ name:z.string().trim().min(2).max(200),sku:z.string().trim().min(1).max(100),category:z.string().trim().max(100).default(''),
+ salePrice:z.coerce.number().finite().positive().max(1000000),costPrice:z.coerce.number().finite().min(0).max(1000000),
+ minStock:z.coerce.number().finite().min(0).max(1000000).default(0),barcode:z.string().trim().max(64).default(''),options:productOptionList.optional(),
+});
+const updateInput=productInput.extend({productId:z.string().uuid(),additionalBarcode:z.string().trim().max(64).default('')});
+function productError(error:unknown){
+ const value=error as {code?:string;statusCode?:number;message?:string};
+ const duplicate=value.code==='23505';
+ return NextResponse.json({error:duplicate?'SKU, barkod və ya seçim adı artıq mövcuddur':value.code?'Məhsul saxlanmadı':value.message||'Məhsul saxlanmadı'},{status:duplicate?409:value.statusCode||400});
+}
+async function handlePATCH(request:Request){
+ const raw=await request.json().catch(()=>null);
+ const userId=request.headers.get('x-birkassa-user-id');
+ if(!userId)return NextResponse.json({error:'Daxil olun.'},{status:401});
+ const deactivate=z.object({action:z.literal('deactivate')}).safeParse(raw).success;
+ const parsed=deactivate?z.object({productId:z.string().uuid()}).safeParse(raw):updateInput.safeParse(raw);
+ if(!parsed.success)return NextResponse.json({error:'Məhsul məlumatlarını və seçimləri düzgün yazın.'},{status:400});
+ const sql=connection();
+ try{
+  const result=await sql.begin(async tx=>{
+   const [old]=await tx.unsafe('select * from products where id=$1 and deleted_at is null for update',[parsed.data.productId]);
+   if(!old)throw Object.assign(Error('Məhsul tapılmadı.'),{statusCode:404});
+   if(deactivate){
+    await tx.unsafe('update products set is_active=false where id=$1',[old.id]);
+    await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id) values($1,'product.deactivated','product',$2)",[userId,old.id]);
+    return {id:old.id,isActive:false};
+   }
+   const body=updateInput.parse(raw);
+   if(body.salePrice!==Number(old.sale_price)||body.costPrice!==Number(old.cost_price))await tx.unsafe('insert into product_price_history(product_id,old_sale_price,new_sale_price,old_cost_price,new_cost_price,changed_by) values($1,$2,$3,$4,$5,$6)',[old.id,old.sale_price,body.salePrice,old.cost_price,body.costPrice,userId]);
+   await tx.unsafe('update products set name=$1,sku=$2,category=$3,sale_price=$4,cost_price=$5,min_stock=$6,discount_price=case when discount_price >= $4 then null else discount_price end where id=$7',[body.name,body.sku,body.category||null,body.salePrice,body.costPrice,body.minStock,old.id]);
+   await savePrimaryBarcode(tx,old.id,body.barcode);
+   if(body.additionalBarcode)await tx.unsafe('insert into product_barcodes(product_id,barcode,is_primary) values($1,$2,false)',[old.id,body.additionalBarcode]);
+   if(body.options!==undefined)await saveProductOptions(tx,old.id,body.options);
+   await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,after_json) values($1,'product.updated','product',$2,$3)",[userId,old.id,JSON.stringify({name:body.name,salePrice:body.salePrice,costPrice:body.costPrice,optionCount:body.options?.length})]);
+   return {id:old.id,name:body.name,salePrice:body.salePrice,costPrice:body.costPrice};
+  });
+  return NextResponse.json(result);
+ }catch(error){return productError(error);}finally{await sql.end({timeout:2});}
+}
+async function handlePOST(request:Request){
+ const parsed=productInput.safeParse(await request.json().catch(()=>null));
+ if(!parsed.success)return NextResponse.json({error:'Məhsul məlumatlarını və seçimləri düzgün yazın.'},{status:400});
+ const body=parsed.data,userId=request.headers.get('x-birkassa-user-id'),sql=connection();
+ try{
+  const result=await sql.begin(async tx=>{
+   const [row]=await tx.unsafe('insert into products(sku,name,category,sale_price,cost_price,min_stock) values($1,$2,$3,$4,$5,$6) returning id,sku,name',[body.sku,body.name,body.category||null,body.salePrice,body.costPrice,body.minStock]);
+   await savePrimaryBarcode(tx,row.id,body.barcode);
+   if(body.options!==undefined)await saveProductOptions(tx,row.id,body.options);
+   await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,after_json) values($1,'product.created','product',$2,$3)",[userId,row.id,JSON.stringify({name:body.name,optionCount:body.options?.length||0})]);
+   return row;
+  });
+  return NextResponse.json(result,{status:201});
+ }catch(error){return productError(error);}finally{await sql.end({timeout:2});}
 }
 
 export const GET=withAdminSession(handleGET);
