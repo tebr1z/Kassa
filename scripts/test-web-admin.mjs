@@ -116,7 +116,7 @@ try{
  assert.equal((await login()).status,429);await sql.unsafe('delete from staff_auth_attempts');await login();
  assert.equal((await request('/api/auth',{method:'DELETE'})).status,200);assert.equal((await request('/api/products')).status,401);
  console.log('PASS: optional/custom variants, atomic product creation, variant cost/receipt snapshots, honest discount pricing, two-store cashier stock isolation and permissions, open-shift assignment lock, salary plans/payroll and expense idempotency, net profit with historical COGS, archive deletion preserving receipts, CSRF/HTTPS/session protections and catalogue privacy.');
- if(process.argv.includes('--serve')){console.log('ISOLATED UI PREVIEW: '+origin+'/products/'+variantProduct.id+' | admin: '+origin+'/admin');await new Promise(resolve=>{process.once('SIGINT',resolve);process.stdin.once('data',resolve);process.stdin.resume();});}
+ if(process.argv.includes('--serve')){console.log('ISOLATED UI PREVIEW: '+origin+'/products/'+variantProduct.id+' | admin: '+origin+'/admin');await new Promise(resolve=>{process.once('SIGINT',resolve);process.stdin.once('data',resolve);process.stdin.resume();});process.stdin.pause();}
 }finally{
  const stopped=new Promise(resolve=>server.once('exit',resolve));server.kill();await Promise.race([stopped,new Promise(resolve=>setTimeout(resolve,5000))]);await sql.end({timeout:2});await database.close();
 }

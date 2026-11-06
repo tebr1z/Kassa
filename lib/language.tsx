@@ -2,11 +2,10 @@
 import {createContext,useContext,useEffect,useSyncExternalStore,type ReactNode} from "react";
 import {desktopTranslations} from "./desktop-translations";
 import {storefrontTranslations} from "./storefront-translations";
-import {Languages,ChevronDown} from "lucide-react";
-export type Language="az"|"ru"|"en"|"tr"|"zh";
-const languages:Record<Language,string>={az:"Azərbaycan",en:"English",ru:"Русский",zh:"中文",tr:"Türkçe"};
-const languageCodes:Record<Language,string>={az:"AZ",en:"EN",ru:"RU",zh:"中文",tr:"TR"};
-const isLanguage=(value:string|null):value is Language=>!!value&&Object.hasOwn(languages,value);
+import {Check,Languages,ChevronDown} from "lucide-react";
+import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuLabel,DropdownMenuRadioGroup,DropdownMenuRadioItem,DropdownMenuSeparator} from '@/components/ui/dropdown-menu';
+import {languageOptions,languageMenuCopy,isLanguage,type Language} from './language-options';
+export type {Language} from './language-options';
 declare global {interface Window {birkassaDesktop?:{setLanguage:(language:Language)=>void}}}
 const LanguageContext=createContext<Language>("az");
 let current:Language="az";
@@ -173,12 +172,24 @@ export function languageAmount(value:number){
 }
 export function useLanguage(){return useContext(LanguageContext);}
 export function LanguageSwitcher(){
- const language=useLanguage();
- return <div className="language-switcher" title={languages[language]}>
-  <Languages size={18} aria-hidden="true"/><span aria-hidden="true">{languageCodes[language]}</span><ChevronDown size={13} aria-hidden="true"/>
-  <select aria-label="Language / Dil" value={language} onChange={event=>{const next=event.target.value;if(!isLanguage(next))return;changeLanguage(next);try{localStorage.setItem("birkassa-language",next);}catch{}}}>
-   {Object.entries(languages).map(([code,name])=><option key={code} value={code} lang={code}>{name}</option>)}
-  </select>
+ const language=useLanguage(),selected=languageOptions[language],copy=languageMenuCopy[language];
+ function selectLanguage(next:string){if(!isLanguage(next))return;changeLanguage(next);try{localStorage.setItem('birkassa-language',next);}catch{}}
+ return <div className="language-switcher">
+  <DropdownMenu modal={false}>
+   <DropdownMenuTrigger asChild><button type="button" className="language-switcher-trigger" aria-label={`${copy.label}: ${selected.name}`} title={`${copy.label}: ${selected.name}`}>
+    <span className="language-trigger-icon" aria-hidden="true"><Languages size={17}/></span><span className="language-current-name" lang={language}>{selected.name}</span><span className="language-current-code" aria-hidden="true">{selected.code}</span><ChevronDown className="language-chevron" size={14} aria-hidden="true"/>
+   </button></DropdownMenuTrigger>
+   <DropdownMenuContent align="end" sideOffset={10} collisionPadding={12} className="language-menu">
+    <DropdownMenuLabel className="language-menu-heading"><strong>{copy.title}</strong><span>{copy.hint}</span></DropdownMenuLabel>
+    <DropdownMenuSeparator className="language-menu-divider"/>
+    <DropdownMenuRadioGroup value={language} onValueChange={selectLanguage} aria-label={copy.title}>
+     {(Object.entries(languageOptions) as [Language,typeof selected][]).map(([code,option])=><DropdownMenuRadioItem key={code} value={code} textValue={option.name} className="language-menu-option">
+      <span className="language-option-code" aria-hidden="true">{option.code}</span><span className="language-option-text"><strong lang={code}>{option.name}</strong><small lang="en">{option.description}</small></span><span className="language-option-check" aria-hidden="true">{code===language&&<Check size={17}/>}</span>
+     </DropdownMenuRadioItem>)}
+    </DropdownMenuRadioGroup>
+    <div className="language-menu-footer"><span aria-hidden="true"/><span>{copy.selected}: <strong lang={language}>{selected.name}</strong></span></div>
+   </DropdownMenuContent>
+  </DropdownMenu>
  </div>;
 }
 export function LanguageProvider({children}:{children:ReactNode}){

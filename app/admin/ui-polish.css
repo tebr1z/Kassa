@@ -1,0 +1,214 @@
+/* Route-scoped polish: keep these styles out of the customer storefront. */
+.app-shell,
+.auth-page,
+.store-admin {
+  --admin-border: #dce7df;
+  --admin-muted: #60766b;
+  --admin-focus: #147852;
+}
+
+.app-shell { background: #f2f6f3; }
+.app-shell .workspace,
+.app-shell .content,
+.app-shell .panel,
+.store-admin,
+.store-admin .settings-form { min-width: 0; }
+.app-shell .content { padding: 26px 28px 40px; }
+.app-shell .panel,
+.app-shell .metric {
+  border-color: var(--admin-border);
+  box-shadow: 0 3px 14px #183c2906;
+}
+.app-shell .panel-head h2,
+.app-shell .inventory-toolbar h2 { line-height: 1.35; }
+.app-shell .metric > strong { font-variant-numeric: tabular-nums; letter-spacing: -.025em; }
+.app-shell .metric-top > span { line-height: 1.5; }
+.app-shell .metric > small { line-height: 1.6; }
+
+/* Navigation stays readable when translated labels take more than one line. */
+.app-shell .sidebar nav { padding-bottom: 16px; scrollbar-width: thin; scrollbar-color: #49665b transparent; }
+.app-shell .nav-label { color: #9bb7a9; }
+.app-shell .nav-item { min-height: 44px; line-height: 1.45; }
+.app-shell .nav-item > svg { flex-shrink: 0; }
+.app-shell .nav-item > span { min-width: 0; overflow-wrap: anywhere; }
+.app-shell .sidebar-footer { min-height: 80px; height: auto; padding-block: 16px; gap: 10px; }
+.app-shell .store-status { min-width: 0; }
+.app-shell .store-status > div { min-width: 0; }
+.app-shell .store-status :is(strong, small) { overflow-wrap: anywhere; }
+.app-shell .status-dot { flex-shrink: 0; }
+.app-shell .sidebar-footer > button { flex-shrink: 0; }
+
+.app-shell .topbar {
+  min-height: 88px;
+  height: auto;
+  padding: 18px 28px;
+  gap: 16px;
+  background: #fff;
+  box-shadow: 0 3px 16px #173c2703;
+}
+.app-shell .topbar-heading { min-width: 0; flex: 1 1 0; }
+.app-shell .topbar h1 { line-height: 1.25; letter-spacing: -.025em; }
+.app-shell .topbar .eyebrow { line-height: 1.5; }
+.app-shell .top-actions { min-width: 0; flex-shrink: 0; gap: 10px; }
+.app-shell .top-actions .profile { width: 42px; height: 42px; border-radius: 12px; }
+.app-shell .workspace-status { gap: 12px; padding: 12px 28px; }
+.app-shell .workspace-status .shift { border: 0; padding: 8px 12px; border-radius: 10px; background: #edf5ef; }
+.app-shell .admin-security-notice { border-color: #d9e5dc; background: #eaf3ed; color: #3e614c; }
+
+/* Toolbars wrap as a group instead of forcing the whole page to scroll. */
+.app-shell .inventory-toolbar { flex-wrap: wrap; gap: 12px; padding: 20px; }
+.app-shell .inventory-toolbar > div:first-child { min-width: 0; }
+.app-shell .inventory-toolbar .search-box { flex: 1 1 230px; min-width: 180px; max-width: 340px; }
+.app-shell .inventory-toolbar > button { flex-shrink: 0; }
+.app-shell .inventory-actions { min-width: 0; flex-wrap: wrap; }
+.app-shell .inventory-actions button { min-height: 40px; white-space: normal; }
+.app-shell .search-box { min-width: 0; transition: border-color .15s, box-shadow .15s; }
+.app-shell .search-box:focus-within { border-color: #4e9c78; box-shadow: 0 0 0 3px #14785214; }
+.app-shell .search-box input { min-width: 0; }
+.app-shell .table-wrap { min-width: 0; max-width: 100%; overscroll-behavior-inline: contain; }
+.app-shell .table-wrap thead { background: #f7faf8; }
+.app-shell .table-wrap th { color: #62796d; padding-block: 13px; }
+.app-shell .table-wrap td { padding-block: 14px; }
+.app-shell .table-wrap tbody tr:hover { background: #f8fbf9; }
+.app-shell .stock-overview { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.app-shell .stock-overview > div { min-width: 0; }
+.app-shell .stock-overview strong { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.app-shell .row-actions { flex-wrap: wrap; gap: 7px; }
+.app-shell .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.app-shell .product-card { min-width: 0; }
+.app-shell .product-card strong { overflow-wrap: anywhere; line-height: 1.5; }
+.app-shell .cart-line > div:first-child { min-width: 0; }
+.app-shell .cart-line strong { overflow-wrap: anywhere; line-height: 1.45; }
+
+/* Match native settings controls with the shared input/button components. */
+:is(.app-shell, .auth-page, .store-admin) :is(input:not([type=checkbox]):not([type=radio]), select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+:is(.app-shell, .auth-page, .store-admin) :is([data-slot=button], [data-slot=select-trigger]) {
+  min-height: 40px;
+}
+:is(.app-shell, .auth-page, .store-admin) :is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+:is(.app-shell, .auth-page, .store-admin) :is([data-slot=button], .nav-item, .menu-button, .profile, .sa-tabs button, .sa-tabs a, .commerce-admin button, .slide-studio button):focus-visible {
+  outline: 2px solid #2c9168;
+  outline-offset: 3px;
+}
+.app-shell .form-row,
+.store-admin .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+:is(.app-shell, .store-admin) .form-row > * { min-width: 0; }
+.app-shell .settings-form label,
+.store-admin .settings-form label { line-height: 1.6; }
+.app-shell .settings-form select,
+.store-admin .settings-form select { width: 100%; min-height: 42px; }
+
+.auth-page { min-height: 100dvh; padding: 80px 24px 40px; }
+.auth-page .auth-card { border-radius: 24px; padding: 32px; border-color: var(--admin-border); box-shadow: 0 22px 70px #164c3020; }
+.auth-page .auth-brand strong { font-size: 19px; letter-spacing: -.02em; }
+.auth-page .auth-brand small { font-size: 11px; }
+.auth-page .auth-card h1 { font-size: 27px; letter-spacing: -.035em; line-height: 1.25; }
+.auth-page .auth-card > p { color: var(--admin-muted); font-size: 13px; line-height: 1.75; }
+.auth-page .auth-card form { gap: 16px; }
+.auth-page .auth-card form > button { min-height: 46px; margin-top: 8px; }
+
+.store-admin { margin: 24px auto; padding: 28px; }
+.store-admin > div:first-child { flex-wrap: wrap; gap: 14px; font-size: 13px; }
+.store-admin h1 { font-size: clamp(30px, 3.5vw, 42px); line-height: 1.2; letter-spacing: -.045em; }
+.store-admin > p { color: var(--admin-muted); line-height: 1.75; font-size: 13px; }
+.store-admin .sa-tabs { grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 7px; padding: 7px; }
+.store-admin .sa-tabs :is(button, a) { display: grid; place-items: center; min-height: 48px; line-height: 1.45; cursor: pointer; }
+.store-admin .sa-tabs button:not(.selected):hover { background: #dfeae1; color: #234c34; }
+.store-admin .sa-eyebrow { letter-spacing: .18em; }
+.store-admin .sa-guide p { font-size: 12px; line-height: 1.7; }
+.store-admin .settings-form { border-color: var(--admin-border); }
+.store-admin .sa-title { flex-wrap: wrap; align-items: flex-start; }
+.store-admin .sa-title > div { min-width: 0; flex: 1 1 240px; }
+.store-admin .sa-title h2 { line-height: 1.4; }
+.store-admin .sa-title p { line-height: 1.7; }
+.store-admin .sa-filters > input { min-width: 0; flex: 1; }
+.store-admin .cm-toolbar > div { min-width: 0; }
+.store-admin .cm-toolbar > input { flex: 1 1 230px; min-width: 0; }
+.store-admin .cm-toolbar p { margin-top: 6px; line-height: 1.7; }
+.store-admin .cm-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.store-admin .cm-products .cm-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.store-admin .cm-products { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.store-admin .cm-product-summary { align-items: flex-start; }
+.store-admin .cm-product-summary > img { flex-shrink: 0; }
+.store-admin .cm-product-summary :is(h3, small, span) { overflow-wrap: anywhere; }
+.store-admin .cm-product-summary h3 { line-height: 1.45; }
+.store-admin .cm-actions { gap: 8px; }
+.store-admin .cm-form-actions { flex-wrap: wrap; gap: 10px; padding-top: 16px; border-top: 1px solid var(--admin-border); }
+.store-admin .cm-form-actions button:first-child { background: #21553d; color: #fff; border-color: #21553d; }
+.store-admin .cm-editor label { min-width: 0; line-height: 1.5; }
+.store-admin .cm-editor-head { flex-wrap: wrap; gap: 12px; }
+.store-admin .cm-editor-head > div { min-width: 0; }
+
+/* Dialogs are portaled outside the shell. :has keeps their polish admin-only. */
+body:has(:is(.app-shell, .auth-page, .store-admin)) [data-slot=dialog-content] {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-color: #d9e5dd;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 26px 90px #102d2633;
+}
+body:has(:is(.app-shell, .auth-page, .store-admin)) [data-slot=dialog-title] { padding-right: 24px; line-height: 1.4; }
+body:has(:is(.app-shell, .auth-page, .store-admin)) [data-slot=dialog-description] { line-height: 1.7; }
+body:has(:is(.app-shell, .auth-page, .store-admin)) [data-slot=dialog-footer] { flex-wrap: wrap; padding-top: 14px; margin-top: 4px; border-top: 1px solid #e2ebe5; }
+body:has(:is(.app-shell, .auth-page, .store-admin)) [data-slot=dialog-footer] button { min-height: 40px; white-space: normal; height: auto; line-height: 1.45; padding-block: 10px; }
+
+@media (max-width: 1180px) {
+  .app-shell .inventory-toolbar .search-box { max-width: none; }
+  .app-shell .inventory-actions { width: 100%; }
+  .app-shell .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .store-admin .cm-products { grid-template-columns: minmax(0, 1fr); }
+  .store-admin .cm-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 820px) {
+  .app-shell .content { padding: 20px 18px 32px; }
+  .app-shell .topbar { padding: 16px 18px; gap: 12px; }
+  .app-shell .workspace-status { padding-inline: 18px; }
+  .app-shell .stock-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-shell .inventory-toolbar .search-box { order: 3; flex-basis: 100%; max-width: none; }
+}
+@media (max-width: 600px) {
+  .store-admin { padding: 24px 16px; margin: 0; }
+  .store-admin .settings-form { padding: 20px 16px; border-radius: 16px; }
+  .store-admin .sa-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .store-admin .sa-tabs :is(button, a) { min-height: 50px; padding: 10px 8px; }
+  .store-admin .sa-title > div { flex-basis: auto; }
+  .store-admin .cm-toolbar > :is(input, select) { width: 100%; flex-basis: 100%; }
+  .store-admin .cm-editor { padding: 18px 14px; }
+  .store-admin .cm-form-actions > button { flex: 1 1 130px; }
+}
+@media (max-width: 560px) {
+  .app-shell .topbar { flex-wrap: wrap; padding: 14px 16px; gap: 12px; }
+  .app-shell .topbar-heading { flex: 1 1 0; }
+  .app-shell .topbar h1 { font-size: 20px; }
+  .app-shell .top-actions { width: 100%; margin: 0; justify-content: flex-end; gap: 8px; }
+  .app-shell .top-actions .new-sale { font-size: 12px; width: auto; height: 42px; padding-inline: 12px; }
+  .app-shell .content { padding: 16px 12px 28px; }
+  .app-shell .workspace-status { padding: 10px 16px; }
+  .app-shell .inventory-toolbar { padding: 18px 16px; }
+  .app-shell .inventory-actions button { flex: 1 1 130px; }
+  .app-shell .metric { padding: 17px 15px; }
+  .app-shell .metric > strong { font-size: 22px; }
+  .app-shell .product-grid { grid-template-columns: minmax(0, 1fr); }
+  .app-shell .stock-overview > div { padding: 15px 16px; }
+  .app-shell .form-row,
+  .store-admin .form-row,
+  .store-admin .cm-fields,
+  .store-admin .cm-products .cm-fields { grid-template-columns: minmax(0, 1fr); }
+  .auth-page { padding: 84px 16px 32px; }
+  .auth-page .auth-card { padding: 26px 22px; border-radius: 20px; }
+  .auth-page .auth-card input { font-size: 16px; }
+  body:has(:is(.app-shell, .auth-page, .store-admin)) [data-slot=dialog-content] { padding: 22px 18px; border-radius: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .search-box { transition: none; }
+}
