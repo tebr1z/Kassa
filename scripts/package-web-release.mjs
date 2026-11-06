@@ -1,0 +1,28 @@
+import {mkdir,cp,readFile,writeFile,readdir,stat} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {createReadStream} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import path from 'node:path';
+if(process.platform!=='linux')throw new Error('A Linux server release must be built on Linux, not copied from a Windows build.');
+const commit=process.env.RELEASE_COMMIT;
+if(!/^[a-f0-9]{40}$/.test(commit||''))throw new Error('RELEASE_COMMIT must be the verified Git commit SHA.');
+const root=path.resolve('web-release');await mkdir(root,{recursive:true});
+const output=path.join(root,commit);await mkdir(output,{recursive:false});
+await stat('.next/standalone/server.js');
+await cp('.next/standalone',output,{recursive:true});
+await cp('public',path.join(output,'public'),{recursive:true});
+await cp('.next/static',path.join(output,'.next/static'),{recursive:true});
+await cp('drizzle',path.join(output,'drizzle'),{recursive:true});
+await mkdir(path.join(output,'scripts'),{recursive:true});
+await cp('scripts/migrate-postgres.mjs',path.join(output,'scripts/migrate-postgres.mjs'));
+// The migration CLI uses dotenv; server-only tracing may not include this dependency.
+await cp('node_modules/dotenv',path.join(output,'node_modules/dotenv'),{recursive:true});
+const entries=await readdir(output);
+if(entries.some(name=>/^(?:\.env|\.private|\.local|\.public-media|media$|desktop-release$|outputs$|work$)/.test(name)))throw new Error('Private/runtime state must not be packaged.');
+const pkg=JSON.parse(await readFile('package.json','utf8'));
+await writeFile(path.join(output,'release.json'),JSON.stringify({commit,version:pkg.version,platform:process.platform,arch:process.arch,builtAt:new Date().toISOString()},null,2));
+const file='restamarket-web-'+commit+'.tar.gz';
+execFileSync('tar',['-czf',path.join(root,file),'-C',output,'.'],{stdio:'inherit'});
+const hash=createHash('sha256');for await(const chunk of createReadStream(path.join(root,file)))hash.update(chunk);
+await writeFile(path.join(root,file+'.sha256'),hash.digest('hex')+'  '+file+'\n');
+console.log('Linux web release packaged: '+file+' (no database, environment file or private setup key).');
