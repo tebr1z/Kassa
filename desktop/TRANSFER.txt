@@ -1,0 +1,33 @@
+RESTAMARKET — BAŞQA WINDOWS KOMPÜTERƏ KÖÇÜRMƏ
+
+1. Köhnə kompüterdə bütün satışları tamamlayın və proqramı bağlayın.
+   Köçürmə qovluğunun yaradıldığı tarixdən sonrakı əməliyyatlar bu nüsxədə yoxdur.
+   Son əməliyyatlardan sonra RestaMarket → Ehtiyat nüsxə yarat ilə yeni .birkassa
+   yaradıb bu qovluqdakı RestaMarket-data.birkassa faylını onunla əvəz edin.
+2. Bu qovluğun HAMISINI şəxsi USB-yə və ya yeni kompüterə köçürün.
+3. RestaMarket-Setup-0.5.0.exe proqramın QURAŞDIRICISIDIR. Onu açıb quraşdırın.
+   PostgreSQL paketə daxildir; ayrıca Node.js və PostgreSQL quraşdırmayın.
+4. Quraşdırıldıqdan sonra masaüstündəki RestaMarket qısayolunu açın.
+   İlk boş kompüterdə yeni şifrə yaratmadan menyudan
+   RestaMarket → Ehtiyatdan bərpa et → RestaMarket-data.birkassa seçin.
+   Artıq məlumat olan kompüterdə bərpa üçün əvvəl administrator girişi lazımdır.
+5. Proqram yenidən açılacaq. Köhnə kompüterdəki administrator ŞİFRƏSİ ilə daxil olun.
+   Köhnə hesabda yalnız PIN varsa, ekranda PIN-i təsdiqləyib yeni güclü şifrəni
+   özünüz yaradın. Şifrələr ehtiyatda heşlənmiş formada saxlanır.
+6. Məhsul sayı, stok, son satış, çek, variantlar və şəkilləri yoxlayın.
+   Veb sinxronizasiya açarı təhlükəsizlik üçün köçürülmür: onu ayrıca yenidən qoşun.
+   Eyni mağazanın iki nüsxəsini paralel kassa kimi istifadə etməyin.
+
+MƏLUMAT HARADADIR?
+- .exe yalnız proqramdır, mağaza məlumatlarını özündə saxlamır.
+- RestaMarket-data.birkassa: baza, məhsullar, stok, satışlar, seçimlər və
+  kompüterə əvvəlcədən endirilmiş şəkillər. İnternetdə qalan şəkillər arxivə daxil deyil.
+- Canlı məlumat qovluğu: %APPDATA%\BirKassa\local-data
+  Köhnə məlumatları itirməmək üçün bu texniki yolun adı dəyişdirilməyib.
+- win-unpacked içindəki RestaMarket.exe təkbaşına köçürülmür: onun resursları da lazımdır.
+  Köçürmə üçün yuxarıdakı Setup + .birkassa üsulundan istifadə edin.
+- .blockmap, .nsis.7z, node_modules və layihənin mənbə kodunu aparmaq lazım deyil.
+
+VACİB: .birkassa şifrələnmiş arxiv deyil; müştəri və maliyyə məlumatı daşıyır.
+Yalnız şəxsi, qorunan diskdə saxlayın; ictimai linkə yükləməyin.
+Yeni kompüter tam yoxlanana qədər köhnə bazanı və ehtiyatı SİLMƏYİN.

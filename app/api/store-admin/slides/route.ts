@@ -1,3 +1,4 @@
+import {withAdminSession} from '@/lib/require-admin';
 import {storeDb} from "@/lib/store-db";
 import {z} from "zod";
 export const dynamic="force-dynamic";
@@ -7,7 +8,7 @@ const schema=z.object({revision:z.number().int().nonnegative(),slides:z.array(z.
  badge:z.string().trim().max(50),description:z.string().trim().max(350),active:z.boolean(),
 })).max(30).refine(slides=>new Set(slides.map(s=>s.id)).size===slides.length&&slides.every(s=>s.productId||s.heading))});
 
-export async function GET(){
+async function handleGET(){
  const sql=storeDb();
  try{
   const [config]=await sql.unsafe("select slides_revision from storefront_config where id=1");
@@ -17,7 +18,7 @@ export async function GET(){
  }catch{return Response.json({error:"Slaydlar yüklənmədi."},{status:503});}finally{await sql.end();}
 }
 
-export async function PUT(request:Request){
+async function handlePUT(request:Request){
  const parsed=schema.safeParse(await request.json().catch(()=>null));
  if(!parsed.success)return Response.json({error:"Slaydları yoxlayın. Kampaniya slaydında başlıq yazın. Maksimum 30 slayd."},{status:400});
  const sql=storeDb();
@@ -38,3 +39,6 @@ export async function PUT(request:Request){
   return Response.json({revision:result});
  }catch{return Response.json({error:"Slaydlar saxlanmadı. Seçilmiş məhsulları yoxlayın."},{status:400});}finally{await sql.end();}
 }
+
+export const GET=withAdminSession(handleGET);
+export const PUT=withAdminSession(handlePUT);

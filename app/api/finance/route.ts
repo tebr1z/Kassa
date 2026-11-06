@@ -1,31 +1,59 @@
-import { NextResponse } from "next/server";
-import { logSystemError } from "@/lib/log-error";
-import postgres from "postgres";
+import {withAdminSession} from '@/lib/require-admin';
+import {storeDb} from '@/lib/store-db';
+import {createHash} from 'node:crypto';
+import {z} from 'zod';
+export const dynamic='force-dynamic';
+const date=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>!Number.isNaN(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value);
+const schema=z.object({action:z.enum(['transaction','payroll','supplier_payment']),type:z.enum(['income','expense']).default('expense'),category:z.string().trim().max(100).default('Digər'),description:z.string().trim().max(500).default(''),account:z.enum(['cash','bank']).default('cash'),amount:z.coerce.number().finite().positive().max(100000000),supplierId:z.string().uuid().optional(),employeeId:z.string().uuid().optional(),branchId:z.string().uuid().optional(),payee:z.string().trim().max(200).default(''),note:z.string().trim().max(1000).default(''),wagePeriod:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),occurredAt:date.optional(),requestKey:z.string().uuid().optional()});
+async function get(request:Request){
+ const url=new URL(request.url),today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Baku',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const from=url.searchParams.get('from')||today.slice(0,7)+'-01',to=url.searchParams.get('to')||today,branch=url.searchParams.get('branch')||null;
+ if(!date.safeParse(from).success||!date.safeParse(to).success||from>to||(Date.parse(to)-Date.parse(from))/86400000>366||(branch&&!z.string().uuid().safeParse(branch).success))return Response.json({error:'Düzgün tarix aralığı seçin (ən çoxu 366 gün).'},{status:400});
+ const sql=storeDb();try{
+ const [totals]=await sql.unsafe("select coalesce(sum(s.total),0) revenue,coalesce(sum(costs.amount),0) cogs,count(*) receipts from sales s join cashier_shifts cs on cs.id=s.shift_id left join lateral(select coalesce(sum(si.cost_snapshot*si.quantity),0) amount from sale_items si where si.sale_id=s.id) costs on true where s.status='completed' and (s.created_at at time zone 'Asia/Baku')::date between $1::date and $2::date and ($3::uuid is null or cs.branch_id=$3)",[from,to,branch]);
+ const [cash]=await sql.unsafe("select coalesce(sum(amount) filter(where type='expense'),0) expenses,coalesce(sum(amount) filter(where type='income'),0) other_income,coalesce(sum(amount) filter(where type='expense' and (employee_id is not null or category='Əməkhaqqı')),0) payroll from finance_transactions where (occurred_at at time zone 'Asia/Baku')::date between $1::date and $2::date and ($3::uuid is null or branch_id=$3)",[from,to,branch]);
+ const sales=await sql.unsafe("select s.id,s.receipt_no,s.created_at,s.total,u.full_name cashier,b.name branch,coalesce(costs.amount,0) cost,coalesce(wh.names,'') warehouse,coalesce(lines.items,'[]'::json) items from sales s join users u on u.id=s.cashier_id join cashier_shifts cs on cs.id=s.shift_id join branches b on b.id=cs.branch_id left join lateral(select sum(cost_snapshot*quantity) amount from sale_items where sale_id=s.id) costs on true left join lateral(select string_agg(distinct w.name,', ') names from stock_movements sm join warehouses w on w.id=sm.warehouse_id where sm.reference_id=s.id and sm.type='sale') wh on true left join lateral(select json_agg(json_build_object('name',coalesce(si.product_name_snapshot,p.name),'option',si.option_snapshot,'quantity',si.quantity,'salePrice',si.unit_price,'costPrice',si.cost_snapshot) order by si.id) items from sale_items si join products p on p.id=si.product_id where si.sale_id=s.id) lines on true where s.status='completed' and (s.created_at at time zone 'Asia/Baku')::date between $1::date and $2::date and ($3::uuid is null or cs.branch_id=$3) order by s.created_at desc limit 100",[from,to,branch]);
+ const recent=await sql.unsafe("select f.id,f.type,f.category,f.description,f.account,f.amount,f.occurred_at,f.payee,f.note,f.wage_period,b.name branch,u.full_name employee from finance_transactions f left join branches b on b.id=f.branch_id left join users u on u.id=f.employee_id where (f.occurred_at at time zone 'Asia/Baku')::date between $1::date and $2::date and ($3::uuid is null or f.branch_id=$3) order by f.occurred_at desc,f.created_at desc limit 200",[from,to,branch]);
+ const categories=await sql.unsafe("select category,sum(amount) amount from finance_transactions where type='expense' and (occurred_at at time zone 'Asia/Baku')::date between $1::date and $2::date and ($3::uuid is null or branch_id=$3) group by category order by amount desc",[from,to,branch]);
+ const branches=await sql.unsafe('select id,name from branches where is_active=true order by name');
+ const employees=await sql.unsafe('select u.id,u.full_name,u.salary,u.branch_id,b.name branch from users u left join branches b on b.id=u.branch_id where u.is_active=true order by u.full_name');
+ const debts=await sql.unsafe("select su.id,su.name,coalesce((select sum(total) from purchase_orders where supplier_id=su.id and status='received'),0)-coalesce((select sum(amount) from supplier_payments where supplier_id=su.id),0) debt from suppliers su where su.is_active=true order by su.name");
+ const revenue=Number(totals.revenue),cogs=Number(totals.cogs),expenses=Number(cash.expenses),otherIncome=Number(cash.other_income);
+ return Response.json({range:{from,to,branch},metrics:{revenue,costOfGoods:cogs,grossProfit:revenue-cogs,expenses,otherIncome,payroll:Number(cash.payroll),netProfit:revenue-cogs+otherIncome-expenses,receipts:Number(totals.receipts)},sales:sales.map(row=>({...row,total:Number(row.total),cost:Number(row.cost),profit:Number(row.total)-Number(row.cost)})),recent:recent.map(row=>({...row,amount:Number(row.amount)})),categories:categories.map(row=>({...row,amount:Number(row.amount)})),branches,employees:employees.map(row=>({...row,salary:Number(row.salary||0)})),debts:debts.map(row=>({...row,debt:Number(row.debt)}))});
+ }catch(error){console.error('finance.get',error);return Response.json({error:'Maliyyə məlumatları yüklənmədi.'},{status:503});}finally{await sql.end();}
+}
+async function post(request:Request){
+ const parsed=schema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return Response.json({error:'Məbləğ, tarix və əməliyyat məlumatlarını yoxlayın.'},{status:400});
+ const body=parsed.data,sql=storeDb();try{
+ const result=await sql.begin(async tx=>{
+ const actor=request.headers.get('x-birkassa-user-id');
+ if(body.action==='supplier_payment'){
+  const fingerprint=createHash('sha256').update(JSON.stringify({...body,requestKey:undefined})).digest('hex');
+  if(body.requestKey){await tx.unsafe('select pg_advisory_xact_lock(hashtext($1))',[body.requestKey]);const [prior]=await tx.unsafe('select id,request_fingerprint from supplier_payments where request_key=$1',[body.requestKey]);if(prior){if(prior.request_fingerprint!==fingerprint)throw Error('Bu açar başqa ödənişdə istifadə olunub.');return {ok:true,id:prior.id,replayed:true};}}
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-const connection=()=>{if(!process.env.DATABASE_URL)throw new Error("DATABASE_URL təyin edilməyib");return postgres(process.env.DATABASE_URL,{max:1,prepare:false,connect_timeout:10})};
-
-export async function GET(){const sql=connection();try{
-  const [metrics]=await sql.unsafe(`select
-    coalesce((select sum(cs.opening_cash) from cashier_shifts cs where cs.closed_at is null),0)
-      + coalesce((select sum(p.amount) from payments p join sales s on s.id=p.sale_id where s.status='completed' and p.method='cash'),0)
-      + coalesce((select sum(case when type='income' then amount else -amount end) from finance_transactions where account='cash'),0)
-      - coalesce((select sum(amount) from supplier_payments where account='cash'),0) as cash_balance,
-    coalesce((select sum(total) from purchase_orders where status='received'),0)-coalesce((select sum(amount) from supplier_payments),0) as supplier_debt,
-    coalesce((select sum(total) from sales where status='completed' and date_trunc('month',created_at at time zone 'Asia/Baku')=date_trunc('month',now() at time zone 'Asia/Baku')),0)
-      + coalesce((select sum(case when type='income' then amount else -amount end) from finance_transactions where date_trunc('month',occurred_at at time zone 'Asia/Baku')=date_trunc('month',now() at time zone 'Asia/Baku')),0)
-      - coalesce((select sum(amount) from supplier_payments where date_trunc('month',paid_at at time zone 'Asia/Baku')=date_trunc('month',now() at time zone 'Asia/Baku')),0) as monthly_flow`);
-  const debts=await sql.unsafe(`select s.id,s.name,coalesce(po.total,0)-coalesce(sp.paid,0) as debt from suppliers s left join (select supplier_id,sum(total) total from purchase_orders where status='received' group by supplier_id) po on po.supplier_id=s.id left join (select supplier_id,sum(amount) paid from supplier_payments group by supplier_id) sp on sp.supplier_id=s.id where s.is_active=true order by debt desc,s.name`);
-  const recent=await sql.unsafe(`select * from (
-    select s.id,s.created_at as occurred_at,'income' as type,'POS satışı '||s.receipt_no as description,coalesce(p.method,'cash') as account,s.total as amount from sales s left join lateral (select method from payments where sale_id=s.id limit 1) p on true where s.status='completed'
-    union all select id,occurred_at,type,description,account,amount from finance_transactions
-    union all select sp.id,sp.paid_at,'expense','Təchizatçı ödənişi — '||su.name,sp.account,sp.amount from supplier_payments sp join suppliers su on su.id=sp.supplier_id
-  ) movements order by occurred_at desc limit 30`);
-  return NextResponse.json({metrics:{cashBalance:Number(metrics.cash_balance),supplierDebt:Math.max(0,Number(metrics.supplier_debt)),monthlyFlow:Number(metrics.monthly_flow)},debts:debts.map(r=>({id:r.id,name:r.name,debt:Math.max(0,Number(r.debt))})),recent:recent.map(r=>({id:r.id,occurredAt:r.occurred_at,type:r.type,description:r.description,account:r.account,amount:Number(r.amount)}))});
-}catch(error){console.error("finance.get",error);void logSystemError("finance.get", error);return NextResponse.json({error:"Maliyyə məlumatları yüklənmədi"},{status:500})}finally{await sql.end({timeout:2})}}
-
-export async function POST(request:Request){const sql=connection();try{const body=await request.json() as {action?:string;type?:string;category?:string;description?:string;account?:string;amount?:number|string;supplierId?:string;note?:string;occurredAt?:string};const amount=Number(body.amount);if(!Number.isFinite(amount)||amount<=0)return NextResponse.json({error:"Məbləği düzgün yazın"},{status:400});const account=body.account==='bank'?'bank':'cash';const result=await sql.begin(async tx=>{const [user]=await tx.unsafe("select id from users where id=$1 and is_active=true",[request.headers.get("x-birkassa-user-id")]);if(!user)throw Object.assign(new Error("İstifadəçi sessiyası tapılmadı"),{statusCode:401});if(body.action==='supplier_payment'){if(!body.supplierId)throw Object.assign(new Error("Təchizatçını seçin"),{statusCode:400});const [supplier]=await tx.unsafe(`select s.id,s.name,coalesce((select sum(total) from purchase_orders where supplier_id=s.id and status='received'),0)-coalesce((select sum(amount) from supplier_payments where supplier_id=s.id),0) debt from suppliers s where s.id=$1 for update`,[body.supplierId]);if(!supplier)throw Object.assign(new Error("Təchizatçı tapılmadı"),{statusCode:404});if(amount>Number(supplier.debt)+0.001)throw Object.assign(new Error(`Ödəniş borcdan çox ola bilməz (${Number(supplier.debt).toFixed(2)} ₼)`),{statusCode:409});const [row]=await tx.unsafe("insert into supplier_payments (supplier_id,amount,account,note,created_by) values ($1,$2,$3,$4,$5) returning id",[supplier.id,amount,account,body.note||null,user.id]);await tx.unsafe("insert into audit_logs (user_id,action,entity_type,entity_id,after_json) values ($1,'finance.supplier_payment','supplier_payment',$2,$3)",[user.id,row.id,JSON.stringify({supplierId:supplier.id,amount,account})]);return row}
-    const type=body.type==='expense'?'expense':'income',category=String(body.category||'Digər').trim(),description=String(body.description||'').trim();if(description.length<2)throw Object.assign(new Error("Açıqlama yazın"),{statusCode:400});const [row]=await tx.unsafe("insert into finance_transactions (type,category,description,account,amount,created_by,occurred_at) values ($1,$2,$3,$4,$5,$6,coalesce($7::timestamptz,now())) returning id",[type,category,description,account,amount,user.id,body.occurredAt||null]);await tx.unsafe("insert into audit_logs (user_id,action,entity_type,entity_id,after_json) values ($1,'finance.transaction_created','finance_transaction',$2,$3)",[user.id,row.id,JSON.stringify({type,category,description,account,amount})]);return row});return NextResponse.json(result,{status:201})
-}catch(error:any){console.error("finance.post",error);void logSystemError("finance.post", error);return NextResponse.json({error:error?.message||"Maliyyə əməliyyatı saxlanmadı"},{status:error?.statusCode||500})}finally{await sql.end({timeout:2})}}
+  if(!body.supplierId)throw Error('Təchizatçı seçin.');
+  const [supplier]=await tx.unsafe("select id from suppliers where id=$1 for update",[body.supplierId]);if(!supplier)throw Error('Təchizatçı tapılmadı.');
+  const [balance]=await tx.unsafe("select coalesce((select sum(total) from purchase_orders where supplier_id=$1 and status='received'),0)-coalesce((select sum(amount) from supplier_payments where supplier_id=$1),0) debt",[body.supplierId]);
+  if(body.amount>Number(balance.debt))throw Error('Ödəniş borcdan çox ola bilməz.');
+  const [row]=await tx.unsafe('insert into supplier_payments(supplier_id,amount,account,note,created_by,request_key,request_fingerprint) values($1,$2,$3,$4,$5,$6,$7) returning id',[body.supplierId,body.amount,body.account,body.note,actor,body.requestKey||null,fingerprint]);await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,after_json) values($1,'finance.supplier_payment','supplier_payment',$2,$3)",[actor,row.id,JSON.stringify({supplierId:body.supplierId,amount:body.amount})]);return {ok:true,id:row.id};
+ }
+ const fingerprint=createHash('sha256').update(JSON.stringify({...body,requestKey:undefined})).digest('hex');
+ if(body.requestKey){
+  await tx.unsafe('select pg_advisory_xact_lock(hashtext($1))',[body.requestKey]);
+  const [prior]=await tx.unsafe('select id,request_fingerprint from finance_transactions where request_key=$1',[body.requestKey]);
+  if(prior){if(prior.request_fingerprint!==fingerprint)throw Error('Bu sorğu açarı başqa əməliyyatda istifadə olunub.');return {ok:true,id:prior.id,replayed:true};}
+ }
+ let branchId=body.branchId||null,employeeId:string|null=null,payee=body.payee,description=body.description,category=body.category,type=body.type;
+ if(body.action==='payroll'){
+  if(!body.employeeId||!body.wagePeriod)throw Error('İşçi və maaş ayını seçin.');
+  const [employee]=await tx.unsafe('select id,full_name,branch_id from users where id=$1 and is_active=true for update',[body.employeeId]);if(!employee)throw Error('İşçi tapılmadı.');
+  employeeId=employee.id;branchId=employee.branch_id;payee=employee.full_name;category='Əməkhaqqı';type='expense';description='Əməkhaqqı — '+employee.full_name+' ('+body.wagePeriod+')';
+ }else if(description.length<2||category.length<2)throw Error('Xərcin kateqoriyasını və nə üçün ödəniş edildiyini yazın.');
+ if(branchId){const [branch]=await tx.unsafe('select id from branches where id=$1 and is_active=true',[branchId]);if(!branch)throw Error('Mağaza tapılmadı.');}
+ const [row]=await tx.unsafe("insert into finance_transactions(type,category,description,account,amount,created_by,occurred_at,branch_id,employee_id,payee,note,wage_period,request_key,request_fingerprint) values($1,$2,$3,$4,$5,$6,coalesce(($7::date+time '12:00') at time zone 'Asia/Baku',now()),$8,$9,$10,$11,$12,$13,$14) returning id",[type,category,description,body.account,body.amount,actor,body.occurredAt||null,branchId,employeeId,payee||null,body.note||null,body.wagePeriod||null,body.requestKey||null,fingerprint]);
+ await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,after_json) values($1,$2,'finance_transaction',$3,$4)",[actor,body.action==='payroll'?'finance.payroll_paid':'finance.transaction_created',row.id,JSON.stringify({type,category,description,amount:body.amount,branchId,employeeId})]);return {ok:true,id:row.id};
+ });return Response.json(result,{status:201});
+ }catch(error){return Response.json({error:error instanceof Error&&!('code'in error)?error.message:'Ödəniş saxlanmadı.'},{status:409});}finally{await sql.end();}
+}
+export const GET=withAdminSession(get);
+export const POST=withAdminSession(post);

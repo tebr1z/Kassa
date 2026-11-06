@@ -9,7 +9,7 @@ const checkoutPayloadSchema = z.object({
   name: z.string().min(2).max(100),
   phone: z.string().min(7).max(25),
   note: z.string().max(1000),
-  items: z.array(z.object({ id: z.string().uuid(), quantity: z.number().int().min(1).max(100) })).min(1).max(50),
+  items: z.array(z.object({ id: z.string().uuid(), optionId:z.string().uuid().nullable().optional(), quantity: z.number().int().min(1).max(100) })).min(1).max(50),
 });
 
 const checkoutAttemptSchema = z.object({

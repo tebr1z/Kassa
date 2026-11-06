@@ -2,9 +2,15 @@ import { createHash } from "node:crypto";
 import { logSystemError } from "./lib/log-error";
 import { NextResponse, type NextRequest } from "next/server";
 import postgres from "postgres";
+import {secureAdminRequest} from "./lib/admin-security";
+import {canUseStaffApi,staffRoles} from './lib/staff-access';
 
 type Rule={prefix:string;read:string[];write:string[]};
 const rules:Rule[]=[
+  {prefix:'/api/locations',read:['admin'],write:['admin']},
+  {prefix:"/api/desktop-media",read:["admin","manager","cashier","warehouse","accountant"],write:[]},
+  {prefix:"/api/desktop-link",read:["admin"],write:["admin"]},
+  {prefix:"/api/desktop-inbox",read:["admin","manager","cashier"],write:["admin","manager","cashier"]},
   {prefix:"/api/online-orders",read:["admin","manager","online_manager","online_assistant"],write:["admin","manager","online_manager","online_assistant"]},
   {prefix:"/api/store-admin",read:["admin"],write:["admin"]},
   {prefix:"/api/dashboard",read:["admin","manager","cashier","warehouse","accountant"],write:[]},
@@ -35,10 +41,21 @@ function forward(request:NextRequest,user?:{id:string;role:string}){
  if(user){headers.set("x-birkassa-user-id",user.id);headers.set("x-birkassa-role",user.role);}
  const response=NextResponse.next({request:{headers}});
  response.headers.set("Cache-Control","private, no-store");
+ if(!request.nextUrl.pathname.startsWith('/api/catalog-media/'))response.headers.set("X-Robots-Tag","noindex, nofollow, noarchive");
  response.headers.set("X-Content-Type-Options","nosniff");
+ response.headers.set("X-Frame-Options","DENY");
+ response.headers.set("Referrer-Policy","same-origin");
+ response.headers.set("Content-Security-Policy","frame-ancestors 'none'; base-uri 'self'; object-src 'none'");
  return response;
 }
 export async function proxy(request:NextRequest){
+ const path=request.nextUrl.pathname;
+ const adminPage=path==='/admin'||path.startsWith('/admin/');
+ if(adminPage&&!secureAdminRequest(request))return new NextResponse('İdarəetmə üçün HTTPS bağlantısı tələb olunur.',{status:426});
+ if(path==='/admin')return forward(request);
+ if(["/api/desktop-feed","/api/desktop-poll","/api/desktop-bridge","/api/desktop-image","/api/desktop-lock"].includes(request.nextUrl.pathname))return forward(request);
+ if(request.nextUrl.pathname.startsWith('/api/desktop-media/'))return forward(request);
+ if(request.nextUrl.pathname.startsWith('/api/catalog-media/'))return forward(request);
  if(!["GET","HEAD","OPTIONS"].includes(request.method)){
   const origin=request.headers.get("origin");
   const ownOrigin=request.nextUrl.protocol+"//"+request.headers.get("host");
@@ -48,21 +65,25 @@ export async function proxy(request:NextRequest){
  }
   if(["/api/customer-account","/api/my-orders","/api/contact","/api/coupon","/api/account-chat","/api/places"].includes(request.nextUrl.pathname))return forward(request);
   if(request.nextUrl.pathname==="/api/catalog"||request.nextUrl.pathname==="/api/customer-orders")return forward(request);
-  if(request.nextUrl.pathname==="/api/auth")return forward(request);
+  if(request.nextUrl.pathname==="/api/auth")return secureAdminRequest(request)?forward(request):NextResponse.json({error:'Administrator girişi üçün HTTPS tələb olunur.'},{status:426});
   const rule=rules.find(item=>request.nextUrl.pathname===item.prefix||request.nextUrl.pathname.startsWith(item.prefix+"/"));
-  if(!rule)return NextResponse.json({error:"API marşrutu üçün icazə qaydası yoxdur"},{status:403});
+  if(!rule&&!adminPage)return NextResponse.json({error:"API marşrutu üçün icazə qaydası yoxdur"},{status:403});
+  if(!secureAdminRequest(request))return NextResponse.json({error:'İdarəetmə üçün HTTPS tələb olunur.'},{status:426});
+  const unauthenticated=()=>adminPage?NextResponse.redirect(new URL('/admin',request.url)):NextResponse.json({error:'Sistemə administrator şifrəsi ilə daxil olun.'},{status:401});
   const token=request.cookies.get("birkassa_session")?.value;
-  if(!token)return NextResponse.json({error:"Sistemə daxil olmaq lazımdır"},{status:401});
+  if(!token)return unauthenticated();
   if(!process.env.DATABASE_URL)return NextResponse.json({error:"Verilənlər bazası bağlantısı yoxdur"},{status:500});
   const sql=postgres(process.env.DATABASE_URL,{max:1,prepare:false,connect_timeout:10});
   try{
     const tokenHash=createHash("sha256").update(token).digest("hex");
-    const [session]=await sql.unsafe("select u.id,u.role from auth_sessions s join users u on u.id=s.user_id where s.token_hash=$1 and s.expires_at>now() and u.is_active=true",[tokenHash]);
-    if(!session)return NextResponse.json({error:"Sessiyanın vaxtı bitib. Yenidən daxil olun"},{status:401});
-    const roles=request.method==="GET"?rule.read:rule.write;
+    const [session]=await sql.unsafe("select u.id,u.role,s.authentication_method,s.last_seen_at>now()-interval '10 minutes' active from auth_sessions s join users u on u.id=s.user_id where s.token_hash=$1 and s.expires_at>now() and u.is_active=true and u.password_hash is not null",[tokenHash]);
+    if(!session||!staffRoles.includes(session.role)||session.authentication_method!=='password'||!session.active)return unauthenticated();
+    if(adminPage&&session.role!=='admin')return NextResponse.redirect(new URL('/admin',request.url));
+    if(!adminPage&&!canUseStaffApi(session.role,path,request.method))return NextResponse.json({error:'Bu bölmə üçün səlahiyyətiniz yoxdur.'},{status:403});
+    const roles=rule?(["GET","HEAD"].includes(request.method)?rule.read:rule.write):['admin'];
     if(!roles.includes(session.role))return NextResponse.json({error:"Bu əməliyyat üçün səlahiyyətiniz yoxdur"},{status:403});
     return forward(request,{id:session.id,role:session.role});
   }catch(error){console.error("permission.proxy",error);void logSystemError("permission.proxy", error);return NextResponse.json({error:"İcazə yoxlanmadı"},{status:500})}finally{await sql.end({timeout:2})}
 }
 
-export const config={matcher:["/api/:path*"]};
+export const config={matcher:["/api/:path*","/admin/:path*"]};

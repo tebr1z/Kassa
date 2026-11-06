@@ -1,0 +1,8 @@
+@media print {
+  .language-bar { display:none!important; }
+  .print-sheet.invoice-receipt { position:absolute; transform:none!important; width:190mm!important; padding:0; }
+  .invoice-dialog { position:static!important; max-width:none!important; max-height:none!important; overflow:visible!important; transform:none!important; }
+  .print-preview:has(.invoice-receipt) { height:auto!important; overflow:visible!important; display:block!important; }
+  .invoice-receipt tr { break-inside:avoid; }
+  .invoice-receipt thead { display:table-header-group; }
+}

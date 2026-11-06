@@ -1,7 +1,9 @@
 export type CustomerCart = Record<string, number>;
+export const cartKey=(productId:string,optionId?:string|null)=>optionId?`${productId}:${optionId}`:productId;
+export function parseCartKey(key:string){const [productId,optionId]=key.split(":");return {productId,optionId:optionId||null};}
 export function sanitizeCart(value: unknown): CustomerCart {
  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
- return Object.fromEntries(Object.entries(value).filter(([id, qty]) => /^[0-9a-f-]{36}$/i.test(id) && typeof qty === "number" && Number.isInteger(qty) && qty > 0 && qty <= 100));
+ return Object.fromEntries(Object.entries(value).filter(([id, qty]) => /^[0-9a-f-]{36}(?::[0-9a-f-]{36})?$/i.test(id) && typeof qty === "number" && Number.isInteger(qty) && qty > 0 && qty <= 100));
 }
 export function readCart(): CustomerCart {
  try { return sanitizeCart(JSON.parse(sessionStorage.getItem("customer-cart") || "{}")); } catch { return {}; }

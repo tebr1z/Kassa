@@ -1,10 +1,11 @@
+import {optionSnapshot} from "@/lib/product-options";
 import {storeDb} from "@/lib/store-db";
 import {customerAccount} from "@/lib/customer-session";
 import {z} from "zod";
 import {sellingPrice,couponDiscount} from "@/lib/commerce";
 import {notifyCatalogOrder,vexiraSettings,whatsappPhone} from "@/lib/vexira";
 export const dynamic="force-dynamic";
-const schema=z.object({requestKey:z.string().uuid(),expectedTotal:z.number().min(0).optional(),coupon:z.string().trim().toUpperCase().max(30).default(""),fulfillment:z.enum(["pickup","delivery"]),address:z.string().max(500),name:z.string().trim().min(2).max(100),phone:z.string().trim().regex(/^[+0-9 ()-]{7,25}$/),note:z.string().max(1000),items:z.array(z.object({id:z.string().uuid(),quantity:z.number().int().min(1).max(100)})).min(1).max(50)});
+const schema=z.object({requestKey:z.string().uuid(),expectedTotal:z.number().min(0).optional(),coupon:z.string().trim().toUpperCase().max(30).default(""),fulfillment:z.enum(["pickup","delivery"]),address:z.string().max(500),name:z.string().trim().min(2).max(100),phone:z.string().trim().regex(/^[+0-9 ()-]{7,25}$/).refine(value=>value.replace(/\D/g,'').length>=7&&value.replace(/\D/g,'').length<=15),note:z.string().max(1000),items:z.array(z.object({id:z.string().uuid(),optionId:z.string().uuid().nullable().optional(),quantity:z.number().int().min(1).max(100)})).min(1).max(50)});
 function checkoutRejection(message:string){return Object.assign(new Error(message),{statusCode:400});}
 export async function POST(request:Request){
  if(Number(request.headers.get("content-length")||0)>20000)return Response.json({error:"Sorğu çox böyükdür"},{status:413});
@@ -25,15 +26,19 @@ export async function POST(request:Request){
   await tx.unsafe("select pg_advisory_xact_lock(hashtext($1))",[account.id]);
   const [recent]=await tx.unsafe("select count(*)::int n from sales_orders o where o.source='catalog' and o.account_id=$1 and o.created_at>now()-interval '10 minutes'",[account.id]);
   if(recent.n>=3)throw checkoutRejection("Bir neçə dəqiqə sonra yenidən cəhd edin.");
-  const grouped=new Map<string,number>();for(const item of b.items)grouped.set(item.id,(grouped.get(item.id)||0)+item.quantity);
+  const grouped=new Map<string,number>();for(const item of b.items)grouped.set(item.id+":"+(item.optionId||""),(grouped.get(item.id+":"+(item.optionId||""))||0)+item.quantity);
   const lines=[];
-  for(const [id,quantity] of [...grouped].sort()){
+  for(const [key,quantity] of [...grouped].sort()){
+   const [id,optionValue]=key.split(":");const optionId=optionValue||null;
    const [p]=await tx.unsafe("select id,name,sale_price,discount_price from products where id=$1 and is_active=true for share",[id]);
    if(!p)throw checkoutRejection("Məhsul artıq mövcud deyil.");
-   const [stock]=await tx.unsafe("select coalesce(sum(quantity),0) n from stock_movements where product_id=$1",[id]);
-   if(quantity>100||Number(stock.n)<quantity)throw checkoutRejection("Seçilmiş miqdar üçün mövcudluq təsdiqlənmədi. Səbəti yeniləyin.");
-   const price=sellingPrice({sale_price:p.sale_price,discount_price:p.discount_price});
-   lines.push({id,name:String(p.name),quantity,price,total:Math.round(quantity*price*100)/100});
+   if(quantity>100)throw checkoutRejection("Seçilmiş miqdar üçün mövcudluq təsdiqlənmədi. Səbəti yeniləyin.");
+   const [option]=optionId?await tx.unsafe("select id,label,price,attributes from product_options where id=$1 and product_id=$2 and is_active=true",[optionId,id]):[];
+   const [options]=await tx.unsafe("select count(*) n from product_options where product_id=$1 and is_active=true",[id]);
+   if((optionId&&!option)||(Number(options.n)>0&&!option))throw checkoutRejection("Məhsulun ölçü, rəng və ya növünü seçin.");
+   const totalQuantity=b.items.filter(item=>item.id===id).reduce((n,item)=>n+item.quantity,0);if(totalQuantity>100)throw checkoutRejection("Bir məhsul üçün maksimum 100 ədəd sifariş verə bilərsiniz.");
+   const price=option?.price!=null?Number(option.price):sellingPrice({sale_price:p.sale_price,discount_price:p.discount_price});
+   lines.push({id,optionId,optionLabel:option?optionSnapshot({label:String(option.label),attributes:option.attributes}):"",name:String(p.name)+(option?" · "+optionSnapshot({label:String(option.label),attributes:option.attributes}):""),quantity,price,total:Math.round(quantity*price*100)/100});
   }
   const subtotal=Number(lines.reduce((s,l)=>s+l.total,0).toFixed(2));let discount=0;
   if(b.coupon){
@@ -45,8 +50,8 @@ export async function POST(request:Request){
   if(b.expectedTotal!==undefined&&Math.abs(b.expectedTotal-Number((subtotal-discount).toFixed(2)))>0.009)throw checkoutRejection("Qiymət yenilənib. Səbəti yeniləyib kuponu təkrar tətbiq edin.");
   const c={id:account.customer_id};
   const [seq]=await tx.unsafe("select nextval('catalog_order_seq')::text as order_no");
-  const [o]=await tx.unsafe("insert into sales_orders(order_no,customer_id,total,note,source,request_key,account_id,fulfillment,delivery_address,coupon_code,coupon_discount) values($1,$2,$3,$4,'catalog',$5,$6,$7,$8,$9,$10) returning id,order_no",[seq.order_no,c.id,Number((subtotal-discount).toFixed(2)),b.note,b.requestKey,account.id,b.fulfillment,b.address,b.coupon||null,discount]);
-  for(const l of lines)await tx.unsafe("insert into sales_order_items(sales_order_id,product_id,quantity,unit_price,line_total) values($1,$2,$3,$4,$5)",[o.id,l.id,l.quantity,l.price,l.total]);
+  const [o]=await tx.unsafe("insert into sales_orders(order_no,customer_id,total,note,source,request_key,account_id,fulfillment,delivery_address,coupon_code,coupon_discount,customer_name_snapshot,customer_phone_snapshot) values($1,$2,$3,$4,'catalog',$5,$6,$7,$8,$9,$10,$11,$12) returning id,order_no",[seq.order_no,c.id,Number((subtotal-discount).toFixed(2)),b.note,b.requestKey,account.id,b.fulfillment,b.fulfillment==='delivery'?b.address.trim():'',b.coupon||null,discount,b.name,b.phone]);
+  for(const l of lines)await tx.unsafe("insert into sales_order_items(sales_order_id,product_id,option_id,option_snapshot,quantity,unit_price,line_total,product_name_snapshot) values($1,$2,$3,$4,$5,$6,$7,$8)",[o.id,l.id,l.optionId,l.optionLabel||null,l.quantity,l.price,l.total,String(l.name).replace(l.optionLabel?" · "+l.optionLabel:"","")]);
   await tx.unsafe("insert into audit_logs(action,entity_type,entity_id,after_json) values('order.catalog_created','sales_order',$1,$2)",[o.id,JSON.stringify({orderNo:o.order_no})]);
   return {created:true as const,order_no:o.order_no,total:Number((subtotal-discount).toFixed(2)),name:b.name,phone:b.phone,fulfillment:b.fulfillment,address:b.address,lines:lines.map(line=>({name:line.name,quantity:line.quantity}))};
  });

@@ -1,3 +1,4 @@
+import {withAdminSession} from '@/lib/require-admin';
 import { NextResponse } from "next/server";
 import { logSystemError } from "@/lib/log-error";
 import postgres from "postgres";
@@ -11,7 +12,7 @@ function connection() {
   return postgres(process.env.DATABASE_URL, { max: 1, prepare: false, connect_timeout: 10 });
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const sql = connection();
   try {
     const body = await request.json() as {
@@ -67,3 +68,5 @@ export async function POST(request: Request) {
     await sql.end({ timeout: 2 });
   }
 }
+
+export const POST=withAdminSession(handlePOST);

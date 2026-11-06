@@ -1,0 +1,13 @@
+# Template only. Never put real credentials in this file.
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE?sslmode=require
+SITE_URL=https://restamarket.az
+BIRKASSA_LOCAL=0
+# Keep preview/staging out of search. Set to 1 only on the real HTTPS domain.
+SEO_INDEXING=0
+# Set the real, random setup secret only in the hosting secret manager.
+BIRKASSA_ADMIN_SETUP_TOKEN=
+# Optional Google URL-prefix verification code (not a password).
+GOOGLE_SITE_VERIFICATION=
+# A Node server needs a persistent private upload directory outside its code.
+# Serverless hosting requires durable object storage rather than this directory.
+BIRKASSA_PUBLIC_MEDIA_DIR=

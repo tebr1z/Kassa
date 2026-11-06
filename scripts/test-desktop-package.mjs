@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {access,readFile,readdir,stat} from 'node:fs/promises';
+import path from 'node:path';
+const pkg=JSON.parse(await readFile('package.json','utf8'));
+const root=path.resolve('desktop-release','v'+pkg.version,'win-unpacked');
+const application=path.join(root,'resources','application');
+const forbidden=['desktop-release','dist','outputs','work','.private','.local-data','.local-desktop-data','web-release','.git','.env','.env.local','.env.production'];
+const entries=await readdir(application);
+assert.deepEqual(entries.filter(name=>forbidden.includes(name)),[],'Release must not contain old release trees, local data or environment secrets');
+await access(path.join(root,'RestaMarket.exe'));
+await access(path.join(root,'resources','postgres','bin','pg_dump.exe'));
+await access(path.join(root,'resources','postgres','bin','pg_restore.exe'));
+await access(path.join(application,'server.js'));
+await access(path.join(application,'.next','static'));
+await access(path.join(application,'public','restamarket-mark.svg'));
+assert.equal(JSON.parse(await readFile(path.join(application,'package.json'),'utf8')).version,pkg.version);
+assert.ok((await stat(path.join('desktop-release','v'+pkg.version,`RestaMarket-Setup-${pkg.version}.exe`))).size>1024*1024);
+console.log('PASS: packaged runtime, matching version, RestaMarket icons, installer, bundled PostgreSQL and static assets; no recursive release directories, local databases or environment files.');

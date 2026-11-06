@@ -1,7 +1,9 @@
+import {withAdminSession} from '@/lib/require-admin';
 import { spawn } from "node:child_process";
 import { logSystemError } from "@/lib/log-error";
 import { NextResponse } from "next/server";
 import postgres from "postgres";
+import {createSnapshot,restoreSnapshot,snapshotTableOrder} from "@/lib/system-snapshot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,9 +11,6 @@ const connection = () => {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL təyin edilməyib");
   return postgres(process.env.DATABASE_URL, { max: 1, prepare: false, connect_timeout: 10 });
 };
-
-const tables = ["warehouses", "warehouse_locations", "cash_registers", "system_settings", "product_categories", "products", "product_barcodes", "customers", "suppliers", "purchase_orders", "purchase_order_items", "finance_transactions", "supplier_payments", "sales_orders", "sales_order_items", "stock_movements", "cashier_shifts", "employee_attendance", "sales", "sale_items", "payments"];
-const snapshotTables = [...tables, "users"];
 
 function sqlLiteral(value: unknown) {
   if (value == null) return "NULL";
@@ -87,7 +86,7 @@ function sqlFile(body: string, filename: string) {
   return new NextResponse(body, { headers: { "Content-Type": "application/sql; charset=utf-8", "Content-Disposition": `attachment; filename="${filename}"` } });
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const sql = connection();
   try {
     const url = new URL(request.url);
@@ -100,7 +99,8 @@ export async function GET(request: Request) {
         const [backup] = await sql.unsafe("select label, payload from system_backups where id=$1", [backupId]);
         if (!backup) return NextResponse.json({ error: "Ehtiyat nüsxə tapılmadı" }, { status: 404 });
         const payload = typeof backup.payload === "string" ? JSON.parse(backup.payload) : backup.payload;
-        const script = `-- BirKassa ehtiyat: ${backup.label}\nBEGIN;\n${["users", ...tables].map((table) => rowsToSql(table, payload[table] || [])).join("\n")}COMMIT;\n`;
+        const data=payload.version===2?payload.tables:payload;
+        const script = `-- BirKassa ehtiyat: ${backup.label}\nBEGIN;\n${(await snapshotTableOrder(sql)).map((table) => rowsToSql(table, data[table] || [])).join("\n")}COMMIT;\n`;
         return sqlFile(script, `birkassa-${stamp}.sql`);
       }
       try {
@@ -123,7 +123,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const sql = connection();
   try {
     const actorId = request.headers.get("x-birkassa-user-id");
@@ -135,10 +135,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true }, { status: 201 });
     }
     if (body.action === "backup") {
-      const payload: Record<string, unknown[]> = {};
-      for (const table of snapshotTables) payload[table] = await sql.unsafe(`select * from ${table}`);
+      const payload = await createSnapshot(sql);
       const label = `Ehtiyat ${new Date().toLocaleString("az-AZ", { timeZone: "Asia/Baku" })}`;
-      const [row] = await sql.unsafe("insert into system_backups (label, payload, created_by) values ($1,$2::jsonb,$3) returning id, label, created_at", [label, JSON.stringify(payload), actorId || null]);
+      const [row] = await sql.unsafe("insert into system_backups (label, payload, created_by) values ($1,$2::text::jsonb,$3) returning id, label, created_at", [label, JSON.stringify(payload), actorId || null]);
       await sql.unsafe("insert into audit_logs (user_id, action, entity_type, entity_id, after_json) values ($1,'system.backup','backup',$2,$3)", [actorId || null, row.id, JSON.stringify({ label })]);
       return NextResponse.json(row, { status: 201 });
     }
@@ -147,55 +146,10 @@ export async function POST(request: Request) {
       const [backup] = await sql.unsafe("select payload from system_backups where id=$1", [body.backupId || ""]);
       if (!backup) return NextResponse.json({ error: "Ehtiyat nüsxə tapılmadı" }, { status: 404 });
       const payload = typeof backup.payload === "string" ? JSON.parse(backup.payload) : backup.payload;
-      await sql.begin(async (tx) => {
-        await tx.unsafe("delete from payments");
-        await tx.unsafe("delete from sale_items");
-        await tx.unsafe("delete from sales");
-        if (Array.isArray(payload.cashier_shifts)) await tx.unsafe("delete from cashier_shifts");
-        if (Array.isArray(payload.employee_attendance)) await tx.unsafe("delete from employee_attendance");
-        await tx.unsafe("delete from stock_movements");
-        await tx.unsafe("delete from sales_order_items");
-        await tx.unsafe("delete from sales_orders");
-        await tx.unsafe("delete from held_receipts");
-        await tx.unsafe("delete from supplier_payments");
-        await tx.unsafe("delete from finance_transactions");
-        await tx.unsafe("delete from purchase_order_items");
-        await tx.unsafe("delete from purchase_orders");
-        await tx.unsafe("delete from suppliers");
-        await tx.unsafe("delete from product_price_history");
-        await tx.unsafe("delete from product_barcodes");
-        await tx.unsafe("delete from inventory_count_items");
-        await tx.unsafe("delete from inventory_counts");
-        await tx.unsafe("delete from products");
-        await tx.unsafe("delete from product_categories");
-        await tx.unsafe("delete from customers");
-        await tx.unsafe("delete from warehouse_locations");
-        await tx.unsafe("delete from cash_registers");
-        await tx.unsafe("delete from warehouses");
-        await tx.unsafe("delete from system_settings");
-        for (const row of (payload.users || []) as Record<string, unknown>[]) {
-          const keys = Object.keys(row);
-          if (!keys.length) continue;
-          const values = keys.map((key) => row[key]) as (string | number | boolean | null)[];
-          await tx.unsafe(`insert into users (${keys.map((key) => `"${key}"`).join(",")}) values (${keys.map((_, index) => `$${index + 1}`).join(",")}) on conflict (id) do nothing`, values);
-        }
-        const locationIds = new Set((payload.warehouse_locations || []).map((row: { id?: string }) => String(row.id || "")));
-        const userIds = new Set((await tx.unsafe("select id from users") as { id: string }[]).map((row) => String(row.id)));
-        for (const table of tables) {
-          const rows = payload[table] || [];
-          for (const row of rows) {
-            const record = { ...row } as Record<string, unknown>;
-            if (table === "stock_movements" && record.location_id && !locationIds.has(String(record.location_id))) record.location_id = null;
-            if (table === "system_settings" && record.updated_by && !userIds.has(String(record.updated_by))) record.updated_by = null;
-            const keys = Object.keys(record);
-            if (!keys.length) continue;
-            const values = keys.map((key) => record[key]) as (string | number | boolean | null)[];
-            await tx.unsafe(`insert into ${table} (${keys.map((key) => `"${key}"`).join(",")}) values (${keys.map((_, index) => `$${index + 1}`).join(",")})`, values);
-          }
-        }
-        await tx.unsafe("insert into audit_logs (user_id, action, entity_type, entity_id, after_json) values ($1,'system.restore','backup',$2,$3)", [actorId || null, body.backupId || null, JSON.stringify({ backupId: body.backupId || null })]);
-      });
-      return NextResponse.json({ ok: true });
+      const recovery=await createSnapshot(sql);
+      await sql.unsafe("insert into system_backups(label,payload,created_by) values($1,$2::text::jsonb,$3)",['Bərpadan əvvəl '+new Date().toISOString(),JSON.stringify(recovery),actorId]);
+      await restoreSnapshot(sql,payload,actorId,body.backupId || "");
+      return NextResponse.json({ ok: true,reauthenticate:true });
     }
     return NextResponse.json({ error: "Naməlum əməliyyat" }, { status: 400 });
   } catch (error: any) {
@@ -205,3 +159,6 @@ export async function POST(request: Request) {
     await sql.end({ timeout: 2 });
   }
 }
+
+export const GET=withAdminSession(handleGET);
+export const POST=withAdminSession(handlePOST);

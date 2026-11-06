@@ -1,13 +1,14 @@
+import {withAdminSession} from '@/lib/require-admin';
 import {storeDb} from "@/lib/store-db";
 import {z} from "zod";
 export const dynamic="force-dynamic";
-export async function GET(request:Request){
+async function handleGET(request:Request){
  const sql=storeDb();try{
- const rows=await sql.unsafe("select o.id,o.order_no,o.status,o.fulfillment,o.delivery_address,o.delivery_stage,o.total,o.coupon_code,o.coupon_discount,o.note,o.created_at,c.full_name,c.phone,(select json_agg(json_build_object('name',p.name,'quantity',i.quantity)) from sales_order_items i join products p on p.id=i.product_id where i.sales_order_id=o.id) items from sales_orders o join customers c on c.id=o.customer_id where o.source='catalog' order by o.created_at desc limit 200");
- return Response.json({rows,canCancel:request.headers.get('x-birkassa-role')!=='online_assistant'});
+ const rows=await sql.unsafe("select o.id,o.order_no,o.status,o.fulfillment,o.delivery_address,o.delivery_stage,o.total,o.coupon_code,o.coupon_discount,o.note,o.created_at,coalesce(o.customer_name_snapshot,c.full_name) full_name,coalesce(o.customer_phone_snapshot,c.phone) phone,(select json_agg(json_build_object('name',coalesce(i.product_name_snapshot,p.name)||case when i.option_snapshot is not null then ' · '||i.option_snapshot else '' end,'quantity',i.quantity)) from sales_order_items i join products p on p.id=i.product_id where i.sales_order_id=o.id) items from sales_orders o join customers c on c.id=o.customer_id where o.source='catalog' order by o.created_at desc limit 200");
+ return Response.json({rows,canManage:true,canCancel:request.headers.get('x-birkassa-role')!=='online_assistant'});
  }finally{await sql.end()}
 }
-export async function PATCH(request:Request){
+async function handlePATCH(request:Request){
  const b=z.object({id:z.string().uuid(),status:z.enum(['preparing','ready','dispatched','delivered','completed','cancelled'])}).safeParse(await request.json().catch(()=>null));
  if(!b.success)return Response.json({error:'Yanlış sorğu'},{status:400});
  if(b.data.status==='cancelled'&&request.headers.get('x-birkassa-role')==='online_assistant')return Response.json({error:'Ləğv üçün menecer səlahiyyəti lazımdır'},{status:403});
@@ -29,3 +30,6 @@ export async function PATCH(request:Request){
  return Response.json(ok?{ok:true}:{error:'Sifariş artıq bağlanıb'},{status:ok?200:409});
  }catch(e){const message=e instanceof Error?e.message:"";if(message.startsWith("Bu sifariş"))return Response.json({error:message},{status:409});throw e;}finally{await sql.end()}
 }
+
+export const GET=withAdminSession(handleGET);
+export const PATCH=withAdminSession(handlePATCH);

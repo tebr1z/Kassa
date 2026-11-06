@@ -1,0 +1,35 @@
+RESTAMARKET 0.5 — MƏHSUL, MAĞAZA VƏ MALİYYƏ
+
+Məhsul seçimləri: /admin/store → Məhsullar və seçimlər.
+Yeni məhsulda və ya redaktədə ölçü/rəng/növ və öz xüsusiyyətlərinizi əlavə edin.
+Məsələn: 30 sm, 40 sm, 50 sm; Qalınlıq: 2 mm; Material: Dəmir.
+Seçim lazım deyilsə bölməni boş saxlayın. Müştəri və kassir aktiv variantı seçir.
+Variantın satış və alış qiyməti boşdursa məhsulun əsas qiymətindən istifadə olunur.
+Variantlar məhsulun ümumi stokunu paylaşır; bu versiya hər ölçü üçün ayrıca
+stok saxlamır. Mövcud ayrı SKU-lu mallar avtomatik bir məhsulda birləşdirilmir.
+Alış qiyməti müştəriyə və kassirə qaytarılmır, çekdə deyil, maliyyədə görünür.
+“Sil” məhsulu arxivləşdirir: köhnə çek, stok hərəkəti və maliyyə tarixçəsi qalır.
+Açıq sifarişdə olan məhsul sifariş bağlanana qədər silinmir.
+
+Mağaza/kassir: /admin → Mağazalar və kassirlər.
+Mağaza yaradın, ona anbar əlavə edin, kassirə həmin mağaza və anbarı təyin edin.
+Kassir üçün ayrıca güclü şifrə qurun. Kassir yalnız POS-a daxil olur.
+Açıq növbə bağlanmadan mağaza/anbar təyinatı dəyişdirilmir.
+Satış stokdan yalnız təyin olunmuş anbar üzrə çıxılır. Çekdə mağaza və kassir,
+maliyyə jurnalında isə mağaza, anbar, kassir, satış və alış dəyəri görünür.
+
+Maliyyə: /admin → Maliyyə.
+Tarix aralığı və mağaza seçin. Xalis nəticə = satış − satılan malın alış dəyəri
++ digər gəlir − qeydə alınmış xərclər. Alış dəyəri satış anında çəkilən
+cost_snapshot ilə saxlanır; məhsulun sonrakı qiyməti köhnə qazancı dəyişmir.
+Maaş planı yalnız məlumatdır. “Maaş ödənişi” ilə həqiqi ödənişi qeydə alın;
+o zaman məbləğ xərcə düşür. Yeni gəlir/xərcdə səbəb, alan şəxs, kateqoriya,
+mağaza, tarix, hesab və sənəd qeydi yazıla bilər. Eyni ödəniş sorğusunun
+şəbəkə səbəbindən təkrarı ikinci əməliyyat yaratmır.
+Təchizatçı borcu ödənişi pul hərəkətidir, satılmış malın maya dəyərinin üstünə
+ikinci dəfə xərc kimi çıxılmır. Bu əməliyyat hesabatıdır, vergi hesabatı deyil.
+
+Veb və masaüstü bazaları ayrıdır. Bu versiya onları vahid stok bazasına çevirmir.
+Vebə yalnız ictimai kataloq və sifariş statusları ötürülür; alış qiyməti/maaş
+göndərilmir. Aktiv masaüstü kataloq bağlantısı ictimai məhsul sahələrini yeniləyə
+bilər. Məhsul idarəetməsinin hansı tərəfdə aparılacağını müəyyən edin.

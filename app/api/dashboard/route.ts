@@ -1,3 +1,4 @@
+import {withAdminSession} from '@/lib/require-admin';
 import { NextResponse } from "next/server";
 import { logSystemError } from "@/lib/log-error";
 import postgres from "postgres";
@@ -12,9 +13,16 @@ function connection() {
   return postgres(process.env.DATABASE_URL, { max: 1, prepare: false, connect_timeout: 10 });
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const sql = connection();
   try {
+    if(request.headers.get('x-birkassa-role')==='cashier'){
+      const id=request.headers.get('x-birkassa-user-id');
+      const [warehouse]=await sql.unsafe(salesWarehouseSql(id||''));
+      const [branch]=warehouse?await sql.unsafe('select name,address from branches where id=$1',[warehouse.branch_id]):[];
+      const [shift]=await sql.unsafe("select cs.id,cs.opened_at,cs.opening_cash,coalesce(sum(p.amount) filter(where p.method='cash'),0) cash_sales,coalesce(sum(p.amount) filter(where p.method='card'),0) card_sales from cashier_shifts cs left join sales s on s.shift_id=cs.id and s.status='completed' left join payments p on p.sale_id=s.id where cs.cashier_id=$1 and cs.closed_at is null group by cs.id order by cs.opened_at desc limit 1",[id]);
+      return NextResponse.json({today:{total:0,count:0,profit:0},payments:{cash:0,card:0},weekly:[],recent:[],alerts:[],suspicious:[],branchName:branch?.name||'Mağaza təyin edilməyib',branchAddress:branch?.address||'',warehouseName:warehouse?.name||'',registerName:'Kassa',shift:shift?{id:shift.id,openedAt:shift.opened_at,openingCash:Number(shift.opening_cash),cashSales:Number(shift.cash_sales),cardSales:Number(shift.card_sales),expectedCash:Number(shift.opening_cash)+Number(shift.cash_sales)}:null});
+    }
     const [today] = await sql.unsafe(`
       select coalesce(sum(s.total),0) as total, count(*) as count,
         coalesce(sum(s.total - costs.cost_total),0) as profit
@@ -65,7 +73,7 @@ export async function GET(request: Request) {
       weekly: weekly.map((row) => ({ day: row.day, total: Number(row.total) })),
       recent: recent.map((row) => ({
         id: row.id, receiptNo: row.receipt_no, total: Number(row.total), status: row.status, createdAt: row.created_at,
-        cashier: row.full_name, paymentMethod: row.payment_method, subtotal:Number(row.subtotal),discount:Number(row.discount),store:row.receipt_store,orderNo:row.order_no,
+        cashier: row.full_name, buyerName:row.buyer_name||"", paymentMethod: row.payment_method, subtotal:Number(row.subtotal),discount:Number(row.discount),store:row.receipt_store,orderNo:row.order_no,
         paymentDetails:row.payment_details.map((p:{method:string;amount:string})=>({method:p.method,amount:Number(p.amount)})),
         items: row.items.map((item: any) => ({ ...item, quantity: Number(item.quantity), unitPrice: Number(item.unitPrice), lineTotal: Number(item.lineTotal) })),
       })),
@@ -76,6 +84,7 @@ export async function GET(request: Request) {
       registerName: (await sql.unsafe("select r.name from cash_registers r join users u on u.branch_id=r.branch_id where r.is_active=true and u.id=$1 order by r.created_at limit 1", [request.headers.get("x-birkassa-user-id")]))[0]?.name || "Kassa",
       branchName: (await sql.unsafe("select b.name from branches b join users u on u.branch_id=b.id where u.id=$1", [request.headers.get("x-birkassa-user-id")]))[0]?.name || "Mağaza",
       branchAddress: (await sql.unsafe("select b.address from branches b join users u on u.branch_id=b.id where u.id=$1", [request.headers.get("x-birkassa-user-id")]))[0]?.address || "",
+      warehouseName:(await sql.unsafe(salesWarehouseSql(request.headers.get('x-birkassa-user-id')||'')))[0]?.name||'Anbar təyin edilməyib',
       alerts: (await sql.unsafe("select value from system_settings where key='low_stock_alert'"))[0]?.value==="false"?[]:(await sql.unsafe(`select p.name, coalesce(max(wl.code),'Mövqe yoxdur') as location, p.min_stock, coalesce(sum(sm.quantity),0) stock from products p left join stock_movements sm on sm.product_id=p.id and sm.warehouse_id=(select id from (${salesWarehouseSql(request.headers.get("x-birkassa-user-id") || "")}) sales_warehouse) left join warehouse_locations wl on wl.id=sm.location_id where p.is_active=true group by p.id having coalesce(sum(sm.quantity),0) <= p.min_stock order by coalesce(sum(sm.quantity),0) limit 6`)).map((row: any)=>({name:row.name,location:row.location,min:Number(row.min_stock),stock:Number(row.stock)})),
       suspicious: (await sql.unsafe(`select s.receipt_no, s.discount, s.subtotal, s.total, s.created_at, u.full_name, 'discount' kind from sales s join users u on u.id=s.cashier_id where s.status='completed' and s.subtotal>0 and s.discount/s.subtotal>=0.2 and s.created_at>now()-interval '7 days' union all select s.receipt_no, s.discount, s.subtotal, s.total, s.created_at, u.full_name, 'return' kind from sales s join users u on u.id=s.cashier_id where s.status='returned' and s.created_at>now()-interval '7 days' order by created_at desc limit 6`)).map((row: any)=>({receiptNo:row.receipt_no,kind:row.kind,cashier:row.full_name,total:Number(row.total),createdAt:row.created_at})),
     });
@@ -86,3 +95,5 @@ export async function GET(request: Request) {
     await sql.end({ timeout: 2 });
   }
 }
+
+export const GET=withAdminSession(handleGET);

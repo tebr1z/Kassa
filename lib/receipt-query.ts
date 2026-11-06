@@ -1,6 +1,6 @@
 // Payments and lines are aggregated separately: mixed payments must not duplicate items.
 export const recentReceiptsSql = `
- select s.id,s.receipt_no,s.subtotal,s.discount,s.total,s.status,s.created_at,
+ select s.id,s.receipt_no,s.subtotal,s.discount,s.total,s.status,s.created_at,s.buyer_name,
  coalesce(s.receipt_store->>'cashier',u.full_name) full_name,o.order_no,
  coalesce(s.receipt_store,jsonb_build_object('name',coalesce(c.name,b.name),'phone',coalesce(c.phone,''),
  'address',coalesce(nullif(c.address,''),b.address,''),'branch',b.name,'register',coalesce(r.name,'Kassa'))) receipt_store,
@@ -18,7 +18,8 @@ export const recentReceiptsSql = `
   from payments p where p.sale_id=s.id
  ) pay on true
  left join lateral (
-  select json_agg(json_build_object('name',coalesce(si.product_name_snapshot,pr.name),
+  select json_agg(json_build_object('code',pr.sku,'name',coalesce(si.product_name_snapshot,pr.name),
+   'optionLabel',coalesce(si.option_snapshot,''),
    'quantity',si.quantity,'unitPrice',si.unit_price,'lineTotal',si.line_total) order by si.id) items
   from sale_items si join products pr on pr.id=si.product_id where si.sale_id=s.id
  ) lines on true

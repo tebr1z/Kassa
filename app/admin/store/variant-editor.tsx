@@ -1,0 +1,22 @@
+"use client";
+import {useState} from 'react';
+import {t} from '@/lib/language';
+import {optionDetails,type OptionAttributes} from '@/lib/product-options';
+export type EditableVariant={id?:string;label:string;size:string;color:string;kind:string;price:string|null;cost_price?:string|null;position:number;is_active:boolean;attributes?:OptionAttributes};
+export default function VariantEditor({options,onSave,busy=false}:{options:EditableVariant[];onSave:(value:EditableVariant)=>Promise<boolean>|boolean;busy?:boolean}){
+ const blank=():EditableVariant=>({label:'',size:'',color:'',kind:'',price:null,position:options.length,is_active:true,attributes:{}});
+ const [editing,setEditing]=useState<EditableVariant>(blank),[attributes,setAttributes]=useState<[string,string][]>([]),[error,setError]=useState('');
+ function edit(value:EditableVariant){setEditing(value);setAttributes(Object.entries(value.attributes||{}));setError('');}
+ async function save(){
+  const pairs=attributes.map(([k,v])=>[k.trim(),v.trim()]);
+  if(pairs.some(([k,v])=>!k||!v)||new Set(pairs.map(([k])=>k.toLocaleLowerCase('az'))).size!==pairs.length){setError('Xüsusiyyətin adını və dəyərini yazın; adlar təkrarlanmasın.');return;}
+  const label=editing.label.trim()||[editing.size,editing.color,editing.kind,...pairs.map(([k,v])=>`${k}: ${v}`)].filter(Boolean).join(' · ');
+  if(!label||label.length>120){setError('Seçimin adı 1–120 simvol olmalıdır.');return;}
+  if(await onSave({...editing,label,attributes:Object.fromEntries(pairs)})){setEditing(blank());setAttributes([]);setError('');}
+ }
+ return <section className="cm-variants"><header className="cm-variants-head"><div><span>İSTƏYƏ BAĞLI SEÇİMLƏR</span><h4>Ölçü, rəng və öz xüsusiyyətləriniz</h4></div><p>Sadə məhsulda boş saxlayın. Hər variant ayrıca seçimdir: 30 sm, 40 sm, 50 sm. Qalınlıq, material və başqa sahələri özünüz əlavə edə bilərsiniz. Seçimlər məhsulun ümumi stokunu istifadə edir.</p></header>
+ <div className="cm-variant-list">{options.map((option,index)=><button key={option.id||index} type="button" className={option.is_active?'':'is-off'} onClick={()=>edit(option)}><strong>{option.label}</strong><span>{optionDetails(option)}</span><b>{option.price?Number(option.price).toFixed(2)+' ₼':'Əsas qiymət'}</b></button>)}</div>
+ <div className="cm-variant-editor">{[['label','Seçimin adı','Məsələn: 40 sm qara'],['size','Ölçü','30 sm'],['color','Rəng','Qara'],['kind','Növ / material','Dəmir']].map(([key,label,placeholder])=><label key={key}>{label}<input value={String(editing[key as keyof EditableVariant]||'')} maxLength={key==='label'?120:80} placeholder={placeholder} onChange={e=>setEditing({...editing,[key]:e.target.value})}/></label>)}<label>Variantın qiyməti ₼<input type="number" min="0.01" max="1000000" step="0.01" value={editing.price||''} placeholder="Boşdursa əsas qiymət" onChange={e=>setEditing({...editing,price:e.target.value||null})}/></label><label>Variantın alış qiyməti ₼<input type="number" min="0" step="0.01" value={editing.cost_price??''} placeholder="Boşdursa məhsulun alış qiyməti" onChange={e=>setEditing({...editing,cost_price:e.target.value===''?null:e.target.value})}/></label><label className="cm-check"><input type="checkbox" checked={editing.is_active} onChange={e=>setEditing({...editing,is_active:e.target.checked})}/>Aktiv seçim</label></div>
+ <div className="cm-custom-attributes">{attributes.map(([key,value],index)=><div className="cm-attribute-row" key={index}><input aria-label="Xüsusiyyətin adı" placeholder="Məsələn: Qalınlıq" maxLength={60} value={key} onChange={e=>setAttributes(attributes.map((pair,i)=>i===index?[e.target.value,pair[1]]:pair))}/><input aria-label="Xüsusiyyətin dəyəri" placeholder="Məsələn: 2 mm" maxLength={120} value={value} onChange={e=>setAttributes(attributes.map((pair,i)=>i===index?[pair[0],e.target.value]:pair))}/><button type="button" aria-label="Xüsusiyyəti sil" onClick={()=>setAttributes(attributes.filter((_,i)=>i!==index))}>×</button></div>)}<button type="button" disabled={attributes.length>=12} onClick={()=>setAttributes([...attributes,['','']])}>+ Öz xüsusiyyətini əlavə et</button></div>
+ {error&&<p role="alert">{error}</p>}<div className="cm-variant-actions"><button type="button" disabled={busy} onClick={()=>void save()}>{editing.id?'Seçimi yenilə':t('Seçim əlavə et')}</button><button type="button" onClick={()=>{setEditing(blank());setAttributes([]);}}>Təmizlə</button></div></section>;
+}

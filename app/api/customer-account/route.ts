@@ -4,6 +4,7 @@ import {createHash,randomBytes,scryptSync,timingSafeEqual} from "node:crypto";
 import {z} from "zod";
 import {customerAccount,customerCookie} from "@/lib/customer-session";
 import {storeDb} from "@/lib/store-db";
+import {secureAuthCookie} from "@/lib/auth-cookie";
 export const dynamic="force-dynamic";
 export async function GET(){const a=await customerAccount();return NextResponse.json({user:a?{id:a.id,name:a.full_name,email:a.email,phone:a.phone,address:a.address||"",lat:a.address_lat==null?null:Number(a.address_lat),lng:a.address_lng==null?null:Number(a.address_lng)}:null})}
 export async function POST(request:Request){
@@ -25,7 +26,7 @@ export async function POST(request:Request){
  }
  const token=randomBytes(32).toString("hex"),expires=new Date(Date.now()+7*86400000);
  await sql.unsafe("insert into customer_sessions(token_hash,account_id,expires_at) values($1,$2,$3)",[createHash("sha256").update(token).digest("hex"),accountId,expires]);
- const r=NextResponse.json({ok:true});r.cookies.set(customerCookie,token,{httpOnly:true,sameSite:"lax",secure:process.env.NODE_ENV==="production",path:"/",expires});return r;
+ const r=NextResponse.json({ok:true});r.cookies.set(customerCookie,token,{httpOnly:true,sameSite:"lax",secure:secureAuthCookie(request),path:"/",expires});return r;
  }catch{return NextResponse.json({error:"Hesab yaradıla bilmədi. E-poçt artıq istifadə edilirsə giriş edin."},{status:400})}finally{await sql.end()}
 }
 const profile=z.object({name:z.string().trim().min(2).max(100),phone:z.string().regex(/^[+0-9 ()-]{7,25}$/),address:z.string().trim().max(300),lat:z.number().gte(-90).lte(90).nullable(),lng:z.number().gte(-180).lte(180).nullable(),currentPassword:z.string().max(128).optional(),newPassword:z.string().min(8).max(128).optional()});

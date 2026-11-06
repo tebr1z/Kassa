@@ -1,3 +1,4 @@
+import {withAdminSession} from '@/lib/require-admin';
 import { NextResponse } from "next/server";
 import postgres from "postgres";
 import { logSystemError } from "@/lib/log-error";
@@ -5,7 +6,7 @@ import { salesWarehouseSql } from "@/lib/warehouse";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   if (!process.env.DATABASE_URL) return NextResponse.json({ error: "DATABASE_URL yoxdur" }, { status: 500 });
   const sql = postgres(process.env.DATABASE_URL, { max: 1, prepare: false, connect_timeout: 10 });
   try {
@@ -30,3 +31,5 @@ export async function POST(request: Request) {
     return NextResponse.json(result,{status:201});
   }catch(error:any){console.error("stock.adjustment",error);void logSystemError("stock.adjustment",error);return NextResponse.json({error:error?.message||"Stok düzəlişi saxlanmadı"},{status:error?.statusCode||500})}finally{await sql.end({timeout:2})}
 }
+
+export const POST=withAdminSession(handlePOST);

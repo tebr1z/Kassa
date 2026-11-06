@@ -3,7 +3,7 @@ import {readFile} from "node:fs/promises";
 import path from "node:path";
 import {logSystemError} from "@/lib/log-error";
 
-export const vexiraPath=path.join(process.cwd(),".private","vexira.json");
+export const vexiraPath=path.join(process.env.BIRKASSA_DATA_DIR||process.cwd(),".private","vexira.json");
 export async function vexiraSettings(){
  try{const parsed=JSON.parse(await readFile(vexiraPath,"utf8")) as {key?:string;phones?:string[]};return {key:parsed.key||process.env.VEXIRA_API_KEY||"",phones:Array.isArray(parsed.phones)?parsed.phones.filter(phone=>whatsappPhone(phone)):[]};}
  catch{return {key:process.env.VEXIRA_API_KEY||"",phones:[] as string[]};}

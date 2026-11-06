@@ -2,12 +2,26 @@ export function sellingPrice(product:{sale_price:unknown;discount_price?:unknown
  const regular=Number(product.sale_price), discount=Number(product.discount_price);
  return discount>0&&discount<regular?discount:regular;
 }
+export function catalogPricing(product:{sale_price:unknown;discount_price?:unknown},options:{price?:string|number|null}[]=[]){
+ const basePrice=sellingPrice(product),baseOriginalPrice=Number(product.sale_price);
+ const cheapest=options.length?[...options].sort((a,b)=>Number(a.price??basePrice)-Number(b.price??basePrice))[0]:null;
+ return {price:Number(cheapest?.price??basePrice),originalPrice:cheapest?.price!=null?Number(cheapest.price):baseOriginalPrice,basePrice,baseOriginalPrice};
+}
 export function couponDiscount(subtotal:number,percent:number,maxDiscount?:number|null){
  const amount=Math.round(subtotal*percent)/100;
  if(maxDiscount==null||!(maxDiscount>0))return amount;
  return Math.min(amount,Number(maxDiscount.toFixed(2)));
 }
-export type CatalogProduct={id:string;name:string;category:string;unit:string;price:number;originalPrice:number;image:string;available:boolean;description:string;specifications:string};
+export type ProductOption={id:string;label:string;size:string;color:string;kind:string;price:number|null;attributes?:Record<string,string>};
+export type CatalogProduct={id:string;code?:string;name:string;category:string;unit:string;price:number;originalPrice:number;basePrice?:number;baseOriginalPrice?:number;image:string;images?:string[];available:boolean;description:string;specifications:string;options:ProductOption[]};
+const slugLetters:Record<string,string>={ə:"e",Ə:"E",ı:"i",İ:"I",ö:"o",Ö:"O",ü:"u",Ü:"U",ş:"s",Ş:"S",ç:"c",Ç:"C",ğ:"g",Ğ:"G"};
+export function productSlug(name:string){
+ const folded=[...name].map(ch=>slugLetters[ch]??ch).join("");
+ return folded.replace(/[^0-9A-Za-z]+/g,"-").replace(/^-+|-+$/g,"").toLowerCase()||"mehsul";
+}
+export function productPath(product:{id:string;name:string;code?:string}){
+ return product.code&&/^\d{6}$/.test(product.code)?`/mehsullar/${productSlug(product.name)}/${product.code}`:`/mehsullar/${product.id}`;
+}
 export function productModel(name:string){
  const cleaned=name.replace(/\s{2,}/g," ").trim();
  const model=cleaned.replace(/\s+\d+(?:[.,]\d+)?\s*(?:sm|mm|ml|l|q|qr|kg)\b.*$/i,"").replace(/-\d+\s*(?:sm|mm)?$/i,"").replace(/\s+\d+-lük$/i,"").trim();
@@ -15,7 +29,7 @@ export function productModel(name:string){
 }
 const searchFold:Record<string,string>={ə:"e",ı:"i",ö:"o",ü:"u",ş:"s",ç:"c",ğ:"g",q:"g",â:"a",î:"i",û:"u"};
 export function foldSearch(value:string){
- return [...value.toLocaleLowerCase("az")].map(ch=>searchFold[ch]||ch).join("").replace(/[^a-z0-9]+/g," ").replace(/\s+/g," ").trim();
+ return [...value.normalize("NFKC").toLocaleLowerCase("az")].map(ch=>searchFold[ch]||ch).join("").replace(/[^\p{L}\p{N}]+/gu," ").replace(/\s+/g," ").trim();
 }
 function editDistance(a:string,b:string){
  if(a===b)return 0;

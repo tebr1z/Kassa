@@ -1,20 +1,39 @@
 {
   "name": "birkassa-system",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "private": true,
+  "main": "desktop/main.cjs",
+  "productName": "RestaMarket",
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
     "install:ci": "node scripts/install-ci.mjs",
-    "dev": "next dev --hostname 127.0.0.1 --port 5757",
-    "build": "next build",
-    "start": "next start --hostname 127.0.0.1 --port 5757",
+    "dev": "node scripts/start-web.mjs --dev",
+    "build": "next build --webpack && node scripts/test-web-build.mjs",
+    "start": "node scripts/start-web.mjs",
     "seed": "node scripts/seed-postgres.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate-postgres.mjs",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "desktop": "electron desktop/main.cjs",
+    "desktop:package": "npm run brand:icons && npm run desktop:runtime && npm run build:desktop && electron-builder --win nsis && node scripts/test-desktop-package.mjs && node scripts/test-packaged-server.mjs && node scripts/smoke-desktop.mjs",
+    "brand:icons": "node scripts/build-brand-icons.mjs",
+    "test:customer": "node scripts/test-customer-account.mjs",
+    "test:seo": "node scripts/test-seo.mjs",
+    "test:seo-http": "node scripts/test-seo-http.mjs",
+    "test:web-admin": "node scripts/test-admin-guard.mjs && node scripts/test-web-admin.mjs",
+    "admin:setup-key": "node scripts/prepare-web-admin-key.mjs",
+    "test:account-translations": "node scripts/test-account-translations.mjs",
+    "test:desktop-package": "node scripts/test-desktop-package.mjs && node scripts/test-packaged-server.mjs && node scripts/smoke-desktop.mjs",
+    "test:desktop-backup": "node scripts/test-desktop-backup.mjs",
+    "desktop:transfer": "node scripts/prepare-desktop-transfer.mjs",
+    "test:desktop": "node scripts/test-local-desktop.mjs",
+    "test:desktop-sync": "node scripts/test-desktop-sync.mjs",
+    "build:desktop": "next build --webpack && node scripts/test-web-build.mjs",
+    "desktop:runtime": "node scripts/prepare-postgres-runtime.mjs",
+    "test:catalog-transfer": "node scripts/test-catalog-transfer.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -25,19 +44,19 @@
     "clsx": "2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.4.0",
-    "drizzle-orm": "0.45.2",
     "dotenv": "^17.2.3",
+    "drizzle-orm": "0.45.2",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^1.31.0",
     "next": "16.3.4",
     "next-themes": "^0.4.6",
+    "postgres": "^3.4.7",
     "radix-ui": "^1.6.7",
     "react": "19.2.6",
     "react-day-picker": "^10.0.1",
     "react-dom": "19.2.6",
     "react-hook-form": "^7.85.0",
-    "postgres": "^3.4.7",
     "react-resizable-panels": "^4.12.2",
     "recharts": "^3.8.0",
     "sonner": "^2.0.8",
@@ -55,6 +74,8 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.15.3",
     "eslint": "9.39.4",
     "eslint-config-next": "16.3.4",
     "react-server-dom-webpack": "19.2.6",
@@ -66,6 +87,75 @@
     "wrangler": "4.92.0"
   },
   "type": "module",
+  "build": {
+    "appId": "az.birkassa.desktop",
+    "productName": "RestaMarket",
+    "artifactName": "RestaMarket-Setup-${version}.${ext}",
+    "win": {"icon":"desktop/assets/restamarket.ico","executableName":"RestaMarket"},
+    "directories": {
+      "output": "desktop-release/v0.5.0",
+      "app": "desktop"
+    },
+    "files": [
+      "main.cjs",
+      "local-database.mjs",
+      "package.json",
+      "preload.cjs",
+      "menu-language.cjs",
+      "backup-archive.mjs",
+      "protect-data.mjs",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".next/standalone/node_modules",
+        "to": "application/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": ".next/standalone",
+        "to": "application",
+        "filter": [
+          "**/*",
+          "!.env*",
+          "!**/.env*",
+          "!.private/**/*",
+          "!**/.private/**/*",
+          "!desktop-release/**/*",
+          "!**/desktop-release/**/*",
+          "!dist/**/*",
+          "!outputs/**/*",
+          "!work/**/*",
+          "!.local-data/**/*",
+          "!.local-desktop-data/**/*",
+          "!.git/**/*"
+        ]
+      },
+      {
+        "from": ".next/static",
+        "to": "application/.next/static"
+      },
+      {
+        "from": "public",
+        "to": "application/public"
+      },
+      {
+        "from": "drizzle",
+        "to": "application/drizzle"
+      },
+      {
+        "from": "desktop/vendor/postgres",
+        "to": "postgres"
+      }
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
   "overrides": {
     "miniflare": {
       "sharp": "0.35.4"

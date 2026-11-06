@@ -1,10 +1,11 @@
+import {withAdminSession} from '@/lib/require-admin';
 import { NextResponse } from "next/server";
 import postgres from "postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function handleGET() {
   if (!process.env.DATABASE_URL) return NextResponse.json({ error: "DATABASE_URL yoxdur" }, { status: 500 });
   const sql = postgres(process.env.DATABASE_URL, { max: 1, prepare: false, connect_timeout: 10 });
   try {
@@ -14,3 +15,5 @@ export async function GET() {
     await sql.end({ timeout: 2 });
   }
 }
+
+export const GET=withAdminSession(handleGET);

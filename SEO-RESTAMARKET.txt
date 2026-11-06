@@ -1,0 +1,45 @@
+RESTAMARKET — GOOGLE / MƏHSUL SEO
+
+Əsas domen: https://restamarket.az
+Məhsullar: /mehsullar və /mehsullar/mehsul-adi/123456
+Əvvəlki /products linkləri 308 ilə yeni ünvana yönəlir; kod dəyişmir.
+
+Hazır olanlar:
+- İlkin server HTML-də məhsul adı, qiymət, şəkil, təsvir və kataloq linkləri.
+- Fərdi başlıq/təsvir, canonical, Open Graph / Twitter paylaşım məlumatları.
+- Product / ProductGroup, Offer, BreadcrumbList, Organization və kataloq JSON-LD.
+- Ölçü/rəng seçimlərinə birbaşa ?variant=SEÇİM_ID ünvanı; əsas canonical eynidir.
+- /sitemap.xml: yalnız aktiv məhsullar və dolu, görünən kateqoriyalar, şəkil URL-ləri.
+- /robots.txt; admin, şəxsi hesab və API-lər axtarışdan kənardır.
+- Localhost, masaüstü və fərqli hostlar noindex-dir.
+
+Yayımlama (bu dəyişiklik avtomatik internetə yayımlama deyil):
+1. HTTPS ilə əsas domenə veb tətbiqi yerləşdirin. Baza/şifrələr və masaüstü arxivi
+   ictimai qovluğa qoyulmur; mövcud admin təhlükəsizliyi saxlanmalıdır.
+2. Serverdə SITE_URL=https://restamarket.az ola bilər (bu artıq standartdır).
+   Reverse proxy Host başlığını restamarket.az kimi ötürməlidir. www varsa HTTPS
+   səviyyəsində əsas domenə 301/308 yönləndirin. Host-u bütün naməlum domenlər
+   üçün eyni tətbiqə açmayın. Bu dəyişiklik DNS/proxy-ni öz-özünə dəyişmir.
+3. SEO_INDEXING=0 bütün nüsxəni indeksdən kənarda saxlayır. Canlı mağazada bu
+   dəyişəni qoymayın və ya 1 edin. BIRKASSA_LOCAL=1 həmişə noindex-dir.
+4. Google Search Console-da domeni təsdiqləyin (DNS təsdiqi tövsiyə olunur).
+   URL-prefix təsdiqi seçsəniz GOOGLE_SITE_VERIFICATION dəyişəninə verilən
+   verification kodunu qoyun. Bu kod parol deyil. Serveri yenidən başladın.
+5. Search Console-a https://restamarket.az/sitemap.xml göndərin. Bir neçə
+   məhsulu Rich Results Test və URL Inspection ilə yoxlayın. Qiymət və stok
+   iddiaları yalnız həqiqi məlumat olduqda əlavə edilməlidir.
+
+Məhsul məzmunu:
+- Admin → Məhsullar və seçimlər: dəqiq ad, öz təsviri, ölçü/material/xüsusiyyətlər,
+  keyfiyyətli orijinal şəkillər və düzgün qiymət yazın. Eyni mətni hər mala
+  köçürməyin; olmayan xüsusiyyət, saxta rəy və açar söz yığını əlavə etməyin.
+- Mövcud satınalma kodları SKU/GTIN kimi uydurulmur; JSON-LD yalnız ictimai
+  məhsul/variant identifikatorlarından istifadə edir. Alış qiyməti, stok miqdarı,
+  maaş və maliyyə ilkin HTML-ə və ya SEO məlumatına çıxarılmır.
+- Mövcud dil dəyişdiricisi ayrıca indekslənən dil URL-ləri yaratmır. Buna görə
+  saxta hreflang əlavə edilməyib. Çoxdilli Google indeksləməsi üçün sonradan
+  ayrıca real tərcümə məzmunlu /ru, /en, /tr, /zh səhifələri lazımdır.
+
+Google-da birinci yer və hətta indeksə daxilolma zəmanətli deyil. Texniki SEO
+əlavə olunub; nəticə real yayımlama, məzmun keyfiyyəti, rəqabət və zamanla bağlıdır.
+Rəsmi qaynaq: https://developers.google.com/search/docs/fundamentals/seo-starter-guide

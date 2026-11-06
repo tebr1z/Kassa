@@ -1,7 +1,8 @@
+import {withAdminSession} from '@/lib/require-admin';
 import {storeDb} from "@/lib/store-db";
 import {z} from "zod";
 export const dynamic="force-dynamic";
-export async function GET(request:Request){
+async function handleGET(request:Request){
  const ticketId=new URL(request.url).searchParams.get("ticket")||"";
  const sql=storeDb();try{
   if(ticketId){
@@ -18,7 +19,7 @@ export async function GET(request:Request){
 const reply=z.object({action:z.literal("reply"),ticketId:z.string().uuid(),message:z.string().trim().min(1).max(2000)});
 const status=z.object({action:z.literal("status"),ticketId:z.string().uuid(),status:z.enum(["open","answered","closed"])});
 const edit=z.object({action:z.literal("edit"),messageId:z.string().uuid(),message:z.string().trim().min(1).max(2000)});
-export async function POST(request:Request){
+async function handlePOST(request:Request){
  const parsed=z.discriminatedUnion("action",[reply,status,edit]).safeParse(await request.json().catch(()=>null));
  if(!parsed.success)return Response.json({error:"Cavabı düzgün yazın."},{status:400});
  const b=parsed.data,sql=storeDb(),staff=request.headers.get("x-birkassa-user-id");
@@ -38,3 +39,6 @@ export async function POST(request:Request){
   await tx.unsafe("update support_tickets set status='answered',updated_at=now() where id=$1",[ticket.id]);
  });return Response.json({ok:true});}catch(e){return Response.json({error:e instanceof Error&&!("code" in e)?e.message:"Bilet yenilənmədi."},{status:400});}finally{await sql.end();}
 }
+
+export const GET=withAdminSession(handleGET);
+export const POST=withAdminSession(handlePOST);

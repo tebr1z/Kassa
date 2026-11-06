@@ -1,0 +1,49 @@
+RESTAMARKET — VEB İDARƏETMƏSİ
+
+Giriş: /admin. Yalnız aktiv administrator və ya kassir güclü şifrə ilə daxil olur.
+Administrator idarəetməyə, kassir yalnız POS-a və öz kassa növbəsinə giriş alır.
+Müştəri hesabı, menecer rolu və tək PIN idarəetmə girişi vermir.
+Şifrə ən azı 12 simvol, hərf və rəqəm olmalıdır. Sessiya 4 saatlıqdır;
+10 dəqiqə hərəkətsizlikdən sonra yenidən giriş tələb olunur.
+5 uğursuz girişdən sonra hesab 15 dəqiqəlik cəhd məhdudiyyətinə düşür.
+
+İNTERNETƏ ÇIXARMAZDAN ƏVVƏL
+- Etibarlı HTTPS domeni qurun. HTTP yalnız localhost/127.0.0.1 üçün açıqdır.
+  TLS arxasında tətbiqə ötürülən sorğunun protokolu da HTTPS kimi qurulmalıdır.
+- İlk uzaq şifrə quraşdırılması üçün serverdə BIRKASSA_ADMIN_SETUP_TOKEN
+  ən azı 32 simvolluq təsadüfi məxfi açar olmalıdır. Alternativ olaraq serverdə
+  npm run admin:setup-key əmri .private/web-admin-setup-token.txt yaradır;
+  açar konsola çıxarılmır və mövcud açar dəyişdirilmir. npm start yerli açarı
+  yalnız işə salınma vaxtı server mühitinə yükləyir; açar build-ə daxil edilmir.
+  Başqa hostda birbaşa standalone server açılarsa, məxfi açarı server mühitində
+  BIRKASSA_ADMIN_SETUP_TOKEN kimi təyin edin. Mövcud PIN varsa, açarla
+  yanaşı o da tələb edilir. Vebdə localhost daxil olmaqla ilk şifrə üçün açar
+  tələb olunur. İlkin şifrə qurulduqdan sonra açarı təhlükəsiz yerdə saxlayın
+  və serverdən silin (digər administratorların ilkin quraşdırması üçün yenisi lazımdır).
+  Açarı NEXT_PUBLIC dəyişəninə, repoya və ya müştəriyə göndərməyin.
+- Standart və ya ortaq şifrə istifadə etməyin. Administrator hesablarını
+  aktiv saxladığınız şəxslərlə məhdudlaşdırın. MFA/VPN və ya ayrıca giriş
+  proksisi əlavə müdafiə verər; bu tətbiq özü MFA xidməti təqdim etmir.
+- PostgreSQL və ehtiyat fayllarını ictimai şəbəkəyə açmayın.
+- Server yeniləmələri, firewall, ayrıca DB istifadəçisi və müntəzəm bərpa
+  yoxlaması aparılan ehtiyat nüsxələri təşkil edin.
+
+MƏLUMAT VƏ SİNXRONİZASİYA
+Veb kassa serverin DATABASE_URL bazası ilə, masaüstü isə kompüterin yerli
+bazası ilə işləyir. Stok, alış qiyməti və maliyyə avtomatik birləşdirilmir.
+Vebdə stok əməliyyatları artıq həmin serverdə saxlanır, yalnız administrator
+görür. Mövcud masaüstü məlumatları dəyişdirilmir və vebə köçürülmür.
+Masaüstü kataloq bağlantısı aktivdirsə, növbəti yayımlama məhsulun ictimai
+adını, qiymətini, şəklini və seçimlərini yeniləyə bilər. Məhsulları iki yerdə
+paralel redaktə etməyin; vebdən idarə etmək üçün kataloq bağlantısını ayırın.
+Bağlantı vebin öz stokunu, alış qiymətini və maliyyəsini dəyişdirmir.
+
+MÜDAFİƏ
+API-lərdə sessiya DB-dən həm Proxy, həm də əməliyyat sərhədində yoxlanır.
+İcazəsiz daxili səhifələr girişə qaytarılır. Kassir maliyyə, alış qiymətləri,
+əməkhaqqı, məhsul silmə və işçi təyinatı API-lərindən istifadə edə bilmir.
+Saxta istifadəçi başlıqları,
+başqa saytdan yazma sorğuları, deaktiv/vaxtı bitmiş/PIN sessiyaları rədd edilir.
+Müştəri kataloquna stok, alış qiyməti, maaş, şifrə və sessiya qaytarılmır.
+Heç bir tətbiq üçün 100% təhlükəsizlik zəmanəti verilmir; yayımlama və
+server konfiqurasiyasının ayrıca yoxlanması vacibdir.

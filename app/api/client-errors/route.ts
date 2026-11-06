@@ -1,10 +1,11 @@
+import {withAdminSession} from '@/lib/require-admin';
 import { NextResponse } from "next/server";
 import { logSystemError } from "@/lib/log-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     const body = await request.json() as { message?: string; detail?: string };
     const message = String(body.message || "").trim();
@@ -16,3 +17,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Xəta jurnalı yazılmadı" }, { status: 500 });
   }
 }
+
+export const POST=withAdminSession(handlePOST);
