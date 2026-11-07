@@ -86,6 +86,21 @@ for(const [path,marker] of [['app/api/sales/route.ts','const price = orderLine?'
   if(path.includes('/sales/'))assert.equal(price(product,{price:45},{unit_price:92},commerce.sellingPrice),92,'Previously accepted order snapshot is not repriced');
 }
 const dashboard=await readFile('app/admin/staff-dashboard.tsx','utf8');assert.equal((dashboard.match(/<ProductDiscountEditor\b/g)||[]).length,2,'Main new and edit forms both expose discounts');assert.ok(dashboard.includes('initialSalePrice={editing.regularPrice??editing.price}'));
+// Render the actual category selector with both loading and loaded lookup data.
+// An imported/free-text category is a product value, not a missing global row.
+const dashboardAst=ts.createSourceFile('staff-dashboard.tsx',dashboard,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const categoryFunction=dashboardAst.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='CategoryField');assert.ok(categoryFunction);
+const categoryCode=ts.transpileModule('import {useState,useEffect} from "react";const t=(value:string)=>value;const useLanguage=()=>{};'+categoryFunction.getText(dashboardAst)+';export default CategoryField;',{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+for(const rows of [[],[{id:'other',name:'Manqallar',isActive:true}],[{id:'same',name:'Endirim sınağı',isActive:true}],[{id:'inactive',name:'Endirim sınağı',isActive:false}]]){
+ const categoryModule={exports:{}};let stateIndex=0;
+ const reactHooks={useState:initial=>[stateIndex++===0?rows:initial,()=>{}],useEffect:()=>{}};
+ new Function('require','module','exports',categoryCode)(name=>name==='react'?reactHooks:require(name),categoryModule,categoryModule.exports);
+ const html=renderToStaticMarkup(createElement('form',null,createElement(categoryModule.exports.default,{defaultValue:'Endirim sınağı'})));
+ const selectedOptions=[...html.matchAll(/<option\b([^>]*)>([^<]*)<\/option>/g)].filter(([,attributes])=>/\bselected=""/.test(attributes));assert.equal(selectedOptions.length,1);
+ assert.equal(selectedOptions[0][2],'Endirim sınağı','The actual rendered selected category survives missing/loading/inactive lookups');
+ assert.equal((html.match(/value="Endirim sınağı"/g)||[]).length,1,'An existing lookup category does not create duplicate options');
+ const payload=new FormData();payload.set('category',selectedOptions[0][1].match(/\bvalue="([^"]*)"/)[1]);assert.equal(Object.fromEntries(payload).category,'Endirim sınağı','Native selected-option form payload preserves the original category during a discount-only edit');
+}
 assert.ok((await readFile('app/admin/store/commerce-manager.tsx','utf8')).includes('discountPercentName="discount_percent"'));
 const {productDiscountTranslations}=await load('lib/product-discount-translations.ts');for(const row of productDiscountTranslations){assert.equal(row.length,5);assert.ok(row.every(value=>value.trim()));}
 console.log('PASS: cent-safe percentage/amount validation, exact legacy preservation, real product/CMS handler writes+DTO, POS/order snapshot and variant-price semantics, main/CMS editors, truthful SSR discount display and five-language strings.');
