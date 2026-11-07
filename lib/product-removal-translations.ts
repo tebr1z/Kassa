@@ -1,0 +1,15 @@
+export const productRemovalTranslations:[string,string,string,string,string][]=[
+  ['MƏHSULUN SİLİNMƏSİ','УДАЛЕНИЕ ТОВАРА','DELETE PRODUCT','ÜRÜNÜ SİLME','删除商品'],
+  ['Məhsulu silmək istəyirsiniz?','Удалить этот товар?','Delete this product?','Bu ürünü silmek istiyor musunuz?','确定删除此商品吗？'],
+  ['Məhsul saytdan və kassadan çıxarılacaq.','Товар будет убран с сайта и из кассы.','The product will be removed from the store and POS.','Ürün siteden ve kasadan kaldırılacak.','此商品将从网站及收银系统中移除。'],
+  ['Köhnə çeklər, satış və stok tarixçəsi saxlanılır.','Старые чеки и история продаж и запасов сохранятся.','Previous receipts, sales and inventory history will be kept.','Eski fişler, satış ve stok geçmişi korunur.','以往收据、销售记录及库存历史将保留。'],
+  ['Bəli, məhsulu sil','Да, удалить товар','Yes, delete product','Evet, ürünü sil','确认删除商品'],
+  ['Silinir…','Удаление…','Deleting…','Siliniyor…','正在删除…'],
+  ['Məhsul silindi.','Товар удалён.','Product deleted.','Ürün silindi.','商品已删除。'],
+  ['Məhsul silinmədi. Yenidən cəhd edin.','Не удалось удалить товар. Попробуйте ещё раз.','The product could not be deleted. Try again.','Ürün silinemedi. Tekrar deneyin.','无法删除商品，请重试。'],
+  ['Məhsul silinmədi. Bağlantını yoxlayıb yenidən cəhd edin.','Не удалось удалить товар. Проверьте соединение и повторите попытку.','The product could not be deleted. Check your connection and try again.','Ürün silinemedi. Bağlantınızı kontrol edip tekrar deneyin.','无法删除商品，请检查网络连接后重试。'],
+  ['Giriş vaxtı bitib. Yenidən daxil olun.','Сеанс истёк. Войдите снова.','Your session has expired. Please sign in again.','Oturum süresi doldu. Yeniden giriş yapın.','登录已过期，请重新登录。'],
+  ['Bu əməliyyat üçün icazəniz yoxdur.','У вас нет разрешения на это действие.','You do not have permission to perform this action.','Bu işlem için izniniz yok.','您无权执行此操作。'],
+  ['Məhsul tapılmadı.','Товар не найден.','Product not found.','Ürün bulunamadı.','未找到商品。'],
+  ['Məhsul açıq sifarişdədir. Əvvəl sifarişi tamamlayın və ya ləğv edin.','Товар есть в открытом заказе. Сначала завершите или отмените заказ.','This product is in an open order. Complete or cancel the order first.','Ürün açık bir siparişte. Önce siparişi tamamlayın veya iptal edin.','此商品属于未完成订单，请先完成或取消该订单。'],
+];

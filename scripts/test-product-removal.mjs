@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import ts from 'typescript';
+const js=ts.transpile(await readFile('lib/product-removal.ts','utf8'),{module:ts.ModuleKind.ESNext});
+const {productRemovalRows,productRemovalDuration}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+const rows=[{id:'a',name:'A'},{id:'b',name:'B'},{id:'c',name:'C'}],hidden=new Set(['b']),exit=[{row:rows[1],index:1}];
+assert.ok(productRemovalDuration>=200&&productRemovalDuration<=500);
+assert.deepEqual(productRemovalRows(rows,[],new Set()),rows,'No deletion means no list change');
+assert.deepEqual(productRemovalRows(rows,exit,hidden),rows,'Keep row during its exit');
+assert.deepEqual(productRemovalRows([rows[0],rows[2]],exit,hidden),rows,'Fast refresh cannot skip exit animation');
+assert.deepEqual(productRemovalRows(rows,[],hidden),[rows[0],rows[2]],'Stale data cannot resurrect a deleted row');
+assert.deepEqual(productRemovalRows([],exit,hidden),[rows[1]],'Missing refreshed data still keeps exit snapshot');
+assert.deepEqual(productRemovalRows(rows,[{row:rows[2],index:2},{row:rows[0],index:0}],new Set(['a','c'])),rows,'Concurrent exits retain ordering');
+assert.deepEqual(productRemovalRows([{id:12,name:'Number'}],[],new Set(['12'])),[]);
+const root=await readFile('app/admin/page.tsx','utf8'),cms=await readFile('app/admin/store/commerce-manager.tsx','utf8'),dialog=await readFile('app/admin/product-delete-dialog.tsx','utf8'),hook=await readFile('app/admin/use-product-removal.tsx','utf8'),css=await readFile('app/admin/product-removal.css','utf8');
+for(const form of [root,cms]){assert.ok(form.includes('<ProductDeleteDialog'));assert.ok(form.includes('product-removal-exit'));assert.ok(form.includes('inert={removal.isRemoving'));assert.ok(!form.includes('window.confirm'));}
+assert.match(root,/archivedProductIds\.current\.add\(id\)/);assert.match(root,/rows\.filter\(row=>!archivedProductIds\.current\.has/);assert.match(root,/onArchived\(target.id\)/);
+assert.match(dialog,/pending\.current=true/);assert.match(dialog,/event\.preventDefault\(\);void removeProduct\(\)/);assert.match(dialog,/body\.ok!==true/);assert.match(dialog,/cancelButton\.current\?\.focus\(\)/);assert.ok(dialog.indexOf('onDeleted(product)')>dialog.indexOf('if(!response.ok)'));
+assert.match(hook,/prefers-reduced-motion/);assert.match(hook,/clearTimeout/);assert.match(css,/prefers-reduced-motion/);
+const translated=ts.transpile(await readFile('lib/product-removal-translations.ts','utf8'),{module:ts.ModuleKind.ESNext});
+const {productRemovalTranslations}=await import('data:text/javascript;base64,'+Buffer.from(translated).toString('base64'));
+const keys=new Set(productRemovalTranslations.map(row=>row[0]));for(const row of productRemovalTranslations)assert.ok(row.length===5&&row.every(Boolean));
+for(const key of ['Məhsulu silmək istəyirsiniz?','Bəli, məhsulu sil','Silinir…','Məhsul silindi.'])assert.ok(keys.has(key));
+console.log('PASS: retained exit snapshots, stale-data tombstones, concurrent ordering, server-confirmed dialog, duplicate guard, five languages, reduced motion and both product screens.');

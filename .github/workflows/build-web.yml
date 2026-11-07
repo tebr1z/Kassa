@@ -28,6 +28,7 @@ jobs:
       - run: node scripts/test-commerce.mjs
       - run: node scripts/test-variant-editor.mjs
       - run: node scripts/test-language-switcher.mjs
+      - run: node scripts/test-product-removal.mjs
       - run: npm run test:account-translations
       - run: npm run build
       - name: Package Linux standalone runtime (no database or secrets)

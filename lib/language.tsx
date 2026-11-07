@@ -2,6 +2,7 @@
 import {createContext,useContext,useEffect,useSyncExternalStore,type ReactNode} from "react";
 import {desktopTranslations} from "./desktop-translations";
 import {storefrontTranslations} from "./storefront-translations";
+import {productRemovalTranslations} from './product-removal-translations';
 import {Check,Languages,ChevronDown} from "lucide-react";
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuLabel,DropdownMenuRadioGroup,DropdownMenuRadioItem,DropdownMenuSeparator} from '@/components/ui/dropdown-menu';
 import {languageOptions,languageMenuCopy,isLanguage,type Language} from './language-options';
@@ -151,7 +152,7 @@ const rows=[
  ["Aktiv","Активен","Active","Aktif","启用"],
  ["Deaktiv","Неактивен","Inactive","Pasif","停用"]
 ];
-rows.push(...desktopTranslations.map(row=>[row[0],row[1],row[2],rows.find(existing=>existing[0]===row[0])?.[3]||row[3],row[4]]),...storefrontTranslations);
+rows.push(...desktopTranslations.map(row=>[row[0],row[1],row[2],rows.find(existing=>existing[0]===row[0])?.[3]||row[3],row[4]]),...storefrontTranslations,...productRemovalTranslations);
 export const translationKeys=rows.map(row=>row[0]);
 const translations=new Map(rows.map(row=>[row[0],row]));
 const upperTranslations=new Map(rows.map(row=>[row[0].toLocaleUpperCase("az"),row]));

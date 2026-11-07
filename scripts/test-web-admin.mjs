@@ -103,6 +103,9 @@ try{
  await sql.unsafe('update products set cost_price=29 where id=$1',[product.id]);
  finance=(await request('/api/finance')).data;assert.equal(finance.metrics.costOfGoods,46,'Historical cost does not change with current purchase price');assert.equal(finance.metrics.expenses,310);assert.equal(finance.metrics.payroll,300);assert.equal(finance.metrics.netProfit,-226);assert.equal(finance.recent.find(r=>r.category==='Kommunal').payee,'Elektrik xidməti');assert.ok(finance.sales.some(s=>s.cashier==='İkinci mağaza kassiri'&&s.warehouse==='İkinci mağaza anbarı'));
  const branchFinance=(await request('/api/finance?branch='+branchId)).data;assert.equal(branchFinance.metrics.revenue,65);assert.equal(branchFinance.metrics.expenses,310);
+ const protectedOrder=await request('/api/orders',{method:'POST',body:{customerName:'Silmə yoxlaması',items:[{productId:product.id,optionId:option.id,quantity:1}]}});assert.equal(protectedOrder.status,201,JSON.stringify(protectedOrder.data));
+ assert.equal((await request('/api/store-admin/commerce',{method:'POST',body:{action:'delete-product',id:product.id,confirm:'SİL'}})).status,400,'Open order blocks deletion');assert.equal((await sql.unsafe('select deleted_at from products where id=$1',[product.id]))[0].deleted_at,null);
+ assert.equal((await request('/api/orders',{method:'POST',body:{action:'status',orderId:protectedOrder.data.orderId,status:'cancelled'}})).status,201);
  const deleted=await request('/api/store-admin/commerce',{method:'POST',body:{action:'delete-product',id:product.id,confirm:'SİL'}});assert.equal(deleted.status,200);assert.ok(!(await request('/api/catalog',{auth:false})).data.products.some(p=>p.id===product.id));assert.ok(!(await request('/api/store-admin/commerce')).data.products.some(p=>p.id===product.id));assert.equal(Number((await sql.unsafe('select count(*) n from sale_items where product_id=$1',[product.id]))[0].n),2,'Product removal retains historical receipts');
  assert.equal((await request('/api/shifts',{method:'POST',body:{action:'open',openingCash:0},headers:{Origin:'https://attacker.example'}})).status,403,'Cross-origin write denied');
  assert.equal((await request('/api/shifts',{method:'POST',body:{action:'open',openingCash:0},headers:{'Sec-Fetch-Site':'cross-site'}})).status,403);
@@ -116,7 +119,17 @@ try{
  assert.equal((await login()).status,429);await sql.unsafe('delete from staff_auth_attempts');await login();
  assert.equal((await request('/api/auth',{method:'DELETE'})).status,200);assert.equal((await request('/api/products')).status,401);
  console.log('PASS: optional/custom variants, atomic product creation, variant cost/receipt snapshots, honest discount pricing, two-store cashier stock isolation and permissions, open-shift assignment lock, salary plans/payroll and expense idempotency, net profit with historical COGS, archive deletion preserving receipts, CSRF/HTTPS/session protections and catalogue privacy.');
- if(process.argv.includes('--serve')){console.log('ISOLATED UI PREVIEW: '+origin+'/products/'+variantProduct.id+' | admin: '+origin+'/admin');await new Promise(resolve=>{process.once('SIGINT',resolve);process.stdin.once('data',resolve);process.stdin.resume();});process.stdin.pause();}
+ if(process.argv.includes('--serve')){
+  const [uiDelete]=await sql.unsafe("insert into products(sku,name,sale_price,cost_price) values('UI-DELETE-QA','UI silmə sınağı',50,20) returning id");
+  const [uiBlocked]=await sql.unsafe("insert into products(sku,name,sale_price,cost_price) values('UI-DELETE-BLOCKED','UI silmə xətası sınağı',50,20) returning id");
+  const [uiCustomer]=await sql.unsafe("insert into customers(full_name) values('İzolə edilmiş UI sınağı') returning id");
+  const [uiOrder]=await sql.unsafe("insert into sales_orders(order_no,customer_id,total,created_by) values('UI-DELETE-GUARD',$1,50,$2) returning id",[uiCustomer.id,admin.id]);
+  await sql.unsafe('insert into sales_order_items(sales_order_id,product_id,quantity,unit_price,line_total) values($1,$2,1,50,50)',[uiOrder.id,uiBlocked.id]);
+  console.log('ISOLATED UI PREVIEW: '+origin+'/products/'+variantProduct.id+' | admin: '+origin+'/admin');
+  await new Promise(resolve=>{process.once('SIGINT',resolve);process.stdin.once('data',resolve);process.stdin.resume();});process.stdin.pause();
+  const [state]=await sql.unsafe('select deleted_at from products where id=$1',[uiDelete.id]);
+  if(state.deleted_at){assert.equal((await sql.unsafe("select count(*)::int n from audit_logs where entity_id=$1 and action='commerce.delete-product'",[uiDelete.id]))[0].n,1,'Only one successful deletion');assert.equal((await sql.unsafe('select deleted_at from products where id=$1',[uiBlocked.id]))[0].deleted_at,null);console.log('PASS: browser deletion fixture archived exactly once; rejected product remained untouched.');}
+ }
 }finally{
  const stopped=new Promise(resolve=>server.once('exit',resolve));server.kill();await Promise.race([stopped,new Promise(resolve=>setTimeout(resolve,5000))]);await sql.end({timeout:2});await database.close();
 }

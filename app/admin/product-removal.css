@@ -1,0 +1,8 @@
+.product-removal-exit{animation:product-removal-exit 340ms cubic-bezier(.2,.7,.3,1) both;pointer-events:none!important;transform-origin:center;will-change:opacity,transform}
+tr.product-removal-exit>td{background:#fff1ef!important}
+.cm-product-card.product-removal-exit{border-color:#edc4be!important;background:#fff8f6!important}
+@keyframes product-removal-exit{0%{opacity:1;transform:translateX(0) scale(1)}35%{opacity:.7}100%{opacity:0;transform:translateX(22px) scale(.98)}}
+.product-removal-notice{display:flex;align-items:center;gap:11px;padding:13px 16px;margin:0 0 16px;border:1px solid #cce2d1;border-radius:13px;background:#edf7ef;color:#266440;box-shadow:0 4px 16px #1a51300a;animation:product-removal-notice 180ms ease-out both}
+.product-removal-notice>svg{flex-shrink:0}.product-removal-notice>span{flex:1;min-width:0}.product-removal-notice strong,.product-removal-notice small{display:block;line-height:1.5}.product-removal-notice strong{font-size:13px}.product-removal-notice small{font-size:12px;color:#526d59;overflow-wrap:anywhere;margin-top:2px}.product-removal-notice>button{display:grid;place-items:center;width:36px;height:36px;flex-shrink:0;padding:0;border:0;border-radius:9px;background:transparent;color:#526d59;cursor:pointer}.product-removal-notice>button:hover{background:#dceee0}.product-removal-notice>button:focus-visible{outline:2px solid #377d52;outline-offset:2px}
+@keyframes product-removal-notice{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.product-removal-exit,.product-removal-notice{animation:none!important;transition:none!important}}
