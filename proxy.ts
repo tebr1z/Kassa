@@ -51,6 +51,20 @@ function forward(request:NextRequest,user?:{id:string;role:string}){
 }
 export async function proxy(request:NextRequest){
  const path=request.nextUrl.pathname;
+ const productDetail=/^\/(?:mehsullar|products)\/.+/.test(path);
+ if(!productDetail&&path!=='/'&&path.endsWith('/')){
+  const target=new URL(request.url);target.pathname=path.replace(/\/+$/,'');
+  return NextResponse.redirect(target,308);
+ }
+ const publicPage=productDetail||['/mehsullar','/products','/account','/sizin-ucun'].includes(path)||path.startsWith('/categories/');
+ if(publicPage){
+  const headers=new Headers(request.headers);
+  headers.delete('x-birkassa-user-id');headers.delete('x-birkassa-role');
+  // Never trust a caller-supplied value. The page uses the real path to send
+  // missing-slash and renamed-slug links directly to one canonical destination.
+  headers.set('x-restamarket-product-pathname',path);
+  return NextResponse.next({request:{headers}});
+ }
  const adminPage=path==='/admin'||path.startsWith('/admin/');
  if(adminPage&&!secureAdminRequest(request))return new NextResponse('İdarəetmə üçün HTTPS bağlantısı tələb olunur.',{status:426});
  if(path==='/admin')return forward(request);
@@ -87,4 +101,4 @@ export async function proxy(request:NextRequest){
   }catch(error){console.error("permission.proxy",error);void logSystemError("permission.proxy", error);return NextResponse.json({error:"İcazə yoxlanmadı"},{status:500})}finally{await sql.end({timeout:2})}
 }
 
-export const config={matcher:["/api/:path*","/admin/:path*"]};
+export const config={matcher:["/api/:path*","/admin/:path*","/mehsullar/:path*","/products/:path*","/account/:path*","/categories/:path*","/sizin-ucun/:path*"]};

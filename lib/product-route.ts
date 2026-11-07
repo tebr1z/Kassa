@@ -16,3 +16,11 @@ export const findProductBySlug=cache(async(slug:string)=>{
  const matches=(await getPublicCatalog()).products.filter(product=>normalize(productSlug(product.name))===normalize(slug));
  return matches.length===1?matches[0]:null;
 });
+// The public code is stable: renaming a product redirects its old slug rather
+// than breaking links. Unrecognised codes must never fall back to another item.
+export const findProductForPath=cache(async(segment:string)=>{
+ if(segment.length>300)return null;
+ const coded=segment.match(/^(\d{6})(?:-.*)?$/);
+ if(coded)return findProductByCode(coded[1]);
+ return await findProductById(segment)||await findProductBySlug(segment);
+});

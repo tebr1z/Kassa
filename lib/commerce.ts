@@ -20,7 +20,7 @@ export function productSlug(name:string){
  return folded.replace(/[^0-9A-Za-z]+/g,"-").replace(/^-+|-+$/g,"").toLowerCase()||"mehsul";
 }
 export function productPath(product:{id:string;name:string;code?:string}){
- return product.code&&/^\d{6}$/.test(product.code)?`/mehsullar/${productSlug(product.name)}/${product.code}`:`/mehsullar/${product.id}`;
+ return product.code&&/^\d{6}$/.test(product.code)?`/mehsullar/${product.code}-${productSlug(product.name)}/`:`/mehsullar/${product.id}`;
 }
 export type ProductVariantQuery=Record<string,string|string[]|undefined>;
 export const productVariantKeys=['olcu','reng','nov','secim','variant'] as const;
