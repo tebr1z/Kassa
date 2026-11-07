@@ -17,10 +17,13 @@ assert.match(account,/<SupportDesk key=\{user\.id\}/);assert.match(account,/<Acc
 assert.match(account,/if\(authPending\.current\)return/);assert.match(account,/json\.ok!==true/);
 assert.match(account,/aria-label=\{t\("Mağazaya qayıt"\)\}/,'Icon-only mobile back link must keep its accessible name');
 const profile=source['app/account-settings.tsx'];
-assert.match(profile,/run!==reverseRun\.current/);assert.match(profile,/run!==searchRun\.current/);
+assert.match(profile,/<DeliveryLocationPicker/);assert.match(profile,/selectionVersion=\{\(\)=>addressVersion\.current\}/);
+assert.doesNotMatch(profile,/\/api\/places|<AddressMap/,'Profile uses the shared opt-in picker, never reverse-geocodes or loads its own map');
 assert.match(profile,/newPassword&&!currentPassword/);assert.match(profile,/input\.value=''/);
 assert.match(profile,/setAddress\(event\.target\.value\);setPin\(null\)/,'Manual address changes must clear stale coordinates');
-assert.match(profile,/if\(savePending\.current\|\|searching\|\|locating\)return/);
+assert.match(profile,/if\(savePending\.current\)return/);
+assert.match(profile,/customerAddressError\(address,\{required:false,maxLength:300\}\)/);
+assert.match(profile,/addressVersion\.current\+\+;savePending\.current=true/,'Saving synchronously invalidates pending map/GPS/address results');
 const orders=source['app/account/order-list.tsx'];
 assert.match(orders,/delivery_fee\?:/);assert.match(orders,/languageAmount\(Number\(order\.total\)\)/);
 assert.doesNotMatch(orders,/order\.total\s*\+\s*fee|Number\(order\.total\)\s*\+\s*fee/,'Delivery fee is already included in order.total');

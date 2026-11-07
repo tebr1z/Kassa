@@ -124,49 +124,10 @@ for(const cancellation of ['destroy','not-current'])for(const reject of [false,t
  controller.widget.dispatchEvent(new Event('gmp-error'));assert.equal(f.state.errors,1,'Current official gmp-error is surfaced');work.resolve();await flush();assert.equal(f.state.selected.length,0,'A widget-level provider error invalidates its pending detail request');
  controller.destroy();controller.widget.dispatchEvent(new Event('gmp-error'));assert.equal(f.state.errors,1);
 }
-// Validate the real component's GPS callbacks as well: a late GPS fix must not
-// replace a newer manual/Google selection, win over a newer GPS request, or run
-// after the checkout was unmounted. No map script is opened by this harness.
-let hooks=[],cursor=0,pendingEffects=[],gps=[],picked=[],writes=0;
-const react={
- useRef(initial){const index=cursor++;if(!(index in hooks))hooks[index]={current:initial};return hooks[index];},
- useState(initial){const index=cursor++;if(!(index in hooks))hooks[index]=initial;return [hooks[index],value=>{writes++;hooks[index]=typeof value==='function'?value(hooks[index]):value;}];},
- useEffect(callback,deps){const index=cursor++,previous=hooks[index];if(!previous||deps.some((value,offset)=>value!==previous.deps[offset])){hooks[index]={deps,cleanup:previous?.cleanup};pendingEffects.push(()=>{previous?.cleanup?.();hooks[index].cleanup=callback();});}},
-};
-const {default:LocationPicker}=await load('app/delivery-location-picker.tsx',{
- react,'@/lib/language':{useTranslations:()=>({t:value=>value,language:'az'})},'@/lib/google-address':{attachGoogleAddressSearch,googleAddressLanguage},'lucide-react':{LocateFixed:()=>null,MapPin:()=>null},'./google-address.css':{},
-});
-let revision=0;
-const props={browserKey:'',pin:null,address:'Initial address',selectionVersion:()=>revision,onPick:pin=>picked.push(pin)};
-function render(changes={}){
- cursor=0;const tree=LocationPicker({...props,...changes});for(const effect of pendingEffects.splice(0))effect();return tree;
-}
-function buttons(node){if(!node||typeof node!=='object')return [];const children=node.props?.children;return [...(node.type==='button'?[node]:[]),...(Array.isArray(children)?children.flat(Infinity):[children]).flatMap(buttons)];}
-function startGps(tree=render()){
- const locate=buttons(tree).find(node=>(Array.isArray(node.props.children)?node.props.children:[node.props.children]).includes('Cari məkanım'));assert.ok(locate);locate.props.onClick();return gps.at(-1);
-}
-function mount(){hooks=[];cursor=0;pendingEffects=[];gps=[];picked=[];writes=0;revision=0;return render();}
-function unmount(){for(const hook of hooks)hook?.cleanup?.();}
-const position={coords:{latitude:40.12345678,longitude:49.12345678}};
-const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
-try{
- Object.defineProperty(globalThis,'navigator',{configurable:true,value:{geolocation:{getCurrentPosition(success,error,options){assert.deepEqual(options,{enableHighAccuracy:true,timeout:10000});gps.push({success,error});}}}});
- mount();startGps().success(position);assert.deepEqual(picked,[{lat:40.123457,lng:49.123457}]);unmount();
- mount();const stale=startGps();revision++;stale.success(position);assert.deepEqual(picked,[],'A parent synchronous revision invalidates GPS even before React effects flush');unmount();
- mount();const first=startGps(),second=startGps();first.success(position);first.error();assert.deepEqual(picked,[]);second.success(position);assert.equal(picked.length,1);unmount();
- mount();const disabled=startGps();render({disabled:true});disabled.success(position);assert.deepEqual(picked,[],'Disabled selection cannot be overwritten');unmount();
- mount();const gone=startGps();unmount();const before=writes;gone.success(position);gone.error();assert.deepEqual(picked,[]);assert.equal(writes,before,'Unmounted GPS callbacks do not write state');
- mount();const failed=startGps();revision++;const beforeFailure=writes;failed.error();assert.equal(writes,beforeFailure,'Stale GPS errors do not replace newer selection status');unmount();
-}finally{
- if(navigatorDescriptor)Object.defineProperty(globalThis,'navigator',navigatorDescriptor);else delete globalThis.navigator;
-}
-
-const pickerSource=await readFile('app/delivery-location-picker.tsx','utf8'),checkoutSource=await readFile('app/cart-sheet.tsx','utf8');
-assert.ok(checkoutSource.includes('selectionVersion={()=>locationRun.current}'),'Cart passes the synchronous address/pin revision to the picker');
-const invalidate=checkoutSource.match(/function invalidateQuote\(\)\{([^}]+)\}/)?.[1];assert.ok(invalidate?.includes('locationRun.current++'));assert.ok(invalidate.indexOf('locationRun.current++')<invalidate.indexOf('setQuote('),'Revision invalidation is synchronous, before state/effect updates');
-assert.match(checkoutSource,/onChange=\{e=>\{setAddress\(e\.target\.value\);setPin\(null\);invalidateQuote\(\);\}\}/,'Typing a manual address invalidates the pending map selection and quote');
-assert.ok(pickerSource.includes("String(latestVersion.current?.()??0)+'|'"),'Autocomplete compares the parent synchronous revision, not only delayed props');
-assert.ok(pickerSource.includes("widget.setAttribute('aria-label',t('Google-da ünvan axtarın'))"),'Changing language updates the accessible name as well as the placeholder');
+// Customer location selection now uses the bundled, opt-in OpenStreetMap picker.
+// Its real GPS/search/map lifecycle tests live in test-open-address.mjs.
+const pickerSource=await readFile('app/delivery-location-picker.tsx','utf8');
+assert.doesNotMatch(pickerSource,/maps\.googleapis\.com|attachGoogleAddressSearch|loadGoogleMaps/);
 
 // Every new setup/search label must have five nonempty translations, be wired
 // into the live language module, and not shadow any pre-existing dictionary key.
@@ -186,11 +147,11 @@ assert.equal(wiredImport,true);assert.equal(wiredSpread,true,'New Google Maps ro
 const {googleMapsTranslations}=await load('lib/google-maps-translations.ts'),translated=new Set(oldKeys);
 for(const row of googleMapsTranslations){assert.equal(row.length,5);assert.ok(row.every(value=>typeof value==='string'&&value.trim()),'All five Google Maps translations: '+row[0]);assert.equal(translated.has(row[0]),false,'Google Maps cannot shadow an old or repeated key: '+row[0]);translated.add(row[0]);}
 const required=new Set();
-for(const path of ['app/admin/store/google-maps-setup.tsx','app/delivery-location-picker.tsx']){
+for(const path of ['app/admin/store/google-maps-setup.tsx']){
  const tree=ts.createSourceFile(path,await readFile(path,'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
  function literals(node){if(ts.isStringLiteral(node))required.add(node.text);else if(ts.isConditionalExpression(node)){literals(node.whenTrue);literals(node.whenFalse);}else ts.forEachChild(node,literals);}
  function scan(node){if(ts.isCallExpression(node)&&['t','text.current','setError','setSearchError'].includes(node.expression.getText(tree)))node.arguments.forEach(literals);ts.forEachChild(node,scan);}scan(tree);
 }
 for(const key of required)if(key)assert.ok(translated.has(key),'Untranslated Maps setup/search/error label: '+key);
-console.log(`PASS: ${googleMapsTranslations.length} Google Maps rows cover all setup/picker labels in five languages without duplicate keys; dictionary wiring, synchronous cart revision, accessible language updates and real GPS callback cancellation.`);
+console.log(`PASS: ${googleMapsTranslations.length} retained Google setup rows have five translations without duplicate keys; customer picker no longer connects to Google.`);
 console.log('PASS: current Google widget events, minimal field mask, five language mappings, valid/invalid addresses and coordinates, latest-result wins, manual address/pin revisions, blocked/destroyed/stale cancellation, import errors and provider errors. Mock-only: no Google requests, keys, billing, database or server.');

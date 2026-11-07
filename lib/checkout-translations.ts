@@ -86,6 +86,7 @@ export const checkoutTranslations:[string,string,string,string,string][]=[
 // Apply these to existing rows before constructing the language lookup; do not
 // append duplicate translation keys or translate catalogue/customer content.
 export const checkoutTurkishOverrides:Record<string,string>={
+  'Axtar':'Ara',
   'Seçin':'Seçiniz',
   'Təhvil və əlaqə':'Teslimat ve iletişim',
   'Sifariş addımları':'Sipariş adımları',

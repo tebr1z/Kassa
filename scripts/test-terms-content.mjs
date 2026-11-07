@@ -18,6 +18,7 @@ async function load(file,imports={}){
 
 const languages=['az','ru','en','tr','zh'];
 const names={az:'termsAz',ru:'termsRu',en:'termsEn',tr:'termsTr',zh:'termsZh'};
+const displayDates={az:'8 noyabr 2026',ru:'8 ноября 2026',en:'8 November 2026',tr:'8 Kasım 2026',zh:'2026年11月8日'};
 const ids=[
  'magaza-elaqe','tetbiq-dairesi','mehsul-secimi','hesab-tehlukesizliyi',
  'sifaris-tesdiqi','qiymet-endirim','odenis-sened','tehvil-catdirilma',
@@ -65,8 +66,9 @@ for(const language of languages){
  assert.equal(isLanguage(language),true);
  assert.strictEqual(document,modules[language][names[language]],language+' aggregator must register its actual complete translation');
  assert.equal(document.status,'published',language+' cannot remain a draft');
- assert.equal(document.version,'2026-11-07.1',language+' policy version');
+ assert.equal(document.version,'2026-11-08.1',language+' policy version');
  nonempty(document.title,language+' title');nonempty(document.updatedDate,language+' display date');
+ assert.equal(document.updatedDate,displayDates[language],language+' deterministic release date');
  assert.match(document.updatedDate,/2026/,language+' display date must be author-provided');
  assert.equal(document.intro.length,2,language+' complete introduction');
  for(const value of document.intro)nonempty(value,language+' introduction');
@@ -89,6 +91,10 @@ for(const language of languages){
  assert.ok(phones.every(phone=>phone==='994702328080'),language+' must not invent another contact telephone');
  assert.match(contact,/Abşeron Mall/u,language+' retains the named shop location');
  for(const number of ['1','6','4'])assert.match(contact,new RegExp('(?:^|\\D)'+number+'(?:\\D|$)'),language+' retains row/building/shop '+number);
+ const privacy=section(document,'melumat-mexfilik').paragraphs[1],deliveryTerms=section(document,'tehvil-catdirilma').paragraphs[1];
+ for(const provider of ['Leaflet','OpenStreetMap','Nominatim','WhatsApp','Vexira'])assert.ok(privacy.includes(provider),language+' current map/media/notification disclosure: '+provider);
+ assert.doesNotMatch(privacy,/Google|unpkg/iu,language+' cannot describe removed map/script providers');
+ assert.doesNotMatch(deliveryTerms,/(?:^|\D)30(?:\D|$)/u,language+' legal tariff refers to current adjustable settings, not a hardcoded promotional threshold');
  assert.doesNotMatch(await readFile('lib/terms-'+language+'.ts','utf8'),/new\s+Date\s*\(|Date\.now\s*\(/,language+' date must not vary during rendering');
 }
 
@@ -107,7 +113,7 @@ for(const [language,words]of Object.entries({
  for(const expression of [words.exchange,words.physical,words.excluded])assert.match(exchange,expression,language+' exchange clock follows actual receipt, excluding receipt day');
  assert.ok(document.sources.some(source=>source.href===sourceUrls[2]),language+' retains the Civil Code source relevant to physical receipt');
 }
-assert.equal(termsContent.en.updatedDate,'7 November 2026');
+assert.equal(termsContent.en.updatedDate,'8 November 2026');
 
 const {termsUiTranslations}=await load('lib/terms-ui-translations.ts');
 const titleRow=termsUiTranslations.find(row=>row[0]===termsContent.az.title);

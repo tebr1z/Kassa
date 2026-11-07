@@ -5,21 +5,27 @@ import {z} from "zod";
 import {sellingPrice,couponDiscount} from "@/lib/commerce";
 import {notifyCatalogOrder,vexiraSettings,whatsappPhone} from "@/lib/vexira";
 import {deliverySettings,sameOriginMutation} from '@/lib/delivery-server';
-import {isCustomerPhone} from '@/lib/customer-contact';
+import {deliveryCharge} from '@/lib/delivery';
+import {normalizeCustomerPhone,customerPhoneError,normalizeCustomerAddress,customerAddressError} from '@/lib/customer-contact';
 export const dynamic="force-dynamic";
-const schema=z.object({requestKey:z.string().uuid(),expectedTotal:z.number().finite().min(0).optional(),deliveryQuoteId:z.string().uuid().nullable().optional(),coupon:z.string().trim().toUpperCase().max(30).default(""),fulfillment:z.enum(["pickup","delivery"]),address:z.string().max(500),name:z.string().trim().min(2).max(100),phone:z.string().trim().refine(isCustomerPhone),note:z.string().max(1000),items:z.array(z.object({id:z.string().uuid(),optionId:z.string().uuid().nullable().optional(),quantity:z.number().int().min(1).max(100)})).min(1).max(50)});
+// Keep snapshot parsing separate from today's plausibility checks: an earlier
+// committed request must still be recoverable with its original contact data.
+const schema=z.object({requestKey:z.string().uuid(),expectedTotal:z.number().finite().min(0).optional(),deliveryQuoteId:z.string().uuid().nullable().optional(),coupon:z.string().trim().toUpperCase().max(30).default(""),fulfillment:z.enum(["pickup","delivery"]),address:z.string().max(500),name:z.string().trim().min(2).max(100),phone:z.string().trim().max(32),note:z.string().max(1000),items:z.array(z.object({id:z.string().uuid(),optionId:z.string().uuid().nullable().optional(),quantity:z.number().int().min(1).max(100)})).min(1).max(50)});
 function checkoutRejection(message:string){return Object.assign(new Error(message),{statusCode:400});}
 export async function POST(request:Request){
  if(!sameOriginMutation(request))return Response.json({error:'Başqa saytdan göndərilən sorğu qəbul edilmir.'},{status:403});
  if(Number(request.headers.get("content-length")||0)>20000)return Response.json({error:"Sorğu çox böyükdür"},{status:413});
  const account=await customerAccount();if(!account)return Response.json({error:"Sifariş üçün hesabınıza daxil olun."},{status:401});
  const parsed=schema.safeParse(await request.json().catch(()=>null));
- if(!parsed.success){const fields=[...new Set(parsed.error.issues.map(issue=>String(issue.path[0]||'request')))];return Response.json({error:fields.length===1&&fields[0]==='phone'?'Əlaqə telefonunu düzgün yazın.':'Ad, telefon və məhsulları düzgün daxil edin.',code:'INVALID_CHECKOUT',fields},{status:400});}
- const b=parsed.data;if(b.fulfillment==="delivery"&&b.address.trim().length<10)return Response.json({error:"Çatdırılma ünvanını tam yazın."},{status:400});const sql=storeDb();
+ if(!parsed.success){const fields=[...new Set(parsed.error.issues.map(issue=>String(issue.path[0]||'request')))];return Response.json({error:fields.length===1&&fields[0]==='phone'?customerPhoneError(''):fields.length===1&&fields[0]==='address'?customerAddressError('',{required:true}):'Ad, telefon və məhsulları düzgün daxil edin.',code:'INVALID_CHECKOUT',fields},{status:400});}
+ const b=parsed.data,sql=storeDb();
  try{
  // Count failed attempts too; do not roll this back with rejected orders.
  const [previous]=await sql.unsafe("select order_no from sales_orders where request_key=$1 and account_id=$2",[b.requestKey,account.id]);
  if(previous)return Response.json({order_no:previous.order_no},{status:201});
+ const phoneError=customerPhoneError(b.phone),addressError=b.fulfillment==='delivery'?customerAddressError(b.address,{required:true,maxLength:500}):'';
+ if(phoneError||addressError)return Response.json({error:phoneError||addressError,code:'INVALID_CHECKOUT',fields:[...(phoneError?['phone']:[]),...(addressError?['address']:[])]},{status:400});
+ b.phone=normalizeCustomerPhone(b.phone)!;b.address=b.fulfillment==='delivery'?normalizeCustomerAddress(b.address):'';
  const [limit]=await sql.unsafe("insert into customer_order_attempts(account_id) values($1) on conflict(account_id) do update set attempts=case when customer_order_attempts.window_start<now()-interval '10 minutes' then 1 else customer_order_attempts.attempts+1 end,window_start=case when customer_order_attempts.window_start<now()-interval '10 minutes' then now() else customer_order_attempts.window_start end returning attempts",[account.id]);
  if(limit.attempts>12)return Response.json({error:"Çox sayda cəhd edildi. 10 dəqiqə sonra yenidən yoxlayın."},{status:429,headers:{"Retry-After":"600"}});
  const result=await sql.begin(async tx=>{
@@ -54,11 +60,17 @@ export async function POST(request:Request){
   if(b.fulfillment==='delivery'){
    await tx.unsafe('select id from delivery_settings where id=1 for share');
    const settings=await deliverySettings(tx);
-   if(Number((subtotal-discount).toFixed(2))<settings.minimumOrder)throw checkoutRejection('Çatdırılma üçün minimum sifariş məbləği ödənmir.');
+   const goodsTotal=Number((subtotal-discount).toFixed(2));
+   if(goodsTotal<settings.minimumOrder)throw checkoutRejection('Çatdırılma üçün minimum sifariş məbləği ödənmir.');
    if(settings.mode==='distance'){
+    const freeEligible=settings.freeOrderFrom!=null&&Number.isFinite(settings.freeOrderFrom)&&Math.round(goodsTotal*100)>=Math.round(settings.freeOrderFrom*100);
     const [quote]=b.deliveryQuoteId?await tx.unsafe('select * from delivery_quotes where id=$1 and account_id=$2 and expires_at>now() and settings_revision=$3 for share',[b.deliveryQuoteId,account.id,settings.revision]):[];
-    if(!quote||quote.address!==b.address.trim())throw checkoutRejection('Çatdırılma hesablaması köhnəlib. Ünvanı yenidən hesablayın.');
-    deliveryFee=Number(quote.fee);distanceMeters=Number(quote.distance_meters);deliveryLat=Number(quote.lat);deliveryLng=Number(quote.lng);deliveryPricing='distance';
+    if(b.deliveryQuoteId?(!quote||normalizeCustomerAddress(String(quote.address))!==b.address):!freeEligible)throw checkoutRejection('Çatdırılma hesablaması köhnəlib. Ünvanı yenidən hesablayın.');
+    // Free eligible orders may use a meaningful manual address without a map.
+    // A supplied quote is still validated; client totals/quote.fee never decide
+    // eligibility. Coupons can bring goods back below the free-order threshold.
+    deliveryPricing='distance';
+    if(quote){distanceMeters=Number(quote.distance_meters);deliveryFee=deliveryCharge(settings,distanceMeters,goodsTotal);deliveryLat=Number(quote.lat);deliveryLng=Number(quote.lng);}
    }else if(b.deliveryQuoteId)throw checkoutRejection('Çatdırılma şərtləri dəyişib. Səbəti yeniləyin.');
   }
   const finalTotal=Number((subtotal-discount+deliveryFee).toFixed(2));

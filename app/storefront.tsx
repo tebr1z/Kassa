@@ -139,7 +139,7 @@ export default function Storefront({productId,categoryId,picksPage,catalogPage,i
   <WhatsAppButton whatsapp={brand?.whatsapp}/>
   {notice&&<div className="sf-toast" role="status"><Check size={17}/>{t(notice)}<button onClick={()=>{setOpen(true);setNotice("");}}>{t("Səbətə bax")}</button></div>}
   {optionProduct&&<OptionDialog product={optionProduct} onPick={id=>add(optionProduct.id,id)} onClose={()=>setOptionProduct(null)}/>}
-  {open&&<CartSheet storeAddress={brand?.address||""} products={products} cart={cart} account={account} onChange={change} onCommitted={committed} onRefresh={refresh} onClose={()=>setOpen(false)}/>}
+  {open&&<CartSheet storeAddress={brand?.address||""} storeWhatsapp={brand?.whatsapp||'994702328080'} products={products} cart={cart} account={account} onChange={change} onCommitted={committed} onRefresh={refresh} onClose={()=>setOpen(false)}/>}
  </div>;
 }
 

@@ -9,7 +9,7 @@ const checkoutPayloadSchema = z.object({
   deliveryQuoteId: z.string().uuid().nullable().optional(),
   address: z.string().max(500),
   name: z.string().min(2).max(100),
-  phone: z.string().min(7).max(25),
+  phone: z.string().min(7).max(32),
   note: z.string().max(1000),
   items: z.array(z.object({ id: z.string().uuid(), optionId:z.string().uuid().nullable().optional(), quantity: z.number().int().min(1).max(100) })).min(1).max(50),
 });

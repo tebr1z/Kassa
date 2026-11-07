@@ -5,20 +5,21 @@ import {z} from "zod";
 import {customerAccount,customerCookie} from "@/lib/customer-session";
 import {storeDb} from "@/lib/store-db";
 import {secureAuthCookie} from "@/lib/auth-cookie";
-import {isCustomerPhone} from '@/lib/customer-contact';
+import {isCustomerPhone,normalizeCustomerPhone,customerPhoneError,isCustomerAddress,normalizeCustomerAddress,customerAddressError} from '@/lib/customer-contact';
 export const dynamic="force-dynamic";
 export async function GET(){const a=await customerAccount();return NextResponse.json({user:a?{id:a.id,name:a.full_name,email:a.email,phone:a.phone,address:a.address||"",lat:a.address_lat==null?null:Number(a.address_lat),lng:a.address_lng==null?null:Number(a.address_lng)}:null})}
 export async function POST(request:Request){
- const b=z.object({action:z.enum(["register","login"]),email:z.string().email().max(200).transform(s=>s.trim().toLowerCase()),password:z.string().min(8).max(128),name:z.string().trim().min(2).max(100).optional(),phone:z.string().trim().refine(isCustomerPhone).optional()}).safeParse(await request.json().catch(()=>null));
- if(!b.success)return NextResponse.json({error:b.error.issues.some(issue=>issue.path[0]==='phone')?'Əlaqə telefonunu düzgün yazın.':"E-poçt və ən azı 8 simvolluq şifrə daxil edin."},{status:400});
- const d=b.data,sql=storeDb();try{
+ const b=z.object({action:z.enum(["register","login"]),email:z.string().email().max(200).transform(s=>s.trim().toLowerCase()),password:z.string().min(8).max(128),name:z.string().trim().min(2).max(100).optional(),phone:z.string().trim().max(32).refine(isCustomerPhone).transform(value=>normalizeCustomerPhone(value)!).optional(),address:z.string().max(300).transform(normalizeCustomerAddress).refine(value=>isCustomerAddress(value,{maxLength:300})).optional()}).safeParse(await request.json().catch(()=>null));
+ if(!b.success)return NextResponse.json({error:b.error.issues.some(issue=>issue.path[0]==='phone')?customerPhoneError(''):b.error.issues.some(issue=>issue.path[0]==='address')?customerAddressError('',{required:true}):"E-poçt və ən azı 8 simvolluq şifrə daxil edin."},{status:400});
+ const d=b.data;if(d.action==='register'&&(!d.name||!d.phone))return NextResponse.json({error:"Ad və telefon tələb olunur."},{status:400});
+ const sql=storeDb();try{
  const [limit]=await sql.unsafe("insert into customer_auth_attempts(email,attempts) values($1,1) on conflict(email) do update set attempts=case when customer_auth_attempts.window_start<now()-interval '15 minutes' then 1 else customer_auth_attempts.attempts+1 end,window_start=case when customer_auth_attempts.window_start<now()-interval '15 minutes' then now() else customer_auth_attempts.window_start end returning attempts",[d.email]);
  if(limit.attempts>10)return NextResponse.json({error:"15 dəqiqə sonra yenidən cəhd edin."},{status:429});
  let accountId:string;
  if(d.action==="register"){
  if(!d.name||!d.phone)return NextResponse.json({error:"Ad və telefon tələb olunur."},{status:400});
  const name=d.name,phone=d.phone,salt=randomBytes(16).toString("hex"),hash=salt+":"+scryptSync(d.password,salt,64).toString("hex");
- accountId=await sql.begin(async tx=>{const [c]=await tx.unsafe("insert into customers(full_name,phone) values($1,$2) returning id",[name,phone]);const [a]=await tx.unsafe("insert into customer_accounts(customer_id,email,password_hash) values($1,$2,$3) returning id",[c.id,d.email,hash]);return a.id});
+ accountId=await sql.begin(async tx=>{const [c]=await tx.unsafe("insert into customers(full_name,phone,address) values($1,$2,$3) returning id",[name,phone,d.address||'']);const [a]=await tx.unsafe("insert into customer_accounts(customer_id,email,password_hash) values($1,$2,$3) returning id",[c.id,d.email,hash]);return a.id});
  }else{
  const [a]=await sql.unsafe("select id,password_hash from customer_accounts where email=$1",[d.email]);
  const [salt,hash]=(a?.password_hash||"dummy:"+ "00".repeat(64)).split(":");const derived=scryptSync(d.password,salt,64),expected=Buffer.from(hash,"hex");
@@ -30,11 +31,11 @@ export async function POST(request:Request){
  const r=NextResponse.json({ok:true});r.cookies.set(customerCookie,token,{httpOnly:true,sameSite:"lax",secure:secureAuthCookie(request),path:"/",expires});return r;
  }catch{return NextResponse.json({error:"Hesab yaradıla bilmədi. E-poçt artıq istifadə edilirsə giriş edin."},{status:400})}finally{await sql.end()}
 }
-const profile=z.object({name:z.string().trim().min(2).max(100),phone:z.string().trim().refine(isCustomerPhone),address:z.string().trim().max(300),lat:z.number().gte(-90).lte(90).nullable(),lng:z.number().gte(-180).lte(180).nullable(),currentPassword:z.string().max(128).optional(),newPassword:z.string().min(8).max(128).optional()});
+const profile=z.object({name:z.string().trim().min(2).max(100),phone:z.string().trim().max(32).refine(isCustomerPhone).transform(value=>normalizeCustomerPhone(value)!),address:z.string().max(300).transform(normalizeCustomerAddress).refine(value=>isCustomerAddress(value,{maxLength:300})),lat:z.number().gte(-90).lte(90).nullable(),lng:z.number().gte(-180).lte(180).nullable(),currentPassword:z.string().max(128).optional(),newPassword:z.string().min(8).max(128).optional()});
 export async function PATCH(request:Request){
  const account=await customerAccount();if(!account)return NextResponse.json({error:"Hesaba daxil olun."},{status:401});
  const parsed=profile.safeParse(await request.json().catch(()=>null));
- if(!parsed.success)return NextResponse.json({error:"Ad, telefon və ünvanı düzgün yazın. Yeni şifrə ən azı 8 simvol olmalıdır."},{status:400});
+ if(!parsed.success)return NextResponse.json({error:parsed.error.issues.some(issue=>issue.path[0]==='phone')?customerPhoneError(''):parsed.error.issues.some(issue=>issue.path[0]==='address')?customerAddressError('',{required:true}):"Ad, telefon və ünvanı düzgün yazın. Yeni şifrə ən azı 8 simvol olmalıdır."},{status:400});
  const d=parsed.data;if((d.lat==null)!==(d.lng==null))return NextResponse.json({error:"Ünvanı xəritədən seçin."},{status:400});
  const sql=storeDb();try{
   if(d.newPassword){

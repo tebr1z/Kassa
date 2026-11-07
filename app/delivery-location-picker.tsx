@@ -1,49 +1,95 @@
 'use client';
-import {useEffect,useRef,useState} from 'react';
-import {LocateFixed,MapPin} from 'lucide-react';
+
+import {useEffect,useId,useRef,useState} from 'react';
+import {LoaderCircle,LocateFixed,MapPin,Search,X} from 'lucide-react';
 import {useTranslations} from '@/lib/language';
-import {attachGoogleAddressSearch,googleAddressLanguage,type GooglePlacesApi} from '@/lib/google-address';
-import './google-address.css';
+import {isAzerbaijanCoordinate} from '@/lib/azerbaijan-location';
+import {AddressMap} from './address-map';
+import './open-map.css';
+
 export type DeliveryPin={lat:number;lng:number};
-type Listener={remove:()=>void};
-type MapInstance={addListener:(name:string,callback:(event:{latLng:{lat:()=>number;lng:()=>number}|null})=>void)=>Listener;panTo:(pin:DeliveryPin)=>void};
-type CircleInstance={setCenter:(pin:DeliveryPin)=>void;setMap:(map:MapInstance|null)=>void};
-type MapsApi=GooglePlacesApi&{Map:new(element:HTMLElement,options:object)=>MapInstance;Circle:new(options:object)=>CircleInstance};
-type MapsWindow=Window & {google?:{maps:MapsApi};__restamarketMapsReady?:()=>void};
-let loading:Promise<MapsApi>|null=null;
-function loadGoogleMaps(key:string){
- const browser=window as MapsWindow;if(browser.google?.maps)return Promise.resolve(browser.google.maps);
- if(loading)return loading;
- loading=new Promise<MapsApi>((resolve,reject)=>{
-  const script=document.createElement('script');script.id='restamarket-google-map';script.async=true;script.referrerPolicy='strict-origin-when-cross-origin';
-  const fail=()=>{clearTimeout(timer);delete browser.__restamarketMapsReady;script.remove();loading=null;reject(new Error('Xəritə yüklənmədi.'));};
-  const timer=setTimeout(fail,15000);
-  browser.__restamarketMapsReady=()=>{clearTimeout(timer);delete browser.__restamarketMapsReady;if(browser.google?.maps)resolve(browser.google.maps);else fail();};
-  script.onerror=fail;script.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(key)+'&loading=async&callback=__restamarketMapsReady';document.head.appendChild(script);
- });return loading;
-}
-export default function DeliveryLocationPicker({browserKey,pin,onPick,address='',onAddressPick,selectionVersion,disabled=false}:{browserKey:string;pin:DeliveryPin|null;onPick:(pin:DeliveryPin)=>void;address?:string;onAddressPick?:(address:string,pin:DeliveryPin)=>void;selectionVersion?:()=>number;disabled?:boolean}){
- const {t,language}=useTranslations();const mounted=useRef(true),geoRun=useRef(0),latestVersion=useRef(selectionVersion),text=useRef(t),box=useRef<HTMLDivElement>(null),searchBox=useRef<HTMLDivElement>(null),search=useRef<Awaited<ReturnType<typeof attachGoogleAddressSearch>>>(null),view=useRef<MapInstance|null>(null),marker=useRef<CircleInstance|null>(null),pick=useRef(onPick),addressPick=useRef(onAddressPick),blocked=useRef(disabled),latestPin=useRef(pin),latestAddress=useRef(address),latestLanguage=useRef(language);
- const [opened,setOpened]=useState(false),[loadingMap,setLoadingMap]=useState(false),[error,setError]=useState(''),[loadAttempt,setLoadAttempt]=useState(0);
- const [searchError,setSearchError]=useState('');
- useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
- useEffect(()=>{latestVersion.current=selectionVersion;text.current=t;pick.current=onPick;addressPick.current=onAddressPick;blocked.current=disabled;latestPin.current=pin;latestAddress.current=address;latestLanguage.current=language;if(search.current){search.current.widget.disabled=disabled;search.current.widget.requestedLanguage=googleAddressLanguage(language);search.current.widget.placeholder=t('Google-da ünvan axtarın');search.current.widget.setAttribute('aria-label',t('Google-da ünvan axtarın'));}},[onPick,onAddressPick,disabled,pin,address,language,t,selectionVersion]);
+type Place=DeliveryPin&{label:string};
+type Props={browserKey?:string;pin:DeliveryPin|null;onPick:(pin:DeliveryPin)=>void;address?:string;onAddressPick?:(address:string,pin:DeliveryPin)=>void;selectionVersion?:()=>number;disabled?:boolean;tileUrl?:string};
+type Results={places:Place[];version:string};
+const searchFailure='Ünvan axtarışı hazırda əlçatan deyil. Ünvanı əl ilə yazın və xəritədə nöqtə seçin.';
+
+// browserKey is accepted only for older callers. Customer maps need no API key.
+export default function DeliveryLocationPicker({pin,onPick,address='',onAddressPick,selectionVersion,disabled=false,tileUrl}:Props){
+ const {t,language}=useTranslations(),id=useId();
+ const mounted=useRef(true),geoRun=useRef(0),searchRun=useRef(0),request=useRef<AbortController|null>(null);
+ const latest=useRef({pin,address,onPick,onAddressPick,selectionVersion,disabled,language});
+ const [opened,setOpened]=useState(false),[query,setQuery]=useState(''),[results,setResults]=useState<Results|null>(null);
+ const [searching,setSearching]=useState(false),[locating,setLocating]=useState(false),[error,setError]=useState('');
+ const [tileSettings,setTileSettings]=useState<{loaded:boolean;url?:string}>({loaded:false});
+ useEffect(()=>{latest.current={pin,address,onPick,onAddressPick,selectionVersion,disabled,language};},[pin,address,onPick,onAddressPick,selectionVersion,disabled,language]);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;request.current?.abort();};},[]);
  useEffect(()=>{
-  if(!opened||!browserKey)return;let gone=false,listener:Listener|undefined;
-  loadGoogleMaps(browserKey).then(async api=>{
-   if(gone||!box.current)return;const center=latestPin.current||{lat:40.4093,lng:49.8671};
-   const map=new api.Map(box.current,{center,zoom:latestPin.current?16:11,streetViewControl:false,mapTypeControl:false,fullscreenControl:false,gestureHandling:'cooperative'});view.current=map;
-   marker.current=new api.Circle({map,center,radius:12,fillColor:'#176747',fillOpacity:1,strokeColor:'#ffffff',strokeWeight:3,clickable:false});
-   listener=map.addListener('click',event=>{if(!blocked.current&&event.latLng){geoRun.current++;pick.current({lat:Number(event.latLng.lat().toFixed(6)),lng:Number(event.latLng.lng().toFixed(6))});}});setLoadingMap(false);
-   if(searchBox.current&&addressPick.current){
-    try{const controller=await attachGoogleAddressSearch(api,searchBox.current,{placeholder:text.current('Google-da ünvan axtarın'),language:latestLanguage.current,isCurrent:()=>!gone,isBlocked:()=>blocked.current,version:()=>String(latestVersion.current?.()??0)+'|'+latestAddress.current+'|'+JSON.stringify(latestPin.current),onSelect:(label,point)=>{geoRun.current++;setSearchError('');addressPick.current?.(label,point);},onError:()=>setSearchError('Ünvan axtarışı alınmadı. Ünvanı əl ilə yaza və xəritədə nöqtə seçə bilərsiniz.')});if(gone)controller?.destroy();else search.current=controller;}
-    catch{if(!gone)setSearchError('Ünvan axtarışı alınmadı. Ünvanı əl ilə yaza və xəritədə nöqtə seçə bilərsiniz.');}
-   }
-  }).catch(()=>{if(!gone){setLoadingMap(false);setError('Xəritə yüklənmədi.');}});
-  return()=>{gone=true;listener?.remove();search.current?.destroy();search.current=null;marker.current?.setMap(null);marker.current=null;view.current=null;};
-  // The map starts once; later pin changes update the existing view below.
- },[opened,browserKey,loadAttempt]);
- useEffect(()=>{if(pin){view.current?.panTo(pin);marker.current?.setCenter(pin);}},[pin]);
- function locate(){setError('');if(!navigator.geolocation){setError('Məkan icazəsi alınmadı.');return;}const run=++geoRun.current,version=latestVersion.current?.();navigator.geolocation.getCurrentPosition(position=>{if(mounted.current&&!blocked.current&&run===geoRun.current&&version===latestVersion.current?.())pick.current({lat:Number(position.coords.latitude.toFixed(6)),lng:Number(position.coords.longitude.toFixed(6))});},()=>{if(mounted.current&&run===geoRun.current&&version===latestVersion.current?.())setError('Məkan icazəsi alınmadı.');},{enableHighAccuracy:true,timeout:10000});}
- return <section className="sf-location-picker" aria-label={t('Çatdırılma nöqtəsi')}><div className="sf-location-actions">{browserKey&&!opened&&<button type="button" className="sf-map-open" disabled={disabled} onClick={()=>{setOpened(true);setLoadingMap(true);setError('');setSearchError('');}}><MapPin size={17}/>{t('Google xəritəsində seç')}</button>}<button type="button" className="sf-map-open" disabled={disabled} onClick={locate}><LocateFixed size={17}/>{t('Cari məkanım')}</button></div>{!browserKey&&<p>{t('Google xəritəsi hələ qoşulmayıb. Ünvanı yaza bilərsiniz.')}</p>}{opened&&<>{onAddressPick&&<div className="sf-google-address"><p>{t('Google-da ünvan axtarın')}</p><div ref={searchBox}/><small>{t('Nəticəni seçəndə ünvan və xəritə nöqtəsi birlikdə doldurulur. Bina və mənzili dəqiqləşdirin.')}</small>{searchError&&<p role="status">{t(searchError)}</p>}</div>}<div ref={box} className="sf-google-map" aria-label={t('Nöqtə seçmək üçün xəritəyə basın.')}/><small>{t(loadingMap?'Xəritə yüklənir…':'Nöqtə seçmək üçün xəritəyə basın.')}</small></>}{pin&&<p className="sf-pin-status"><MapPin size={14}/>{t('Seçilmiş nöqtə')}: {pin.lat.toFixed(6)}, {pin.lng.toFixed(6)}</p>}{error&&<p role="alert" className="sf-form-error">{t(error)}{opened&&<button type="button" className="sf-map-open" onClick={()=>{setError('');setSearchError('');setLoadingMap(true);setLoadAttempt(value=>value+1);}}>{t('Yenidən yoxla')}</button>}</p>}{browserKey&&!opened&&<small>{t('Xəritəni açanda Google Maps xidmətinə qoşulursunuz.')}</small>}</section>;
+  if(!opened||tileUrl||tileSettings.loaded)return;
+  const controller=new AbortController();
+  void fetch('/api/delivery-settings',{cache:'no-store',signal:controller.signal}).then(async response=>{
+   if(!response.ok)throw new Error();const data=await response.json() as {settings?:{tileUrl?:string}};
+   if(!controller.signal.aborted)setTileSettings({loaded:true,url:typeof data.settings?.tileUrl==='string'?data.settings.tileUrl:undefined});
+  }).catch(()=>{if(!controller.signal.aborted)setTileSettings({loaded:true});});
+  return()=>controller.abort();
+ },[opened,tileUrl,tileSettings.loaded]);
+ function version(){const current=latest.current;return String(current.selectionVersion?.()??0)+'|'+current.address+'|'+JSON.stringify(current.pin)+'|'+current.language;}
+ function invalidateSearch(){searchRun.current++;request.current?.abort();request.current=null;setSearching(false);setResults(null);}
+ function acceptPin(point:DeliveryPin){
+  if(latest.current.disabled)return;
+  geoRun.current++;setLocating(false);invalidateSearch();
+  if(!isAzerbaijanCoordinate(point.lat,point.lng)){setError('Azərbaycan daxilində nöqtə seçin. Ünvanı əl ilə də yaza bilərsiniz.');return;}
+  setError('');latest.current.onPick(point);
+ }
+ function locate(){
+  if(latest.current.disabled)return;
+  setError('');invalidateSearch();
+  if(!navigator.geolocation){setError('Məkan icazəsi alınmadı.');return;}
+  const run=++geoRun.current,selected=version();setLocating(true);
+  const current=()=>mounted.current&&!latest.current.disabled&&run===geoRun.current&&selected===version();
+  navigator.geolocation.getCurrentPosition(position=>{
+   if(!mounted.current||run!==geoRun.current)return;
+   setLocating(false);if(!current())return;
+   const point={lat:Number(position.coords.latitude.toFixed(6)),lng:Number(position.coords.longitude.toFixed(6))};
+   if(!isAzerbaijanCoordinate(point.lat,point.lng)){setError('Azərbaycan daxilində nöqtə seçin. Ünvanı əl ilə də yaza bilərsiniz.');return;}
+   latest.current.onPick(point);
+  },()=>{if(!mounted.current||run!==geoRun.current)return;setLocating(false);if(current())setError('Məkan icazəsi alınmadı.');},{enableHighAccuracy:true,timeout:10000});
+ }
+ async function search(){
+  if(latest.current.disabled||request.current)return;
+  const q=query.trim();if(q.length<3||q.length>120){setError('Axtarış 3–120 simvol olmalıdır.');return;}
+  geoRun.current++;setLocating(false);
+  const controller=new AbortController();request.current=controller;
+  const run=++searchRun.current,selected=version();setSearching(true);setResults(null);setError('');
+  const current=()=>mounted.current&&!latest.current.disabled&&run===searchRun.current&&selected===version();
+  try{
+   const response=await fetch('/api/places',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,lang:latest.current.language}),cache:'no-store',signal:controller.signal});
+   const data=await response.json() as {places?:Place[];error?:string};
+   if(!current())return;
+   if(!response.ok)throw new Error(data.error||searchFailure);
+   const places=Array.isArray(data.places)?data.places.filter(place=>place&&typeof place.label==='string'&&place.label.trim()&&typeof place.lat==='number'&&typeof place.lng==='number'&&isAzerbaijanCoordinate(place.lat,place.lng)).slice(0,6):[];
+   setResults({places,version:selected});if(!places.length)setError('Bu axtarışla ünvan tapılmadı.');
+  }catch(cause){if(current()&&!controller.signal.aborted)setError(cause instanceof TypeError||cause instanceof SyntaxError?searchFailure:cause instanceof Error?cause.message:searchFailure);}
+  finally{if(mounted.current&&run===searchRun.current){setSearching(false);request.current=null;}}
+ }
+ function choose(place:Place){
+  if(latest.current.disabled)return;
+  if(results?.version!==version()){invalidateSearch();setError('Ünvan dəyişib. Lazımdırsa, yenidən axtarın.');return;}
+  geoRun.current++;setLocating(false);invalidateSearch();setError('');
+  const point={lat:Number(place.lat.toFixed(6)),lng:Number(place.lng.toFixed(6))};
+  if(latest.current.onAddressPick)latest.current.onAddressPick(place.label.trim().slice(0,500),point);else latest.current.onPick(point);
+ }
+ return <section className="sf-location-picker open-address-picker" aria-label={t('Çatdırılma nöqtəsi')}>
+  <div className="open-address-actions"><button type="button" className="open-address-button" disabled={disabled} aria-expanded={opened} aria-controls={id+'-map-panel'} onClick={()=>{if(latest.current.disabled)return;geoRun.current++;setLocating(false);invalidateSearch();setError('');setOpened(value=>!value);}}><MapPin size={17} aria-hidden="true"/>{t(opened?'Xəritəni bağla':'Xəritəni aç və ünvan axtar')}</button><button type="button" className="open-address-button" disabled={disabled} onClick={locate}>{locating?<LoaderCircle size={17} className="open-address-spin" aria-hidden="true"/>:<LocateFixed size={17} aria-hidden="true"/>}{t('Cari məkanım')}</button></div>
+  {!opened&&<small className="open-address-hint">{t('Xəritə və axtarış yalnız açdıqda qoşulur. Ünvanı əl ilə də yaza bilərsiniz.')}</small>}
+  {opened&&<div id={id+'-map-panel'} className="open-address-panel">
+   <p className="open-address-hint">{t('Xəritə OpenStreetMap, axtarış Nominatim xidmətindən istifadə edir. Axtarışa mənzil və şəxsi məlumat yazmayın.')}</p>
+   <div className="open-address-search"><label htmlFor={id+'-query'}>{t('Ünvan axtar')}<span className="open-address-query"><Search size={17} aria-hidden="true"/><input id={id+'-query'} value={query} disabled={disabled} onChange={event=>{invalidateSearch();setQuery(event.target.value);setError('');}} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();void search();}}} maxLength={120} autoComplete="off" placeholder={t('Küçə, məhəllə və ya nişan')}/>{query&&<button type="button" disabled={disabled} aria-label={t('Axtarışı təmizlə')} onClick={()=>{invalidateSearch();setQuery('');setError('');}}><X size={16} aria-hidden="true"/></button>}</span></label><button type="button" className="open-address-button" disabled={disabled||searching||query.trim().length<3} onClick={()=>void search()}>{searching?<LoaderCircle size={16} className="open-address-spin" aria-hidden="true"/>:<Search size={16} aria-hidden="true"/>}{t(searching?'Axtarılır…':'Axtar')}</button></div>
+   <small className="open-address-hint">{t('Axtarış yalnız düyməyə basanda göndərilir. Nəticədən sonra bina və mənzili əl ilə dəqiqləşdirin.')}</small>
+   {results&&results.places.length>0&&<ul className="open-address-results" aria-label={t('Ünvan nəticələri')}>{results.places.map(place=><li key={place.lat+','+place.lng+','+place.label}><button type="button" disabled={disabled} onClick={()=>choose(place)}><MapPin size={17} aria-hidden="true"/><span>{place.label}</span></button></li>)}</ul>}
+   {tileUrl||tileSettings.loaded?<AddressMap pin={pin} onPick={acceptPin} disabled={disabled} tileUrl={tileUrl||tileSettings.url}/>:<p className="open-address-status" role="status"><LoaderCircle size={16} className="open-address-spin" aria-hidden="true"/>{t('Xəritə yüklənir…')}</p>}
+   <small className="open-address-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a> · <a href="https://nominatim.org/" target="_blank" rel="noopener noreferrer">Nominatim</a></small>
+  </div>}
+  {pin&&<p className="sf-pin-status open-address-pin"><MapPin size={14} aria-hidden="true"/>{t('Seçilmiş nöqtə')}: {pin.lat.toFixed(6)}, {pin.lng.toFixed(6)}</p>}
+  {error&&<p className="open-address-status is-warning" role="status">{t(error)}</p>}
+ </section>;
 }
