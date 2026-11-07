@@ -8,6 +8,7 @@ import ts from 'typescript';
 import http from 'node:http';
 import {openLocalDatabase} from '../desktop/local-database.mjs';
 import {verifySeoHttp} from './test-seo-http.mjs';
+import {STAFF_PORTAL_PATH,staffPortalPath,verifyStaffPortalPolicy,verifyStaffPortalHttp} from './test-staff-portal.mjs';
 
 const policy=ts.transpile(await readFile('lib/admin-security.ts','utf8'),{module:ts.ModuleKind.ESNext});
 const {secureAdminRequest}=await import('data:text/javascript;base64,'+Buffer.from(policy).toString('base64'));
@@ -35,7 +36,8 @@ try{
  const privatePaths=['/api/products','/api/dashboard','/api/finance','/api/orders','/api/warehouses','/api/reports','/api/employees','/api/settings','/api/audit','/api/system?view=backups','/api/store-admin/commerce','/api/locations'];
  for(const url of privatePaths)assert.equal((await request(url,{auth:false})).status,401,'No anonymous access: '+url);
  assert.equal((await request('/api/products',{auth:false,headers:{'x-birkassa-user-id':admin.id,'x-birkassa-role':'admin'}})).status,401,'Cannot forge identity headers');
- for(const url of ['/admin/store','/admin/online']){const denied=await request(url,{auth:false});assert.equal(denied.status,307);assert.equal(new URL(denied.headers.get('location'),origin).pathname,'/admin');}
+ await verifyStaffPortalPolicy();
+ for(const url of [staffPortalPath('/store'),staffPortalPath('/online')]){const denied=await request(url,{auth:false});assert.equal(denied.status,307);assert.equal(new URL(denied.headers.get('location'),origin).pathname,STAFF_PORTAL_PATH);}
  const salt=randomBytes(16).toString('hex');await sql.unsafe('update users set pin_hash=$1 where id=$2',[salt+':'+scryptSync('246810',salt,64).toString('hex'),admin.id]);
  const enrollment={action:'setup-password',userId:admin.id,pin:'246810',password,confirmPassword:password};
  assert.equal((await request('/api/auth',{method:'POST',body:enrollment})).status,401,'PIN alone cannot enroll a web administrator');
@@ -43,7 +45,7 @@ try{
  const login=()=>request('/api/auth',{method:'POST',body:{action:'login',userId:admin.id,password}});
  const signed=await login();assert.equal(signed.status,200);assert.equal(signed.data.local,false);assert.match(signed.headers.get('set-cookie'),/HttpOnly/);assert.match(signed.headers.get('set-cookie'),/SameSite=Strict/i);
  for(const url of privatePaths){const allowed=await request(url);assert.equal(allowed.status,200,url+': '+JSON.stringify(allowed.data));assert.match(allowed.headers.get('cache-control'),/no-store/);}
- assert.equal((await request('/admin/store')).status,200);
+ assert.equal((await request(staffPortalPath('/store'))).status,200);
  const created=await request('/api/store-admin/commerce',{method:'POST',body:{action:'product',name:'Veb mangal',sku:'WEB-SECURE-01',category:'Manqallar',unit:'ədəd',sale_price:60,cost_price:21,description:'Test',specifications:'Dəmir',discount_price:null,is_active:true,barcode:''}});assert.equal(created.status,200,JSON.stringify(created.data));
  const [product]=await sql.unsafe("select id from products where sku='WEB-SECURE-01'");
  assert.equal((await request('/api/store-admin/commerce',{method:'POST',body:{action:'option',product_id:product.id,label:'60 sm qara',size:'60 sm',color:'Qara',kind:'Dəmir',price:65,cost_price:23,attributes:{'Qalınlıq':'2 mm'},position:0,is_active:true}})).status,200);
@@ -120,10 +122,7 @@ try{
  const deleted=await request('/api/store-admin/commerce',{method:'POST',body:{action:'delete-product',id:product.id,confirm:'SİL'}});assert.equal(deleted.status,200);assert.ok(!(await request('/api/catalog',{auth:false})).data.products.some(p=>p.id===product.id));assert.ok(!(await request('/api/store-admin/commerce')).data.products.some(p=>p.id===product.id));assert.equal(Number((await sql.unsafe('select count(*) n from sale_items where product_id=$1',[product.id]))[0].n),3,'Product removal retains historical receipts');
  assert.equal((await request('/api/shifts',{method:'POST',body:{action:'open',openingCash:0},headers:{Origin:'https://attacker.example'}})).status,403,'Cross-origin write denied');
  assert.equal((await request('/api/shifts',{method:'POST',body:{action:'open',openingCash:0},headers:{'Sec-Fetch-Site':'cross-site'}})).status,403);
- const [manager]=await sql.unsafe("insert into users(branch_id,full_name,role,password_hash) select branch_id,'Test manager','manager',password_hash from users where id=$1 returning id",[admin.id]);
- const fake=randomBytes(32).toString('hex');await sql.unsafe("insert into auth_sessions(user_id,token_hash,expires_at,authentication_method) values($1,$2,now()+interval '1 hour','password')",[manager.id,createHash('sha256').update(fake).digest('hex')]);
- assert.equal((await request('/api/products',{auth:false,headers:{Cookie:'birkassa_session='+fake}})).status,401,'Manager cannot access admin functions');
- assert.equal((await request('/api/auth',{method:'PATCH',auth:false,headers:{Cookie:'birkassa_session='+fake}})).status,401);
+ await verifyStaffPortalHttp({origin,request,sql,admin,adminSession:session,password,setSession:value=>{session=value;}});
  const tokenHash=createHash('sha256').update(session).digest('hex');await sql.unsafe("update auth_sessions set last_seen_at=now()-interval '11 minutes' where token_hash=$1",[tokenHash]);assert.equal((await request('/api/products')).status,401);assert.equal((await request('/api/auth',{method:'PATCH'})).status,401);await login();
  await sql.unsafe('update users set is_active=false where id=$1',[admin.id]);assert.equal((await request('/api/products')).status,401);assert.equal((await request('/api/auth',{method:'PATCH'})).status,401);await sql.unsafe('update users set is_active=true where id=$1',[admin.id]);
  for(let n=0;n<5;n++)assert.equal((await request('/api/auth',{method:'POST',body:{action:'login',userId:admin.id,password:'wrong-password'}})).status,401);
@@ -136,7 +135,7 @@ try{
   const [uiCustomer]=await sql.unsafe("insert into customers(full_name) values('İzolə edilmiş UI sınağı') returning id");
   const [uiOrder]=await sql.unsafe("insert into sales_orders(order_no,customer_id,total,created_by) values('UI-DELETE-GUARD',$1,50,$2) returning id",[uiCustomer.id,admin.id]);
   await sql.unsafe('insert into sales_order_items(sales_order_id,product_id,quantity,unit_price,line_total) values($1,$2,1,50,50)',[uiOrder.id,uiBlocked.id]);
-  console.log('ISOLATED UI PREVIEW: '+origin+'/products/'+variantProduct.id+' | admin: '+origin+'/admin');
+  console.log('ISOLATED UI PREVIEW: '+origin+'/products/'+variantProduct.id+' | staff: '+origin+STAFF_PORTAL_PATH);
   await new Promise(resolve=>{process.once('SIGINT',resolve);process.stdin.once('data',resolve);process.stdin.resume();});process.stdin.pause();
   const [state]=await sql.unsafe('select deleted_at from products where id=$1',[uiDelete.id]);
   if(state.deleted_at){assert.equal((await sql.unsafe("select count(*)::int n from audit_logs where entity_id=$1 and action='commerce.delete-product'",[uiDelete.id]))[0].n,1,'Only one successful deletion');assert.equal((await sql.unsafe('select deleted_at from products where id=$1',[uiBlocked.id]))[0].deleted_at,null);console.log('PASS: browser deletion fixture archived exactly once; rejected product remained untouched.');}

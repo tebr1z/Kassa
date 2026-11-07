@@ -12,7 +12,7 @@ assert.deepEqual(productRemovalRows(rows,[],hidden),[rows[0],rows[2]],'Stale dat
 assert.deepEqual(productRemovalRows([],exit,hidden),[rows[1]],'Missing refreshed data still keeps exit snapshot');
 assert.deepEqual(productRemovalRows(rows,[{row:rows[2],index:2},{row:rows[0],index:0}],new Set(['a','c'])),rows,'Concurrent exits retain ordering');
 assert.deepEqual(productRemovalRows([{id:12,name:'Number'}],[],new Set(['12'])),[]);
-const root=await readFile('app/admin/page.tsx','utf8'),cms=await readFile('app/admin/store/commerce-manager.tsx','utf8'),dialog=await readFile('app/admin/product-delete-dialog.tsx','utf8'),hook=await readFile('app/admin/use-product-removal.tsx','utf8'),css=await readFile('app/admin/product-removal.css','utf8');
+const root=await readFile('app/admin/staff-dashboard.tsx','utf8'),cms=await readFile('app/admin/store/commerce-manager.tsx','utf8'),dialog=await readFile('app/admin/product-delete-dialog.tsx','utf8'),hook=await readFile('app/admin/use-product-removal.tsx','utf8'),css=await readFile('app/admin/product-removal.css','utf8');
 for(const form of [root,cms]){assert.ok(form.includes('<ProductDeleteDialog'));assert.ok(form.includes('product-removal-exit'));assert.ok(form.includes('inert={removal.isRemoving'));assert.ok(!form.includes('window.confirm'));}
 assert.match(root,/archivedProductIds\.current\.add\(id\)/);assert.match(root,/rows\.filter\(row=>!archivedProductIds\.current\.has/);assert.match(root,/onArchived\(target.id\)/);
 assert.match(dialog,/pending\.current=true/);assert.match(dialog,/event\.preventDefault\(\);void removeProduct\(\)/);assert.match(dialog,/body\.ok!==true/);assert.match(dialog,/cancelButton\.current\?\.focus\(\)/);assert.ok(dialog.indexOf('onDeleted(product)')>dialog.indexOf('if(!response.ok)'));

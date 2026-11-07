@@ -7,6 +7,7 @@ import {productRemovalTranslations} from './product-removal-translations';
 import {deliveryTranslations} from './delivery-translations';
 import {accountUiTranslations} from './account-ui-translations';
 import {checkoutTranslations,checkoutTurkishOverrides} from './checkout-translations';
+import {staffLabelTranslations} from './staff-label-translations';
 import {Check,Languages,ChevronDown} from "lucide-react";
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuLabel,DropdownMenuRadioGroup,DropdownMenuRadioItem,DropdownMenuSeparator} from '@/components/ui/dropdown-menu';
 import {languageOptions,languageMenuCopy,isLanguage,type Language} from './language-options';
@@ -156,7 +157,7 @@ const rows=[
  ["Aktiv","Активен","Active","Aktif","启用"],
  ["Deaktiv","Неактивен","Inactive","Pasif","停用"]
 ];
-rows.push(...desktopTranslations.map(row=>[row[0],row[1],row[2],rows.find(existing=>existing[0]===row[0])?.[3]||row[3],row[4]]),...storefrontTranslations,...productRemovalTranslations,...deliveryTranslations,...accountUiTranslations,...checkoutTranslations);
+rows.push(...desktopTranslations.map(row=>[row[0],row[1],row[2],rows.find(existing=>existing[0]===row[0])?.[3]||row[3],row[4]]),...storefrontTranslations,...productRemovalTranslations,...deliveryTranslations,...accountUiTranslations,...checkoutTranslations,...staffLabelTranslations);
 export const translationKeys=rows.map(row=>row[0]);
 for(const row of rows)if(checkoutTurkishOverrides[row[0]])row[3]=checkoutTurkishOverrides[row[0]];
 const translations=new Map(rows.map(row=>[row[0],row]));

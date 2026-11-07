@@ -4,7 +4,7 @@ const keys=new Set([...fs.readFileSync('lib/language.tsx','utf8').matchAll(/^ \[
 const desktopRows=fs.readFileSync('lib/desktop-translations.ts','utf8').split('`')[1].trim().split('\n');
 for(const row of desktopRows)keys.add(row.split('|')[0]);
 for(const key of [...keys])keys.add(key.toLocaleUpperCase('az'));
-const paths=['app/storefront.tsx','app/product-view.tsx','app/cart-sheet.tsx','app/hero-slider.tsx','app/commerce-ui.tsx','app/admin/page.tsx','app/admin/online/page.tsx','app/admin/thermal-receipt.tsx','app/admin/store/page.tsx','app/admin/store/commerce-manager.tsx'];
+const paths=['app/storefront.tsx','app/product-view.tsx','app/cart-sheet.tsx','app/hero-slider.tsx','app/commerce-ui.tsx','app/admin/staff-dashboard.tsx','app/admin/online/online-page.tsx','app/admin/thermal-receipt.tsx','app/admin/store/store-page.tsx','app/admin/store/commerce-manager.tsx'];
 const patches=[];
 for(const file of paths){
  const source=fs.readFileSync(file,'utf8');

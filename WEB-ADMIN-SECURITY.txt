@@ -1,8 +1,13 @@
 RESTAMARKET — VEB İDARƏETMƏSİ
 
-Giriş: /admin. Yalnız aktiv administrator və ya kassir güclü şifrə ilə daxil olur.
-Administrator idarəetməyə, kassir yalnız POS-a və öz kassa növbəsinə giriş alır.
-Müştəri hesabı, menecer rolu və tək PIN idarəetmə girişi vermir.
+Giriş: rəhbərin paylaşdığı siyahılanmayan heyət ünvanı. Köhnə /admin və alt
+yolları 404 qaytarır; yeni ünvanı açıqlayan yönləndirmə yoxdur. Bu ünvan məxfi
+şifrə deyil və təkbaşına təhlükəsizlik təmin etmir.
+Aktiv işçi şəxsi güclü şifrə ilə daxil olur: rəhbər bütün bölmələrə, kassir
+yalnız POS-a və öz kassa növbəsinə, anbardar məhsul/anbar/satınalmaya, mühasib
+maliyyə və hesabatlara, menecer əməliyyat bölmələrinə giriş alır. Onlayn
+sifariş rolları yalnız sifariş mərkəzinə daxil olur; köməkçi sifariş ləğv edə bilmir.
+İşçi şifrəsini yalnız rəhbər təyin edir. Müştəri hesabı və tək PIN heyət girişi vermir.
 Şifrə ən azı 12 simvol, hərf və rəqəm olmalıdır. Sessiya 4 saatlıqdır;
 10 dəqiqə hərəkətsizlikdən sonra yenidən giriş tələb olunur.
 5 uğursuz girişdən sonra hesab 15 dəqiqəlik cəhd məhdudiyyətinə düşür.
@@ -31,8 +36,8 @@ Müştəri hesabı, menecer rolu və tək PIN idarəetmə girişi vermir.
 MƏLUMAT VƏ SİNXRONİZASİYA
 Veb kassa serverin DATABASE_URL bazası ilə, masaüstü isə kompüterin yerli
 bazası ilə işləyir. Stok, alış qiyməti və maliyyə avtomatik birləşdirilmir.
-Vebdə stok əməliyyatları artıq həmin serverdə saxlanır, yalnız administrator
-görür. Mövcud masaüstü məlumatları dəyişdirilmir və vebə köçürülmür.
+Vebdə stok əməliyyatları həmin serverdə saxlanır və yalnız təyin olunmuş
+işçi rollarına açılır. Mövcud masaüstü məlumatları dəyişdirilmir və vebə köçürülmür.
 Masaüstü kataloq bağlantısı aktivdirsə, növbəti yayımlama məhsulun ictimai
 adını, qiymətini, şəklini və seçimlərini yeniləyə bilər. Məhsulları iki yerdə
 paralel redaktə etməyin; vebdən idarə etmək üçün kataloq bağlantısını ayırın.

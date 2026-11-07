@@ -1,6 +1,6 @@
 RESTAMARKET 0.5 — MƏHSUL, MAĞAZA VƏ MALİYYƏ
 
-Məhsul seçimləri: /admin/store → Məhsullar və seçimlər.
+Məhsul seçimləri: heyət girişi → Sayt, brend və Cloudinary → Məhsullar və seçimlər.
 Yeni məhsulda və ya redaktədə ölçü/rəng/növ və öz xüsusiyyətlərinizi əlavə edin.
 Məsələn: 30 sm, 40 sm, 50 sm; Qalınlıq: 2 mm; Material: Dəmir.
 Seçim lazım deyilsə bölməni boş saxlayın. Müştəri və kassir aktiv variantı seçir.
@@ -11,14 +11,14 @@ Alış qiyməti müştəriyə və kassirə qaytarılmır, çekdə deyil, maliyy�
 “Sil” məhsulu arxivləşdirir: köhnə çek, stok hərəkəti və maliyyə tarixçəsi qalır.
 Açıq sifarişdə olan məhsul sifariş bağlanana qədər silinmir.
 
-Mağaza/kassir: /admin → Mağazalar və kassirlər.
+Mağaza/kassir: heyət girişi → Mağazalar və kassirlər.
 Mağaza yaradın, ona anbar əlavə edin, kassirə həmin mağaza və anbarı təyin edin.
 Kassir üçün ayrıca güclü şifrə qurun. Kassir yalnız POS-a daxil olur.
 Açıq növbə bağlanmadan mağaza/anbar təyinatı dəyişdirilmir.
 Satış stokdan yalnız təyin olunmuş anbar üzrə çıxılır. Çekdə mağaza və kassir,
 maliyyə jurnalında isə mağaza, anbar, kassir, satış və alış dəyəri görünür.
 
-Maliyyə: /admin → Maliyyə.
+Maliyyə: heyət girişi → Maliyyə.
 Tarix aralığı və mağaza seçin. Xalis nəticə = satış − satılan malın alış dəyəri
 + digər gəlir − qeydə alınmış xərclər. Alış dəyəri satış anında çəkilən
 cost_snapshot ilə saxlanır; məhsulun sonrakı qiyməti köhnə qazancı dəyişmir.

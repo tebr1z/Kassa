@@ -2,5 +2,5 @@ import type {ReactNode} from 'react';
 import {privateRobots} from '@/lib/seo';
 import './ui-polish.css';
 import './product-removal.css';
-export const metadata={title:'İdarəetmə',robots:privateRobots};
+export const metadata={title:'İdarəetmə mərkəzi',robots:privateRobots};
 export default function AdminLayout({children}:{children:ReactNode}){return children;}

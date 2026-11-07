@@ -1,5 +1,6 @@
 import {withAdminSession} from '@/lib/require-admin';
 import {storeDb} from '@/lib/store-db';
+import {staffRoles} from '@/lib/staff-access';
 import {strongPassword,staffPasswordHash} from '@/lib/staff-password';
 import {z} from 'zod';
 export const dynamic='force-dynamic';
@@ -33,7 +34,7 @@ async function post(request:Request){const parsed=schema.safeParse(await request
     await tx.unsafe('delete from auth_sessions where user_id=$1 and user_id<>$2',[id,actor]);
    }
   }else{
-   const [user]=await tx.unsafe("select id from users where id=$1 and role in ('admin','cashier') and is_active=true for update",[b.userId]);if(!user)throw Error('Aktiv administrator və ya kassir tapılmadı.');
+   const [user]=await tx.unsafe("select id,role from users where id=$1 and is_active=true for update",[b.userId]);if(!user||!staffRoles.includes(user.role))throw Error('Aktiv işçi tapılmadı.');
    await tx.unsafe('update users set password_hash=$1 where id=$2',[await staffPasswordHash(b.password),b.userId]);await tx.unsafe('delete from auth_sessions where user_id=$1',[b.userId]);id=b.userId;
   }
   const safe={...b} as Record<string,unknown>;delete safe.password;

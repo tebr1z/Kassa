@@ -6,6 +6,7 @@ const {spawn}=require('node:child_process');
 const {randomBytes}=require('node:crypto');
 const menuLabels=require('./menu-language.cjs');
 const desktopToken=randomBytes(32).toString('hex');
+const staffEntry='/heyet-g7m4q9x2k8';
 let language='az',pollTimer;
 const labels=()=>menuLabels(language);
 let database,server,closing=false;
@@ -48,11 +49,11 @@ else app.whenReady().then(async()=>{
  let polling=false;const poll=async()=>{if(polling||closing)return;polling=true;try{const response=await fetch(url+'/api/desktop-poll',{method:'POST',headers:{Authorization:'Bearer '+desktopToken},signal:AbortSignal.timeout(25000)});if(response.ok){const result=await response.json();if(result.received>0&&Notification.isSupported()&&!smoke)new Notification({title:'BirKassa',body:labels()[11]+': '+result.received}).show();}}catch{}finally{polling=false;}};
  pollTimer=setInterval(()=>void poll(),30000);void poll();
  let locking=false;
- const lock=async()=>{if(locking||closing)return;locking=true;try{await fetch(url+'/api/desktop-lock',{method:'POST',headers:{Authorization:'Bearer '+desktopToken},signal:AbortSignal.timeout(5000)});if(!win.isDestroyed())await win.loadURL(url+'/admin');}catch{}finally{locking=false;}};
+ const lock=async()=>{if(locking||closing)return;locking=true;try{await fetch(url+'/api/desktop-lock',{method:'POST',headers:{Authorization:'Bearer '+desktopToken},signal:AbortSignal.timeout(5000)});if(!win.isDestroyed())await win.loadURL(url+staffEntry);}catch{}finally{locking=false;}};
  powerMonitor.on('lock-screen',()=>void lock());powerMonitor.on('suspend',()=>void lock());
  let idleLocked=false;const idleTimer=setInterval(()=>{const idle=powerMonitor.getSystemIdleTime();if(idle>=600&&!idleLocked){idleLocked=true;void lock();}if(idle<60)idleLocked=false;},10000);app.once('before-quit',()=>clearInterval(idleTimer));
  win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',(event,target)=>{if(new URL(target).origin!==url)event.preventDefault();});
- await win.loadURL(url+'/admin');
+ await win.loadURL(url+staffEntry);
  try{await database.backupData(path.join(dataRoot,'backups',`automatic-${new Date().toISOString().slice(0,10)}.birkassa`));}catch(error){if(smoke)throw error;dialog.showErrorBox(labels()[10],error.message);}
  if(smoke){const bridge=await win.webContents.executeJavaScript("typeof window.birkassaDesktop?.setLanguage==='function'");if(!bridge)throw new Error('Desktop preload bridge did not load.');console.log('PASS: Electron window loaded local POS; language bridge available; automatic backup created.');app.quit();}
  }catch(error){if(process.argv.includes('--smoke')){console.error(error.message);if(server&&server.exitCode===null){server.kill();await Promise.race([new Promise(resolve=>server.once('exit',resolve)),new Promise(resolve=>setTimeout(resolve,5000))]);}if(database)await database.close().catch(()=>{});app.exit(1);return;}dialog.showErrorBox('RestaMarket açılmadı',error.message);app.quit();}

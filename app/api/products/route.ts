@@ -38,7 +38,8 @@ async function handleGET(request: Request) {
       group by p.id, b.barcode,bc.barcodes,ph.history,po.options
       order by p.name
     `);
-    const editable=request.headers.get('x-birkassa-role')==='admin'?await sql.unsafe('select product_id,id,label,size,color,kind,price,cost_price,position,is_active,attributes from product_options order by position,created_at'):[];
+    const canEditInventory=['admin','manager','warehouse'].includes(request.headers.get('x-birkassa-role')||'');
+    const editable=canEditInventory?await sql.unsafe('select product_id,id,label,size,color,kind,price,cost_price,position,is_active,attributes from product_options order by position,created_at'):[];
     return NextResponse.json(rows.map((row) => ({
       id: row.id,
       name: row.name,
@@ -52,7 +53,7 @@ async function handleGET(request: Request) {
       cost: request.headers.get("x-birkassa-role")==="cashier"?0:Number(row.cost_price),
       barcodes: row.barcodes,
       options:((row.options||[]) as PublicOption[]).map(option=>({...option,price:option.price==null?null:Number(option.price)})),
-      ...(request.headers.get('x-birkassa-role')==='admin'?{editableOptions:editable.filter(o=>o.product_id===row.id).map(o=>({id:o.id,label:o.label,size:o.size,color:o.color,kind:o.kind,price:o.price,cost_price:o.cost_price,position:o.position,is_active:o.is_active,attributes:o.attributes}))}:{}),
+      ...(canEditInventory?{editableOptions:editable.filter(o=>o.product_id===row.id).map(o=>({id:o.id,label:o.label,size:o.size,color:o.color,kind:o.kind,price:o.price,cost_price:o.cost_price,position:o.position,is_active:o.is_active,attributes:o.attributes}))}:{}),
       priceHistory: ((request.headers.get("x-birkassa-role")==="cashier"?[]:row.price_history) as PriceHistory[]).map(item=>({...item,oldSalePrice:Number(item.oldSalePrice),newSalePrice:Number(item.newSalePrice),oldCostPrice:Number(item.oldCostPrice),newCostPrice:Number(item.newCostPrice)})),
     })));
   } catch (error) {
@@ -79,6 +80,7 @@ async function handlePATCH(request:Request){
  const userId=request.headers.get('x-birkassa-user-id');
  if(!userId)return NextResponse.json({error:'Daxil olun.'},{status:401});
  const deactivate=z.object({action:z.literal('deactivate')}).safeParse(raw).success;
+ if(deactivate&&request.headers.get('x-birkassa-role')!=='admin')return NextResponse.json({error:'Məhsulu yalnız rəhbər arxivləşdirə bilər.'},{status:403});
  const parsed=deactivate?z.object({productId:z.string().uuid()}).safeParse(raw):updateInput.safeParse(raw);
  if(!parsed.success)return NextResponse.json({error:'Məhsul məlumatlarını və seçimləri düzgün yazın.'},{status:400});
  const sql=connection();

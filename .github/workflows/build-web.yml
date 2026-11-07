@@ -35,6 +35,9 @@ jobs:
       - run: node scripts/test-hydration-format.mjs
       - run: node scripts/test-checkout-contract.mjs
       - run: node scripts/test-account-contact.mjs
+      - run: node scripts/test-staff-access.mjs
+      - run: node scripts/test-staff-labels.mjs
+      - run: node scripts/test-staff-portal.mjs
       - run: node scripts/test-product-removal.mjs
       - run: npm run test:account-translations
       - run: npm run build

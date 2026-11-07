@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import {STAFF_PORTAL_PATH} from './test-staff-portal.mjs';
 const markup=html=>[...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(match=>JSON.parse(match[1]));
 const escape=value=>value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#x27;'}[char]));
 const slugFor=p=>[...p.name].map(ch=>({'ə':'e','Ə':'E','ı':'i','İ':'I','ö':'o','Ö':'O','ü':'u','Ü':'U','ş':'s','Ş':'S','ç':'c','Ç':'C','ğ':'g','Ğ':'G'}[ch]??ch)).join('').replace(/[^0-9A-Za-z]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase();
@@ -21,15 +22,15 @@ export async function verifySeoHttp(origin,productId){
  assert.equal((await get('/products')).headers.get('location'),'/mehsullar');
  for(const missing of ['/mehsullar/not-found/000000','/mehsullar/000000-not-found/','/categories/not-a-category']){const r=await get(missing);assert.equal(r.status,404,missing);assert.match(await r.text(),/noindex/);}
  for(const api of ['/api/catalog','/api/products']){const r=await get(api+'/');assert.equal(r.status,308,'Existing API slash policy is unchanged: '+api);assert.equal(new URL(r.headers.get('location'),origin).pathname,api);assert.equal((await get(api)).status,api==='/api/catalog'?200:401,'Slash handling cannot bypass API permissions');}
- const adminSlash=await get('/admin/');assert.equal(adminSlash.status,308);assert.equal(new URL(adminSlash.headers.get('location'),origin).pathname,'/admin');
+ for(const legacy of ['/admin','/admin/','/admin/store','/admin/online']){const retired=await get(legacy);assert.equal(retired.status,404);assert.equal(retired.headers.get('location'),null);assert.ok(!(await retired.text()).includes(STAFF_PORTAL_PATH),'Old staff URLs cannot reveal the new entry');}
  const homeHtml=await (await get('/')).text();assert.ok(homeHtml.includes('href="'+path+'"'),'Home links exist without JavaScript');
  const listHtml=await (await get('/mehsullar')).text();assert.ok(listHtml.includes('href="'+path+'"'));assert.ok(listHtml.includes('<h1>Məhsullar</h1>'));assert.ok(markup(listHtml).some(node=>node['@type']==='CollectionPage'));
- const sitemap=await (await get('/sitemap.xml')).text();assert.ok(sitemap.includes('https://restamarket.az'+path));assert.doesNotMatch(sitemap,/127\.0\.0\.1|localhost|\/admin|\/account|\/products\/|variant=/);for(const item of catalog.products)assert.ok(sitemap.includes('https://restamarket.az'+pathFor(item)),'All products, not only the selected fixture, use code-first canonical sitemap paths');
+ const sitemap=await (await get('/sitemap.xml')).text();assert.ok(sitemap.includes('https://restamarket.az'+path));assert.doesNotMatch(sitemap,/127\.0\.0\.1|localhost|\/admin|\/account|\/products\/|variant=/);assert.ok(!sitemap.includes(STAFF_PORTAL_PATH));for(const item of catalog.products)assert.ok(sitemap.includes('https://restamarket.az'+pathFor(item)),'All products, not only the selected fixture, use code-first canonical sitemap paths');
  for(const category of catalog.categories.filter(c=>catalog.products.some(p=>p.category===c.name))){const r=await get('/categories/'+category.id);assert.equal(r.status,200);assert.ok((await r.text()).includes(escape(category.name)));}
  const robots=await (await get('/robots.txt')).text();assert.match(robots,/Disallow: \/\s/);assert.doesNotMatch(robots,/Sitemap:/);
  const publicRobots=await new Promise((resolve,reject)=>{const req=http.get(origin+'/robots.txt',{headers:{Host:'restamarket.az'}},r=>{let data='';r.on('data',chunk=>data+=chunk);r.on('end',()=>resolve(data));});req.on('error',reject);});
- assert.match(publicRobots,/Sitemap: https:\/\/restamarket\.az\/sitemap\.xml/);assert.match(publicRobots,/Disallow: \/admin/);assert.match(publicRobots,/Allow: \/api\/catalog-media\//);assert.doesNotMatch(publicRobots,/variant=/);
- for(const privatePath of ['/admin','/account']){const r=await get(privatePath);assert.match(await r.text(),/<meta name="robots" content="noindex/);}
+ assert.match(publicRobots,/Sitemap: https:\/\/restamarket\.az\/sitemap\.xml/);assert.match(publicRobots,/Disallow: \/admin/);assert.match(publicRobots,/Allow: \/api\/catalog-media\//);assert.doesNotMatch(publicRobots,/variant=/);assert.ok(!publicRobots.includes(STAFF_PORTAL_PATH),'Robots policy does not advertise the staff entry');
+ for(const privatePath of [STAFF_PORTAL_PATH,'/account']){const r=await get(privatePath);assert.match(await r.text(),/<meta name="robots" content="noindex/);}
  if(product.options.length){
   const option=product.options.at(-1),group=graph.find(node=>node['@type']==='ProductGroup'),variant=group.hasVariant.find(node=>node.sku===(product.code||product.id)+'-'+option.id);assert.ok(variant);
   const deepLink=new URL(variant.url),r=await get(deepLink.pathname+deepLink.search),selectedHtml=await r.text();assert.equal(r.status,200);assert.ok(selectedHtml.includes('aria-current="true"'),'Readable variant URL is preselected in SSR');assert.ok(selectedHtml.includes('rel="canonical" href="https://restamarket.az'+path+'"'));assert.ok(selectedHtml.includes('href="'+escape(deepLink.pathname+deepLink.search)+'"'),'Choices are crawlable links');
@@ -42,6 +43,6 @@ export async function verifySeoHttp(origin,productId){
   }
   const invalid=await get(path+'?olcu=definitely-not-a-choice');assert.equal(invalid.status,200);assert.doesNotMatch(await invalid.text(),/class="pd-variant-option"[^>]*aria-current="true"/,'Unknown choice is not silently replaced with another price');
  }
- console.log('PASS: code-first trailing-slash canonical for every product, direct308 old/renamed/UUID links, exact variant preservation, unchanged API/admin slash guards, server HTML,404s,sitemap and private noindex.');
+ console.log('PASS: code-first trailing-slash canonical for every product, direct308 old/renamed/UUID links, exact variant preservation, unchanged API slash guards, retired staff404, server HTML, sitemap without staff disclosure and private noindex.');
 }
 if(process.argv[1]?.endsWith('test-seo-http.mjs'))await verifySeoHttp(process.env.TEST_ORIGIN||'http://127.0.0.1:5757');

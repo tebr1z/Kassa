@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import postgres from "postgres";
 import {secureAdminRequest} from "./lib/admin-security";
 import {canUseStaffApi,staffRoles} from './lib/staff-access';
+import {STAFF_PORTAL_PATH,isStaffPortalPath,canOpenStaffPage} from './lib/staff-portal';
 
 type Rule={prefix:string;read:string[];write:string[]};
 const rules:Rule[]=[
@@ -51,6 +52,9 @@ function forward(request:NextRequest,user?:{id:string;role:string}){
 }
 export async function proxy(request:NextRequest){
  const path=request.nextUrl.pathname;
+ // Do not reveal the unlisted replacement with a legacy redirect, even to a
+ // signed-in user. The legacy page modules independently return notFound too.
+ if(path==='/admin'||path.startsWith('/admin/'))return new NextResponse('Səhifə tapılmadı.',{status:404,headers:{'Cache-Control':'private, no-store','X-Robots-Tag':'noindex, nofollow, noarchive','X-Content-Type-Options':'nosniff'}});
  const productDetail=/^\/(?:mehsullar|products)\/.+/.test(path);
  if(!productDetail&&path!=='/'&&path.endsWith('/')){
   const target=new URL(request.url);target.pathname=path.replace(/\/+$/,'');
@@ -65,9 +69,10 @@ export async function proxy(request:NextRequest){
   headers.set('x-restamarket-product-pathname',path);
   return NextResponse.next({request:{headers}});
  }
- const adminPage=path==='/admin'||path.startsWith('/admin/');
+ const adminPage=isStaffPortalPath(path);
+ if(adminPage&&![STAFF_PORTAL_PATH,STAFF_PORTAL_PATH+'/store',STAFF_PORTAL_PATH+'/online'].includes(path))return new NextResponse('Səhifə tapılmadı.',{status:404,headers:{'Cache-Control':'private, no-store','X-Robots-Tag':'noindex, nofollow, noarchive'}});
  if(adminPage&&!secureAdminRequest(request))return new NextResponse('İdarəetmə üçün HTTPS bağlantısı tələb olunur.',{status:426});
- if(path==='/admin')return forward(request);
+ if(path===STAFF_PORTAL_PATH)return forward(request);
  if(["/api/desktop-feed","/api/desktop-poll","/api/desktop-bridge","/api/desktop-image","/api/desktop-lock"].includes(request.nextUrl.pathname))return forward(request);
  if(request.nextUrl.pathname.startsWith('/api/desktop-media/'))return forward(request);
  if(request.nextUrl.pathname.startsWith('/api/catalog-media/'))return forward(request);
@@ -84,7 +89,7 @@ export async function proxy(request:NextRequest){
   const rule=rules.find(item=>request.nextUrl.pathname===item.prefix||request.nextUrl.pathname.startsWith(item.prefix+"/"));
   if(!rule&&!adminPage)return NextResponse.json({error:"API marşrutu üçün icazə qaydası yoxdur"},{status:403});
   if(!secureAdminRequest(request))return NextResponse.json({error:'İdarəetmə üçün HTTPS tələb olunur.'},{status:426});
-  const unauthenticated=()=>adminPage?NextResponse.redirect(new URL('/admin',request.url)):NextResponse.json({error:'Sistemə administrator şifrəsi ilə daxil olun.'},{status:401});
+  const unauthenticated=()=>adminPage?NextResponse.redirect(new URL(STAFF_PORTAL_PATH,request.url)):NextResponse.json({error:'Sistemə şəxsi işçi şifrəsi ilə daxil olun.'},{status:401});
   const token=request.cookies.get("birkassa_session")?.value;
   if(!token)return unauthenticated();
   if(!process.env.DATABASE_URL)return NextResponse.json({error:"Verilənlər bazası bağlantısı yoxdur"},{status:500});
@@ -93,7 +98,7 @@ export async function proxy(request:NextRequest){
     const tokenHash=createHash("sha256").update(token).digest("hex");
     const [session]=await sql.unsafe("select u.id,u.role,s.authentication_method,s.last_seen_at>now()-interval '10 minutes' active from auth_sessions s join users u on u.id=s.user_id where s.token_hash=$1 and s.expires_at>now() and u.is_active=true and u.password_hash is not null",[tokenHash]);
     if(!session||!staffRoles.includes(session.role)||session.authentication_method!=='password'||!session.active)return unauthenticated();
-    if(adminPage&&session.role!=='admin')return NextResponse.redirect(new URL('/admin',request.url));
+    if(adminPage){if(!canOpenStaffPage(session.role,path))return NextResponse.redirect(new URL(STAFF_PORTAL_PATH,request.url));return forward(request,{id:session.id,role:session.role});}
     if(!adminPage&&!canUseStaffApi(session.role,path,request.method))return NextResponse.json({error:'Bu bölmə üçün səlahiyyətiniz yoxdur.'},{status:403});
     const roles=rule?(["GET","HEAD"].includes(request.method)?rule.read:rule.write):['admin'];
     if(!roles.includes(session.role))return NextResponse.json({error:"Bu əməliyyat üçün səlahiyyətiniz yoxdur"},{status:403});
@@ -101,4 +106,5 @@ export async function proxy(request:NextRequest){
   }catch(error){console.error("permission.proxy",error);void logSystemError("permission.proxy", error);return NextResponse.json({error:"İcazə yoxlanmadı"},{status:500})}finally{await sql.end({timeout:2})}
 }
 
-export const config={matcher:["/api/:path*","/admin/:path*","/mehsullar/:path*","/products/:path*","/account/:path*","/categories/:path*","/sizin-ucun/:path*"]};
+// Matcher paths must be literals for Next.js build-time analysis.
+export const config={matcher:["/api/:path*","/admin/:path*","/heyet-g7m4q9x2k8/:path*","/mehsullar/:path*","/products/:path*","/account/:path*","/categories/:path*","/sizin-ucun/:path*"]};
