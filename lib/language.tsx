@@ -1,5 +1,6 @@
 "use client";
 import {createContext,useContext,useEffect,useSyncExternalStore,type ReactNode} from "react";
+import {formatLanguageAmount,localeForLanguage,languageUpperCase} from './language-format';
 import {desktopTranslations} from "./desktop-translations";
 import {storefrontTranslations} from "./storefront-translations";
 import {productRemovalTranslations} from './product-removal-translations';
@@ -159,9 +160,9 @@ rows.push(...desktopTranslations.map(row=>[row[0],row[1],row[2],rows.find(existi
 export const translationKeys=rows.map(row=>row[0]);
 for(const row of rows)if(checkoutTurkishOverrides[row[0]])row[3]=checkoutTurkishOverrides[row[0]];
 const translations=new Map(rows.map(row=>[row[0],row]));
-const upperTranslations=new Map(rows.map(row=>[row[0].toLocaleUpperCase("az"),row]));
-export function t(text:string):string{const exact=translations.get(text),row=exact||upperTranslations.get(text);const translated=row?.[(["az","ru","en","tr","zh"] as const).indexOf(current)]||text;if(row)return !exact?translated.toLocaleUpperCase(current):translated;const prefix=desktopTranslations.find(entry=>entry[0].endsWith(": ")&&text.startsWith(entry[0]));return prefix?t(prefix[0])+text.slice(prefix[0].length):text;}
-export function languageLocale(){return ({az:"az-AZ",en:"en-US",ru:"ru-RU",zh:"zh-CN",tr:"tr-TR"} as const)[current];}
+const upperTranslations=new Map(rows.map(row=>[languageUpperCase(row[0],"az"),row]));
+export function t(text:string,language:Language=current):string{const exact=translations.get(text),row=exact||upperTranslations.get(text);const translated=row?.[(["az","ru","en","tr","zh"] as const).indexOf(language)]||text;if(row)return !exact?languageUpperCase(translated,language):translated;const prefix=desktopTranslations.find(entry=>entry[0].endsWith(": ")&&text.startsWith(entry[0]));return prefix?t(prefix[0],language)+text.slice(prefix[0].length):text;}
+export function languageLocale(language:Language=current){return localeForLanguage(language);}
 const azMonths=["yanvar","fevral","mart","aprel","may","iyun","iyul","avqust","sentyabr","oktyabr","noyabr","dekabr"];
 const azWeekdays:Record<string,string>={Sun:"bazar",Mon:"bazar ertəsi",Tue:"çərşənbə axşamı",Wed:"çərşənbə",Thu:"cümə axşamı",Fri:"cümə",Sat:"şənbə"};
 export function languageDate(value:Date){
@@ -171,11 +172,14 @@ export function languageDate(value:Date){
  return `${part("day")} ${azMonths[Number(part("month"))-1]}, ${azWeekdays[part("weekday")]}`;
 }
 export function languageWeekday(value:Date){return current==="az"?["Baz","B.e","Ç.a","Çər","C.a","Cüm","Şən"][value.getUTCDay()]:value.toLocaleDateString(languageLocale(),{weekday:"short",timeZone:"Asia/Baku"});}
-export function languageAmount(value:number){
- if(current!=="az")return value.toLocaleString(languageLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
- const [whole,fraction]=value.toFixed(2).split(".");return whole.replace(/\B(?=(\d{3})+(?!\d))/g," ")+","+fraction;
-}
+export function languageAmount(value:number,language:Language=current){return formatLanguageAmount(value,language);}
 export function useLanguage(){return useContext(LanguageContext);}
+export function useTranslations(){
+ const language=useLanguage();
+ // Bind rendering to React's snapshot, not a mutable external-store value that
+ // may already have changed while a later Suspense boundary is still hydrating.
+ return {language,t:(text:string)=>t(text,language),languageLocale:()=>languageLocale(language),languageAmount:(value:number)=>languageAmount(value,language)};
+}
 export function LanguageSwitcher(){
  const language=useLanguage(),selected=languageOptions[language],copy=languageMenuCopy[language];
  function selectLanguage(next:string){if(!isLanguage(next))return;changeLanguage(next);try{localStorage.setItem('birkassa-language',next);}catch{}}

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {checkoutContactError} from './customer-contact';
 
 const checkoutPayloadSchema = z.object({
   requestKey: z.string().uuid(),
@@ -43,6 +44,9 @@ export function readCheckoutAttempt(accountId: string, storage?: AttemptStorage)
 export function saveCheckoutAttempt(attempt: CheckoutAttempt, storage?: AttemptStorage): boolean {
   try {
     const parsed = checkoutAttemptSchema.parse(attempt);
+    // Keep the reader backwards-compatible: an old attempt may already have
+    // committed. Only newly saved attempts require today's contact rules.
+    if (checkoutContactError(parsed.payload)) return false;
     const target = storage ?? globalThis.sessionStorage;
     const key = storageKey(parsed.accountId);
     const value = JSON.stringify(parsed);

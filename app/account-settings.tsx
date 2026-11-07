@@ -2,13 +2,14 @@
 import {useId,useRef,useState,type FormEvent} from 'react';
 import {CheckCircle2,Info,KeyRound,LoaderCircle,LockKeyhole,MapPin,Save,Search,ShieldCheck,UserRound,X} from 'lucide-react';
 import {AddressMap} from './address-map';
-import {t,useLanguage} from '@/lib/language';
+import {useTranslations} from '@/lib/language';
+import {customerPhonePattern,checkoutContactError} from '@/lib/customer-contact';
 export type AccountUser={id:string;name:string;email:string;phone:string;address:string;lat:number|null;lng:number|null};
 type Pin={lat:number;lng:number};
 type Place=Pin&{label:string};
 
 export function AccountSettings({user,onSaved}:{user:AccountUser;onSaved:()=>Promise<void>}){
- useLanguage();const id=useId();
+ const {t}=useTranslations();const id=useId();
  const [name,setName]=useState(user.name),[phone,setPhone]=useState(user.phone),[address,setAddress]=useState(user.address);
  const [pin,setPin]=useState<Pin|null>(user.lat!=null&&user.lng!=null?{lat:user.lat,lng:user.lng}:null);
  const [query,setQuery]=useState(''),[places,setPlaces]=useState<Place[]>([]);
@@ -42,6 +43,7 @@ export function AccountSettings({user,onSaved}:{user:AccountUser;onSaved:()=>Pro
  }
  async function save(event:FormEvent<HTMLFormElement>){
   event.preventDefault();if(savePending.current||searching||locating)return;
+  const contactError=checkoutContactError({name,phone});if(contactError){setError(contactError);return;}
   const form=event.currentTarget,fields=new FormData(form),newPassword=String(fields.get('newPassword')||''),currentPassword=String(fields.get('currentPassword')||'');
   if(newPassword&&!currentPassword){setError('Şifrəni dəyişmək üçün cari şifrənizi yazın.');form.querySelector<HTMLInputElement>('[name=currentPassword]')?.focus();return;}
   savePending.current=true;setSaving(true);setError('');setSaved(false);
@@ -59,7 +61,7 @@ export function AccountSettings({user,onSaved}:{user:AccountUser;onSaved:()=>Pro
  return <section className="account-settings" aria-labelledby={id+'-heading'}>
   <div className="account-section-heading"><div><span className="shop-tag">{t('ŞƏXSİ MƏLUMATLAR')}</span><h2 id={id+'-heading'}>{t('Hesab ayarları')}</h2><p>{t('Əlaqə məlumatınızı və çatdırılma ünvanınızı bir yerdən idarə edin.')}</p></div><ShieldCheck size={27} aria-hidden="true"/></div>
   <form className="account-profile-form" onSubmit={save} onInvalid={event=>{const details=(event.target as HTMLElement).closest('details');if(details)details.open=true;}}>
-   <fieldset className="account-form-section" disabled={saving}><legend><UserRound size={19}/>{t('Əlaqə məlumatları')}</legend><div className="account-field-grid"><label>{t('Ad və soyad')}<input value={name} onChange={event=>{setName(event.target.value);setSaved(false);}} required minLength={2} maxLength={100} autoComplete="name"/></label><label>{t('Telefon')}<input value={phone} onChange={event=>{setPhone(event.target.value);setSaved(false);}} type="tel" required pattern="[+0-9 ()-]{7,25}" maxLength={25} autoComplete="tel"/></label></div><label>{t('E-poçt')}<span className="account-readonly-field"><input value={user.email} readOnly autoComplete="email" aria-describedby={id+'-email-help'}/><LockKeyhole size={16} aria-hidden="true"/></span></label><small id={id+'-email-help'} className="account-field-hint">{t('E-poçt giriş üçün istifadə olunur və burada dəyişdirilmir.')}</small></fieldset>
+   <fieldset className="account-form-section" disabled={saving}><legend><UserRound size={19}/>{t('Əlaqə məlumatları')}</legend><div className="account-field-grid"><label>{t('Ad və soyad')}<input value={name} onChange={event=>{setName(event.target.value);setSaved(false);}} required minLength={2} maxLength={100} autoComplete="name"/></label><label>{t('Telefon')}<input value={phone} onChange={event=>{setPhone(event.target.value);setSaved(false);}} type="tel" required pattern={customerPhonePattern} maxLength={25} autoComplete="tel"/></label></div><label>{t('E-poçt')}<span className="account-readonly-field"><input value={user.email} readOnly autoComplete="email" aria-describedby={id+'-email-help'}/><LockKeyhole size={16} aria-hidden="true"/></span></label><small id={id+'-email-help'} className="account-field-hint">{t('E-poçt giriş üçün istifadə olunur və burada dəyişdirilmir.')}</small></fieldset>
    <fieldset className="account-form-section" disabled={saving}><legend><MapPin size={19}/>{t('Çatdırılma ünvanı')}</legend><p className="account-field-hint">{t('Ünvanı axtarın, xəritədən seçin və ya əl ilə yazın.')}</p><div className="address-picker">
     <div className="address-search"><label htmlFor={id+'-address-search'}>{t('Ünvan axtar')}<span className="account-address-query"><Search size={17} aria-hidden="true"/><input id={id+'-address-search'} value={query} onChange={event=>{searchRun.current++;setSearching(false);setQuery(event.target.value);setPlaces([]);setAddressNote('');}} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();void search();}}} maxLength={120} autoComplete="off" placeholder={t('Küçə, məhəllə və ya nişan')}/>{query&&<button type="button" aria-label={t('Axtarışı təmizlə')} onClick={()=>{searchRun.current++;setSearching(false);setQuery('');setPlaces([]);}}><X size={16}/></button>}</span></label><button type="button" className="account-secondary" disabled={searching||query.trim().length<3} onClick={()=>void search()}>{searching?<LoaderCircle className="account-spin" size={16}/>:<Search size={16}/>} {t(searching?'Axtarılır…':'Axtar')}</button></div>
     {places.length>0&&<ul className="address-results" aria-label={t('Ünvan nəticələri')}>{places.map(place=><li key={place.lat+','+place.lng}><button type="button" onClick={()=>choosePlace(place)}><MapPin size={17}/><span>{place.label}</span></button></li>)}</ul>}

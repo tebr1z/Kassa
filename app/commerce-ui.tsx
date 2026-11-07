@@ -1,5 +1,5 @@
 "use client";
-import {t,useLanguage} from "@/lib/language";
+import {useTranslations,useLanguage} from "@/lib/language";
 import {useEffect,useRef,useState,type FormEvent} from "react";
 import {MessageCircle,Send} from "lucide-react";
 
@@ -9,12 +9,12 @@ export function WhatsAppButton({whatsapp}:{whatsapp?:string}){useLanguage();
  const url=whatsappUrl(whatsapp);if(!url)return null;
  return <div className="sf-whatsapp-wrap"><a className="sf-whatsapp live" href={url} target="_blank" rel="noopener noreferrer"><WhatsAppIcon/><span>WhatsApp</span></a></div>;
 }
-export function ContactBox({whatsapp}:{whatsapp?:string}){useLanguage();
+export function ContactBox({whatsapp}:{whatsapp?:string}){const {t}=useTranslations();
  const [status,setStatus]=useState(""),[busy,setBusy]=useState(false);const url=whatsappUrl(whatsapp);
  async function send(e:FormEvent<HTMLFormElement>){e.preventDefault();const form=e.currentTarget;const data=new FormData(form);setBusy(true);setStatus("");try{const r=await fetch("/api/contact",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:data.get("name"),phone:data.get("phone"),message:data.get("message")})});const d=await r.json() as {error?:string};if(!r.ok)throw new Error(d.error);setStatus("Mesajınız qəbul olundu. Tezliklə sizinlə əlaqə saxlayacağıq.");form.reset();}catch(e){setStatus(e instanceof Error?e.message:"Mesaj göndərilmədi.");}finally{setBusy(false);}}
  return <div className="sf-contact-box"><div className="sf-contact-box-title"><MessageCircle size={22}/><h3>{t("Bizə yazın")}</h3>{url&&<a href={url} target="_blank" rel="noopener noreferrer"><WhatsAppIcon/> WhatsApp</a>}</div><form onSubmit={send}><div className="sf-contact-fields"><label className="sf-form-label">{t("Ad")}<input name="name" required minLength={2} maxLength={80} autoComplete="name" placeholder="Adınız" disabled={busy}/></label><label className="sf-form-label">{t("Nömrə")}<input name="phone" required minLength={7} maxLength={20} inputMode="tel" autoComplete="tel" placeholder="050 000 00 00" disabled={busy}/></label></div><label className="sf-form-label">{t("Mesaj")}<textarea name="message" required minLength={5} maxLength={2000} placeholder="Məhsul, sifariş və ya təklifiniz barədə…" disabled={busy}/></label><button className="sf-primary" disabled={busy}>{busy?"Göndərilir…":t("Göndər")}<Send size={16}/></button><p role="status" className="sf-contact-status">{status}</p></form></div>;
 }
-export function CouponBox({items,onApply,onBusyChange,disabled=false}:{items:{id:string;optionId?:string;quantity:number;price:number}[];onApply:(code:string,discount:number)=>void;onBusyChange?:(busy:boolean)=>void;disabled?:boolean}){useLanguage();
+export function CouponBox({items,onApply,onBusyChange,disabled=false}:{items:{id:string;optionId?:string;quantity:number;price:number}[];onApply:(code:string,discount:number)=>void;onBusyChange?:(busy:boolean)=>void;disabled?:boolean}){const {t}=useTranslations();
  const [code,setCode]=useState(""),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
  const revision=useRef(0),applyRef=useRef(onApply),busyRef=useRef(onBusyChange);applyRef.current=onApply;busyRef.current=onBusyChange;
  useEffect(()=>()=>{busyRef.current?.(false);},[]);

@@ -1,11 +1,11 @@
 "use client";
-import {t,useLanguage,languageAmount,LanguageSwitcher} from "@/lib/language";
+import {useTranslations,languageAmount,LanguageSwitcher} from "@/lib/language";
 import ProductPrice from "./product-price";
 import {optionDetails} from "@/lib/product-options";
 import Link from "next/link";
 import {useCallback,useEffect,useRef,useState,type KeyboardEvent as ReactKeyboardEvent} from "react";
 import {ArrowLeft,ArrowRight,Check,MapPin,Package,Search,ShoppingBag,Store,Truck,UserRound} from "lucide-react";
-import {labelMatches,productModel,productPath,productSearchScore,type CatalogProduct,type HeroSlide} from "@/lib/commerce";
+import {labelMatches,productModel,productPath,productSearchScore,compareCatalogNames,type CatalogProduct,type HeroSlide} from "@/lib/commerce";
 import {cartKey,parseCartKey,readCart,saveCart,type CustomerCart} from "@/lib/storefront-cart";
 import ProductView from "./product-view";
 import HeroSlider from "./hero-slider";
@@ -19,13 +19,13 @@ type Brand={name:string;kind:string;description:string;about:string;logo:string;
 type ShowcaseCategory={id:string;name:string;image:string};
 export type Customer={id:string;name:string;phone:string;address?:string}|null;
 export const money=(value:number)=>languageAmount(value);
-function ProductCard({product,inCart,onAdd,onOpen,pinned=false}:{product:CatalogProduct;inCart:number;onAdd:()=>void;onOpen:()=>void;pinned?:boolean}){useLanguage();
+function ProductCard({product,inCart,onAdd,onOpen,pinned=false}:{product:CatalogProduct;inCart:number;onAdd:()=>void;onOpen:()=>void;pinned?:boolean}){const {t}=useTranslations();
  return <article className="sf-product"><Link className="sf-product-image" href={productPath(product)}>{product.image?<img src={product.image} alt={product.name} loading="lazy"/>:<Package size={56}/>}<span className="sf-category-tag">{product.category||t("Digər")}</span>{pinned&&<span className="sf-pin-tag">{t("Seçilmiş")}</span>}{product.originalPrice>product.price&&<span className="sf-sale-tag">−{Math.round((1-product.price/product.originalPrice)*100)}%</span>}</Link><div className="sf-product-copy"><span className="sf-product-meta"><i/> {productModel(product.name)}</span><h3><Link href={productPath(product)}>{product.name}</Link></h3><div className="sf-card-bottom"><ProductPrice price={product.price} originalPrice={product.originalPrice} compact/><button className={inCart?"sf-add is-added":"sf-add"} onClick={()=>inCart?onOpen():onAdd()}>{inCart?<><Check size={15}/> {t("Səbətdə")} · {inCart}</>:t("Səbətə əlavə et")}</button></div></div></article>;
 }
-function SearchField({products,query,onQuery}:{products:CatalogProduct[];query:string;onQuery:(value:string)=>void}){useLanguage();
+function SearchField({products,query,onQuery}:{products:CatalogProduct[];query:string;onQuery:(value:string)=>void}){const {t,languageAmount:money}=useTranslations();
  const root=useRef<HTMLDivElement>(null);
  const [open,setOpen]=useState(false);
- const matches=query.trim()?[...products].map(product=>({product,score:productSearchScore(product,query)})).filter(item=>item.score>0).sort((a,b)=>b.score-a.score||a.product.name.localeCompare(b.product.name,"az")).slice(0,6):[];
+ const matches=query.trim()?[...products].map(product=>({product,score:productSearchScore(product,query)})).filter(item=>item.score>0).sort((a,b)=>b.score-a.score||compareCatalogNames(a.product.name,b.product.name)).slice(0,6):[];
  useEffect(()=>{
   if(!open)return;
   function outside(event:MouseEvent){if(!root.current?.contains(event.target as Node))setOpen(false);}
@@ -39,7 +39,7 @@ function SearchField({products,query,onQuery}:{products:CatalogProduct[];query:s
   {open&&!!matches.length&&<ul id="search-results" className="sf-search-results" aria-label={t("Axtarış nəticələri")}>{matches.map(({product})=> <li key={product.id}><Link href={productPath(product)} onClick={()=>setOpen(false)}><span className="sf-search-thumb">{product.image?<img src={product.image} alt=""/>:<Package size={22}/>}</span><span><strong>{product.name}</strong><small>{product.category||t("Digər")} · {productModel(product.name)}</small></span><b>{money(product.price)} AZN</b></Link></li>)}</ul>}
  </div>;
 }
-function OptionMenu({label,value,options,open,searchable=false,onToggle,onClose,onChange}:{label:string;value:string;options:string[];open:boolean;searchable?:boolean;onToggle:()=>void;onClose:()=>void;onChange:(value:string)=>void}){useLanguage();
+function OptionMenu({label,value,options,open,searchable=false,onToggle,onClose,onChange}:{label:string;value:string;options:string[];open:boolean;searchable?:boolean;onToggle:()=>void;onClose:()=>void;onChange:(value:string)=>void}){const {t}=useTranslations();
  const root=useRef<HTMLDivElement>(null),inputRef=useRef<HTMLInputElement>(null),listRef=useRef<HTMLUListElement>(null);
  const [filter,setFilter]=useState(""),[active,setActive]=useState(0);
  const shown=searchable&&filter.trim()?options.filter(item=>item!=="Hamısı"&&labelMatches(item,filter)):options;
@@ -64,7 +64,7 @@ function OptionMenu({label,value,options,open,searchable=false,onToggle,onClose,
   {open&&<div className="sf-option-panel">{searchable&&<label className="sf-option-search"><Search size={16}/><input ref={inputRef} aria-label={t(label)+" · "+t("Axtar")} aria-controls={label+"-options"} placeholder={t("Axtar")} value={filter} onChange={event=>{setFilter(event.target.value);setActive(0);}} onKeyDown={onSearchKey}/>{filter&&<button type="button" className="sf-search-clear" aria-label={t("Axtarışı təmizlə")} onClick={()=>{setFilter("");setActive(0);inputRef.current?.focus();}}>×</button>}</label>}<ul id={searchable?label+"-options":undefined} className="sf-option-list" role="listbox" aria-label={t(label)} ref={listRef}>{shown.map((item,index)=><li key={item}><button type="button" role="option" data-active={searchable&&index===active} aria-selected={item===value} onMouseEnter={()=>setActive(index)} onClick={()=>pick(item)}>{t(item)}{item===value&&<Check size={15}/>}</button></li>)}{searchable&&filter.trim()&&!shown.length&&<li className="sf-option-empty">{t("Uyğun seçim yoxdur")}</li>}</ul></div>}
  </div>;
 }
-export default function Storefront({productId,categoryId,picksPage,catalogPage,initialCatalog,initialOptionId}:{productId?:string;categoryId?:string;picksPage?:boolean;catalogPage?:boolean;initialCatalog?:PublicCatalog;initialOptionId?:string}){useLanguage();
+export default function Storefront({productId,categoryId,picksPage,catalogPage,initialCatalog,initialOptionId}:{productId?:string;categoryId?:string;picksPage?:boolean;catalogPage?:boolean;initialCatalog?:PublicCatalog;initialOptionId?:string}){const {t}=useTranslations();
  const [brand,setBrand]=useState<Brand|null>(initialCatalog?.brand||null),[products,setProducts]=useState<CatalogProduct[]>(initialCatalog?.products||[]),[account,setAccount]=useState<Customer>(null),[slides,setSlides]=useState<HeroSlide[]>(initialCatalog?.slides||[]),[showcase,setShowcase]=useState<ShowcaseCategory[]>(initialCatalog?.categories||[]);
  const [cart,setCart]=useState<CustomerCart>({}),[loaded,setLoaded]=useState(Boolean(initialCatalog)),[error,setError]=useState(""),[notice,setNotice]=useState("");
  const [query,setQuery]=useState(""),[category,setCategory]=useState("Hamısı"),[model,setModel]=useState("Hamısı"),[sort,setSort]=useState("name"),[open,setOpen]=useState(false),[menu,setMenu]=useState<""|"category"|"model">(""),[visitOrder,setVisitOrder]=useState<string[]>([]),[optionProduct,setOptionProduct]=useState<CatalogProduct|null>(null);
@@ -90,11 +90,11 @@ export default function Storefront({productId,categoryId,picksPage,catalogPage,i
  function committed(items:{id:string;optionId?:string|null;quantity:number}[]){setCart(current=>{const next={...current};for(const item of items){const key=cartKey(item.id,item.optionId);const quantity=Math.max(0,(next[key]||0)-item.quantity);if(quantity)next[key]=quantity;else delete next[key];}saveCart(next);return next;});}
  const count=Object.values(cart).reduce((a,b)=>a+b,0);
  const quantityInCart=(id:string)=>Object.entries(cart).reduce((sum,[key,quantity])=>sum+(parseCartKey(key).productId===id?quantity:0),0);
- const categories=["Hamısı",...[...new Set(products.map(p=>p.category||"Digər"))].sort((a,b)=>a.localeCompare(b,"az"))];
+ const categories=["Hamısı",...[...new Set(products.map(p=>p.category||"Digər"))].sort(compareCatalogNames)];
  const scoped=products.filter(p=>category==="Hamısı"||(p.category||"Digər")===category);
- const models=["Hamısı",...new Set(scoped.map(p=>productModel(p.name)))].sort((a,b)=>a==="Hamısı"?-1:b==="Hamısı"?1:a.localeCompare(b,"az"));
+ const models=["Hamısı",...new Set(scoped.map(p=>productModel(p.name)))].sort((a,b)=>a==="Hamısı"?-1:b==="Hamısı"?1:compareCatalogNames(a,b));
  const needle=query.trim();
- const bySort=(a:CatalogProduct,b:CatalogProduct)=>sort==="low"?a.price-b.price:sort==="high"?b.price-a.price:sort==="sale"?(b.originalPrice-b.price)-(a.originalPrice-a.price):a.name.localeCompare(b.name,"az");
+ const bySort=(a:CatalogProduct,b:CatalogProduct)=>sort==="low"?a.price-b.price:sort==="high"?b.price-a.price:sort==="sale"?(b.originalPrice-b.price)-(a.originalPrice-a.price):compareCatalogNames(a.name,b.name);
  const ranked=needle?products.map(product=>({product,score:productSearchScore(product,query)})).filter(item=>item.score>0):[];
  const scopedRanked=ranked.filter(({product})=>{const itemModel=productModel(product.name);return (category==="Hamısı"||(product.category||"Digər")===category)&&(model==="Hamısı"||itemModel===model);});
  const found=needle?(scopedRanked.length?scopedRanked:ranked).sort((a,b)=>b.score-a.score||bySort(a.product,b.product)).map(item=>item.product):scoped.filter(p=>model==="Hamısı"||productModel(p.name)===model).sort(bySort);
@@ -138,8 +138,8 @@ export default function Storefront({productId,categoryId,picksPage,catalogPage,i
   <WhatsAppButton whatsapp={brand?.whatsapp}/>
   {notice&&<div className="sf-toast" role="status"><Check size={17}/>{t(notice)}<button onClick={()=>{setOpen(true);setNotice("");}}>{t("Səbətə bax")}</button></div>}
   {optionProduct&&<OptionDialog product={optionProduct} onPick={id=>add(optionProduct.id,id)} onClose={()=>setOptionProduct(null)}/>}
-  {open&&<CartSheet storeAddress={brand?.address||""} products={products} cart={cart} account={account} onChange={change} onCommitted={committed} onClose={()=>setOpen(false)}/>}
+  {open&&<CartSheet storeAddress={brand?.address||""} products={products} cart={cart} account={account} onChange={change} onCommitted={committed} onRefresh={refresh} onClose={()=>setOpen(false)}/>}
  </div>;
 }
 
-function OptionDialog({product,onPick,onClose}:{product:CatalogProduct;onPick:(id:string)=>void;onClose:()=>void}){useLanguage();const ref=useRef<HTMLDialogElement>(null);useEffect(()=>{ref.current?.showModal();},[]);return <dialog ref={ref} className="sf-options-dialog" onCancel={onClose}><header><div><span>{t("MƏHSUL SEÇİMİ")}</span><h2>{product.name}</h2></div><button type="button" aria-label={t("Bağla")} onClick={onClose}>×</button></header><p>{t("Ölçü, rəng və ya növü seçin")}</p><div>{product.options.map(option=><button type="button" key={option.id} onClick={()=>onPick(option.id)}><span><strong>{option.label}</strong><small>{optionDetails(option)}</small></span><b>{money(option.price??product.basePrice??product.price)} AZN</b></button>)}</div></dialog>;}
+function OptionDialog({product,onPick,onClose}:{product:CatalogProduct;onPick:(id:string)=>void;onClose:()=>void}){const {t,languageAmount:money}=useTranslations();const ref=useRef<HTMLDialogElement>(null);useEffect(()=>{ref.current?.showModal();},[]);return <dialog ref={ref} className="sf-options-dialog" onCancel={onClose}><header><div><span>{t("MƏHSUL SEÇİMİ")}</span><h2>{product.name}</h2></div><button type="button" aria-label={t("Bağla")} onClick={onClose}>×</button></header><p>{t("Ölçü, rəng və ya növü seçin")}</p><div>{product.options.map(option=><button type="button" key={option.id} onClick={()=>onPick(option.id)}><span><strong>{option.label}</strong><small>{optionDetails(option)}</small></span><b>{money(option.price??product.basePrice??product.price)} AZN</b></button>)}</div></dialog>;}

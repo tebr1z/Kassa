@@ -5,7 +5,8 @@ import {Package,ShieldCheck,ShoppingBag,Truck,ArrowLeft,ArrowRight,LogOut,Mail,P
 import {BrandLogo} from "../brand-logo";
 import "../storefront.css";
 import "./account.css";
-import {t,useLanguage,languageLocale,LanguageSwitcher} from "@/lib/language";
+import {useTranslations,LanguageSwitcher} from "@/lib/language";
+import {customerPhonePattern,checkoutContactError} from '@/lib/customer-contact';
 import {SupportDesk} from "../support-desk";
 import {AccountSettings} from "../account-settings";
 import {OrderList,type CustomerOrder} from './order-list';
@@ -17,7 +18,7 @@ function subscribeTab(callback:()=>void){window.addEventListener('popstate',call
 
 
 
-export default function Account(){useLanguage();
+export default function Account(){const {t,languageLocale}=useTranslations();
  const [user,setUser]=useState<User|null>(null);
  const [ready,setReady]=useState(false);
  const [register,setRegister]=useState(false);
@@ -60,6 +61,7 @@ export default function Account(){useLanguage();
   e.preventDefault();if(authPending.current)return;authPending.current=true;generation.current++;setBusy(true);setError("");
   try{
    const d=Object.fromEntries(new FormData(e.currentTarget));
+   if(register){const contactError=checkoutContactError({name:String(d.name||''),phone:String(d.phone||'')});if(contactError)throw new Error(contactError);}
    const r=await fetch("/api/customer-account",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...d,action:register?"register":"login"})});
    const json=await r.json() as {ok?:boolean;error?:string};
    if(!r.ok||json.ok!==true)throw new Error(json.error||"Giriş alınmadı");
@@ -99,7 +101,7 @@ export default function Account(){useLanguage();
       <form onSubmit={submit}><fieldset disabled={busy} className="account-auth-fields">
        {register&&<>
         <label>{t("Ad və soyad")}<input name="name" required minLength={2} maxLength={100} autoComplete="name"/></label>
-        <label>{t("Telefon")}<input name="phone" type="tel" required pattern="[+0-9 ()-]{7,25}" autoComplete="tel"/></label>
+        <label>{t("Telefon")}<input name="phone" type="tel" required pattern={customerPhonePattern} maxLength={25} autoComplete="tel"/></label>
        </>}
        <label>{t("E-poçt")}<input name="email" type="email" required maxLength={200} autoComplete="email"/></label>
        <label>{t("Şifrə")}<span className="account-password-field"><input name="password" type={showPassword?"text":"password"} required minLength={8} maxLength={128} autoComplete={register?"new-password":"current-password"} aria-describedby="account-password-hint"/><button type="button" aria-label={t(showPassword?"Şifrəni gizlət":"Şifrəni göstər")} aria-pressed={showPassword} onClick={()=>setShowPassword(value=>!value)}>{showPassword?<EyeOff size={18}/>:<Eye size={18}/>}</button></span></label>

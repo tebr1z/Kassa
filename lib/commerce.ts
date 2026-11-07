@@ -14,6 +14,16 @@ export function couponDiscount(subtotal:number,percent:number,maxDiscount?:numbe
 }
 export type ProductOption={id:string;label:string;size:string;color:string;kind:string;price:number|null;attributes?:Record<string,string>};
 export type CatalogProduct={id:string;code?:string;name:string;category:string;unit:string;price:number;originalPrice:number;basePrice?:number;baseOriginalPrice?:number;image:string;images?:string[];available:boolean;description:string;specifications:string;options:ProductOption[]};
+export const catalogTextLower=(value:string)=>value.replace(/I/g,'ı').replace(/İ/g,'i').toLowerCase();
+const catalogAlphabet='abcçdeəfgğhxıijkqlmnoöprsştuüvyz';
+// Explicit Azerbaijani ordering avoids SSR/browser ICU fallback differences.
+export function compareCatalogNames(left:string,right:string){
+ const a=[...catalogTextLower(left.normalize('NFC'))],b=[...catalogTextLower(right.normalize('NFC'))];
+ const weight=(letter:string)=>{const index=catalogAlphabet.indexOf(letter);return index<0?letter.codePointAt(0)!:256+index;};
+ for(let index=0;index<Math.min(a.length,b.length);index++){const difference=weight(a[index])-weight(b[index]);if(difference)return difference;}
+ if(a.length!==b.length)return a.length-b.length;
+ return left<right?-1:left>right?1:0;
+}
 const slugLetters:Record<string,string>={ə:"e",Ə:"E",ı:"i",İ:"I",ö:"o",Ö:"O",ü:"u",Ü:"U",ş:"s",Ş:"S",ç:"c",Ç:"C",ğ:"g",Ğ:"G"};
 export function productSlug(name:string){
  const folded=[...name].map(ch=>slugLetters[ch]??ch).join("");
@@ -77,7 +87,7 @@ export function productModel(name:string){
 }
 const searchFold:Record<string,string>={ə:"e",ı:"i",ö:"o",ü:"u",ş:"s",ç:"c",ğ:"g",q:"g",â:"a",î:"i",û:"u"};
 export function foldSearch(value:string){
- return [...value.normalize("NFKC").toLocaleLowerCase("az")].map(ch=>searchFold[ch]||ch).join("").replace(/[^\p{L}\p{N}]+/gu," ").replace(/\s+/g," ").trim();
+ return [...catalogTextLower(value.normalize("NFKC"))].map(ch=>searchFold[ch]||ch).join("").replace(/[^\p{L}\p{N}]+/gu," ").replace(/\s+/g," ").trim();
 }
 function editDistance(a:string,b:string){
  if(a===b)return 0;
@@ -134,8 +144,8 @@ export function labelMatches(label:string,query:string){
  return needle.split(" ").filter(Boolean).every(token=>words.some(word=>tokenNear(token,word)));
 }
 export function relatedProducts(product:CatalogProduct,products:CatalogProduct[]){
- const words=new Set(product.name.toLocaleLowerCase("az").split(/\s+/).filter(w=>w.length>2));
- const score=(p:CatalogProduct)=>(p.category&&p.category===product.category?10:0)+p.name.toLocaleLowerCase("az").split(/\s+/).filter(w=>words.has(w)).length*3+1/(1+Math.abs(p.price-product.price));
- return products.filter(p=>p.id!==product.id&&p.available).sort((a,b)=>score(b)-score(a)||a.name.localeCompare(b.name)).slice(0,4);
+ const words=new Set(catalogTextLower(product.name).split(/\s+/).filter(w=>w.length>2));
+ const score=(p:CatalogProduct)=>(p.category&&p.category===product.category?10:0)+catalogTextLower(p.name).split(/\s+/).filter(w=>words.has(w)).length*3+1/(1+Math.abs(p.price-product.price));
+ return products.filter(p=>p.id!==product.id&&p.available).sort((a,b)=>score(b)-score(a)||compareCatalogNames(a.name,b.name)).slice(0,4);
 }
 export type HeroSlide={id:string;productId:string|null;heading:string;badge:string;description:string};

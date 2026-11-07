@@ -5,15 +5,16 @@ import {z} from "zod";
 import {sellingPrice,couponDiscount} from "@/lib/commerce";
 import {notifyCatalogOrder,vexiraSettings,whatsappPhone} from "@/lib/vexira";
 import {deliverySettings,sameOriginMutation} from '@/lib/delivery-server';
+import {isCustomerPhone} from '@/lib/customer-contact';
 export const dynamic="force-dynamic";
-const schema=z.object({requestKey:z.string().uuid(),expectedTotal:z.number().finite().min(0).optional(),deliveryQuoteId:z.string().uuid().nullable().optional(),coupon:z.string().trim().toUpperCase().max(30).default(""),fulfillment:z.enum(["pickup","delivery"]),address:z.string().max(500),name:z.string().trim().min(2).max(100),phone:z.string().trim().regex(/^[+0-9 ()-]{7,25}$/).refine(value=>value.replace(/\D/g,'').length>=7&&value.replace(/\D/g,'').length<=15),note:z.string().max(1000),items:z.array(z.object({id:z.string().uuid(),optionId:z.string().uuid().nullable().optional(),quantity:z.number().int().min(1).max(100)})).min(1).max(50)});
+const schema=z.object({requestKey:z.string().uuid(),expectedTotal:z.number().finite().min(0).optional(),deliveryQuoteId:z.string().uuid().nullable().optional(),coupon:z.string().trim().toUpperCase().max(30).default(""),fulfillment:z.enum(["pickup","delivery"]),address:z.string().max(500),name:z.string().trim().min(2).max(100),phone:z.string().trim().refine(isCustomerPhone),note:z.string().max(1000),items:z.array(z.object({id:z.string().uuid(),optionId:z.string().uuid().nullable().optional(),quantity:z.number().int().min(1).max(100)})).min(1).max(50)});
 function checkoutRejection(message:string){return Object.assign(new Error(message),{statusCode:400});}
 export async function POST(request:Request){
  if(!sameOriginMutation(request))return Response.json({error:'Başqa saytdan göndərilən sorğu qəbul edilmir.'},{status:403});
  if(Number(request.headers.get("content-length")||0)>20000)return Response.json({error:"Sorğu çox böyükdür"},{status:413});
  const account=await customerAccount();if(!account)return Response.json({error:"Sifariş üçün hesabınıza daxil olun."},{status:401});
  const parsed=schema.safeParse(await request.json().catch(()=>null));
- if(!parsed.success)return Response.json({error:"Ad, telefon və məhsulları düzgün daxil edin."},{status:400});
+ if(!parsed.success){const fields=[...new Set(parsed.error.issues.map(issue=>String(issue.path[0]||'request')))];return Response.json({error:fields.length===1&&fields[0]==='phone'?'Əlaqə telefonunu düzgün yazın.':'Ad, telefon və məhsulları düzgün daxil edin.',code:'INVALID_CHECKOUT',fields},{status:400});}
  const b=parsed.data;if(b.fulfillment==="delivery"&&b.address.trim().length<10)return Response.json({error:"Çatdırılma ünvanını tam yazın."},{status:400});const sql=storeDb();
  try{
  // Count failed attempts too; do not roll this back with rejected orders.

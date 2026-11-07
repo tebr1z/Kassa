@@ -1,12 +1,12 @@
 "use client";
-import {t,useLanguage} from "@/lib/language";
+import {useTranslations} from "@/lib/language";
 import Link from "next/link";
 import {useEffect,useState} from "react";
 import {ArrowLeft,ArrowRight,Pause,Play,ShoppingBag,Sparkles} from "lucide-react";
 import {productPath,type CatalogProduct,type HeroSlide} from "@/lib/commerce";
 import "./hero-slider.css";
 
-export default function HeroSlider({slides,products,description}:{slides:HeroSlide[];products:CatalogProduct[];description?:string}){useLanguage();
+export default function HeroSlider({slides,products,description}:{slides:HeroSlide[];products:CatalogProduct[];description?:string}){const {t}=useTranslations();
  const [index,setIndex]=useState(0),[paused,setPaused]=useState(false);
  const signature=slides.map(s=>s.id).join(",");
  useEffect(()=>{setIndex(0);},[signature]);

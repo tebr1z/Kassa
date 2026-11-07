@@ -55,6 +55,36 @@ try{
  await sql.unsafe("update delivery_quotes set expires_at=now()-interval '1 minute' where id=$1",[quote.id]);
  assert.equal((await request('/api/customer-orders',deliveryPayload)).data.order_no,deliveryOrder.data.order_no,'Committed order remains retryable after quote expires');
  const history=await request('/api/my-orders'),delivered=history.data.orders.find(row=>row.order_no===deliveryOrder.data.order_no);assert.equal(Number(delivered.total),66);assert.equal(Number(delivered.delivery_fee),6);assert.equal(delivered.distance_meters,5000);
+ // A separate disposable customer keeps checkout validation/retry checks away
+ // from the account and rate limits used by the interactive --serve preview.
+ const checkoutReturnCookie=cookie;
+ const checkoutCustomer=await request('/api/customer-account',{action:'register',name:'Checkout Contract',phone:'+994500000003',email:'checkout-'+randomUUID()+'@example.test',password});
+ assert.equal(checkoutCustomer.status,200,JSON.stringify(checkoutCustomer.data));cookie=checkoutCustomer.response.headers.get('set-cookie').split(';')[0];
+ const checkoutAccount=(await request('/api/customer-account')).data.user;
+ const decimalProducts=await sql.unsafe("insert into products(sku,name,sale_price,cost_price) values('CHECKOUT-DECIMAL-029','Checkout decimal 0.29',0.29,0.10),('CHECKOUT-DECIMAL-057','Checkout decimal 0.57',0.57,0.10) returning id,sku");
+ const firstDecimal=decimalProducts.find(row=>row.sku==='CHECKOUT-DECIMAL-029'),secondDecimal=decimalProducts.find(row=>row.sku==='CHECKOUT-DECIMAL-057');
+ await sql.unsafe("insert into commerce_coupons(code,percent,minimum,usage_limit,expires_at) values('CHECKOUT-DECIMAL',10,0,10,now()+interval '1 day')");
+ const decimalItems=[{id:firstDecimal.id,quantity:3},{id:secondDecimal.id,quantity:7}];
+ const decimalPayload={...payload,requestKey:randomUUID(),coupon:'CHECKOUT-DECIMAL',expectedTotal:4.37,items:decimalItems,name:'  Checkout Contract  ',phone:'+994 (50) 123-45-67'};
+ for(const invalidPhone of ['+994501234567abc','+994/50/1234567','+994\u00a0501234567','123456','1234567890123456','+++++++']){
+  const rejected=await request('/api/customer-orders',{...decimalPayload,requestKey:randomUUID(),phone:invalidPhone});assert.equal(rejected.status,400,'Invalid phone is rejected before creating an order: '+JSON.stringify(invalidPhone));
+ }
+ assert.equal((await request('/api/customer-orders',{...decimalPayload,requestKey:randomUUID(),name:' A '})).status,400,'Name is validated after trimming, not only by raw HTML length');
+ const [{n:beforeCheckout}]=await sql.unsafe('select count(*)::int n from sales_orders where account_id=$1',[checkoutAccount.id]);assert.equal(beforeCheckout,0,'Contact validation cannot create orders');
+ const appliedCoupon=await request('/api/coupon',{code:'CHECKOUT-DECIMAL',items:decimalItems});assert.equal(appliedCoupon.status,200,JSON.stringify(appliedCoupon.data));assert.equal(appliedCoupon.data.discount,0.49);assert.equal(appliedCoupon.data.total,4.37,'Coupon and checkout use the same decimal subtotal');
+ const concurrent=await Promise.all([request('/api/customer-orders',decimalPayload),request('/api/customer-orders',decimalPayload)]);
+ for(const result of concurrent)assert.equal(result.status,201,JSON.stringify(result.data));assert.equal(concurrent[0].data.order_no,concurrent[1].data.order_no,'Concurrent retries share one committed order number');
+ const [decimalOrder]=await sql.unsafe('select id,total,customer_name_snapshot,customer_phone_snapshot from sales_orders where account_id=$1 and request_key=$2',[checkoutAccount.id,decimalPayload.requestKey]);assert.equal(Number(decimalOrder.total),4.37);assert.equal(decimalOrder.customer_name_snapshot,'Checkout Contract');assert.equal(decimalOrder.customer_phone_snapshot,decimalPayload.phone);
+ const decimalLines=await sql.unsafe('select line_total from sales_order_items where sales_order_id=$1 order by line_total',[decimalOrder.id]);assert.deepEqual(decimalLines.map(row=>Number(row.line_total)),[0.87,3.99]);
+ const [{n:committed}]=await sql.unsafe('select count(*)::int n from sales_orders where account_id=$1 and request_key=$2',[checkoutAccount.id,decimalPayload.requestKey]);assert.equal(committed,1,'Concurrent checkout inserts exactly one database order');
+ const [usedCoupon]=await sql.unsafe("select used from commerce_coupons where code='CHECKOUT-DECIMAL'");assert.equal(usedCoupon.used,1,'Idempotent retry consumes the coupon only once');
+ const staleOption=await request('/api/customer-orders',{...decimalPayload,requestKey:randomUUID(),coupon:'',expectedTotal:40,items:[{id:product.id,quantity:1}]});assert.equal(staleOption.status,400,'A stale basket without a now-required product choice is not silently charged at base price');
+ const stalePrice=await request('/api/customer-orders',{...decimalPayload,requestKey:randomUUID(),coupon:'',expectedTotal:4.35});assert.equal(stalePrice.status,400,'An outdated expected total must be rejected, not accepted with an unconfirmed price');
+ await sql.unsafe('update products set sale_price=0.39 where id=$1',[firstDecimal.id]);
+ const committedRetry=await request('/api/customer-orders',decimalPayload);assert.equal(committedRetry.status,201,JSON.stringify(committedRetry.data));assert.equal(committedRetry.data.order_no,concurrent[0].data.order_no,'Committed request remains retryable after a catalogue price changes');
+ const [stillOnce]=await sql.unsafe("select used from commerce_coupons where code='CHECKOUT-DECIMAL'");assert.equal(stillOnce.used,1);
+ await sql.unsafe('update products set is_active=false where id in ($1,$2)',[firstDecimal.id,secondDecimal.id]);cookie=checkoutReturnCookie;
+ console.log('PASS: strict phone/name validation, cent-price line and coupon totals, concurrent idempotency, one coupon use, stale option/price rejection and committed retry after price changes. Isolated checkout customer only.');
  // Preview stays in manual mode: no Google calls or billing in the UI fixture.
  await sql.unsafe("update delivery_settings set mode='manual',minimum_order=50,minimum_fee=3,price_per_km=1.2,server_key='',revision=revision+1 where id=1");
  await sql.unsafe("insert into product_options(product_id,label,size,color,price) values($1,'40 · Qırmızı','40','Qırmızı',70),($1,'50 · Yaşıl','50','Yaşıl',80)",[product.id]);

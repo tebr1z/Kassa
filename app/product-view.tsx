@@ -1,5 +1,5 @@
 "use client";
-import {t,useLanguage} from "@/lib/language";
+import {useTranslations} from "@/lib/language";
 
 import Link from "next/link";
 import {useSearchParams} from 'next/navigation';
@@ -18,7 +18,7 @@ type Props = {
   initialOptionId?:string;
 };
 
-function ProductImage({ product }: { product: CatalogProduct }) {useLanguage();
+function ProductImage({ product }: { product: CatalogProduct }) {const {t}=useTranslations();
   const hintId = useId();
   const frame = useRef<HTMLButtonElement>(null);
   const position = useRef({ x: 50, y: 50 });
@@ -89,7 +89,7 @@ function ProductImage({ product }: { product: CatalogProduct }) {useLanguage();
   </div>;
 }
 
-export default function ProductView({ product, products, inCart, onAdd, onOpenCart,initialOptionId }: Props) {useLanguage();
+export default function ProductView({ product, products, inCart, onAdd, onOpenCart,initialOptionId }: Props) {const {t}=useTranslations();
   const searchParams=useSearchParams();
   const selectedOption=searchParams?productOptionFromQuery(product,searchParams):product.options.find(option=>option.id===initialOptionId);
   const optionId=selectedOption?.id||'';
