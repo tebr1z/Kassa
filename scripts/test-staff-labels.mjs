@@ -59,6 +59,9 @@ assert.ok(finance.includes('data.employees.map(u=>canEditSalary?<form'),'Salary 
 assert.ok(finance.includes('</form>:<div key={u.id} className="ops-assignment">'),'Other finance roles receive a read-only salary view, not a form');
 assert.ok(!/DesktopConnection/.test(await readFile('app/admin/online/online-page.tsx','utf8')),'Online roles do not mount administrator-only desktop settings');
 const locations=await readFile('app/admin/locations-panel.tsx','utf8');
+const online=await readFile('app/admin/online/online-page.tsx','utf8');
+assert.ok(online.includes("fetch('/api/auth',{method:'DELETE'})"),'Online-only staff have a real logout action');
+assert.ok(online.includes('onClick={()=>void logout()}'),'Online-only staff can leave the shared portal');
 assert.ok(locations.includes('u.is_active&&canAssignStaffPassword(u.role)'));
 assert.ok(locations.includes('staffDisplayName(u.full_name,u.role,t)'));
 assert.ok(locations.includes('t(staffRoleLabel(user.role))'));
