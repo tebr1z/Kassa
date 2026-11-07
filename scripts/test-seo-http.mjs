@@ -5,6 +5,11 @@ const markup=html=>[...html.matchAll(/<script type="application\/ld\+json">([\s\
 const escape=value=>value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#x27;'}[char]));
 const slugFor=p=>[...p.name].map(ch=>({'ə':'e','Ə':'E','ı':'i','İ':'I','ö':'o','Ö':'O','ü':'u','Ü':'U','ş':'s','Ş':'S','ç':'c','Ç':'C','ğ':'g','Ğ':'G'}[ch]??ch)).join('').replace(/[^0-9A-Za-z]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase();
 const pathFor=p=>'/mehsullar/'+p.code+'-'+slugFor(p)+'/';
+const azAmount=value=>{const [whole,fraction]=Number(value).toFixed(2).split('.');return whole.replace(/\B(?=(\d{3})+(?!\d))/g,' ')+','+fraction;};
+function assertSelectedPrice(html,product,option){
+ const area=html.split('<div class="pd-price-row">')[1]?.split('<p class="pd-intro">')[0];assert.ok(area,'Main price must be present in real server HTML');
+ const amount=area.match(/<strong\b[^>]*>([\s\S]*?)<\/strong>/)?.[1]?.replace(/<!--[\s\S]*?-->/g,'').replace(/<[^>]*>/g,'').trim();assert.equal(amount,azAmount(option.price??product.basePrice??product.price)+' ₼','SSR price must be the exact selected variant, not a different cheaper option or merely a JSON-LD value');
+}
 export async function verifySeoHttp(origin,productId){
  const catalog=await (await fetch(origin+'/api/catalog')).json();
  const product=catalog.products.find(p=>p.id===productId)||catalog.products.find(p=>p.options.length)||catalog.products[0];assert.ok(product);
@@ -34,14 +39,20 @@ export async function verifySeoHttp(origin,productId){
  if(product.options.length){
   const option=product.options.at(-1),group=graph.find(node=>node['@type']==='ProductGroup'),variant=group.hasVariant.find(node=>node.sku===(product.code||product.id)+'-'+option.id);assert.ok(variant);
   const deepLink=new URL(variant.url),r=await get(deepLink.pathname+deepLink.search),selectedHtml=await r.text();assert.equal(r.status,200);assert.ok(selectedHtml.includes('aria-current="true"'),'Readable variant URL is preselected in SSR');assert.ok(selectedHtml.includes('rel="canonical" href="https://restamarket.az'+path+'"'));assert.ok(selectedHtml.includes('href="'+escape(deepLink.pathname+deepLink.search)+'"'),'Choices are crawlable links');
-  const choice=selectedHtml.match(/<a[^>]+class="pd-variant-option"[^>]+aria-current="true"[^>]*>([\s\S]*?)<\/a>/)?.[1];assert.ok(choice);assert.doesNotMatch(choice,/<(?:small|b)>|\bAZN\b|₼/,'Choice chips have no prices or repeated detail block');
-  const legacy=await get(path+'?variant='+option.id);assert.equal(legacy.status,200);assert.ok((await legacy.text()).includes('aria-current="true"'),'Legacy UUID links still preselect their choice');
+  assertSelectedPrice(selectedHtml,product,option);
+  const choice=selectedHtml.match(/<a[^>]+class="[^"]*pd-variant-option[^"]*"[^>]+aria-current="true"[^>]*>([\s\S]*?)<\/a>/)?.[1];assert.ok(choice);assert.doesNotMatch(choice,/<(?:small|b)>|\bAZN\b|₼/,'Choice chips have no prices or repeated detail block');
+  for(const item of group.hasVariant){const url=new URL(item.url);assert.ok(selectedHtml.includes('href="'+escape(url.pathname+url.search)+'"'),'All true variants remain crawlable links in the collapsed all-choices section');}
+  const legacy=await get(path+'?variant='+option.id);assert.equal(legacy.status,200);const legacyHtml=await legacy.text();assert.ok(legacyHtml.includes('aria-current="true"'),'Legacy UUID links still preselect their choice');assertSelectedPrice(legacyHtml,product,option);
   for(const old of legacyPaths){
    for(const selection of [deepLink.search,'?variant='+option.id]){
     const redirected=await get(old+selection);assert.equal(redirected.status,308,'Selected legacy URL redirects: '+old+selection);const target=new URL(redirected.headers.get('location'),origin);assert.equal(target.pathname,path);assert.equal(target.search,deepLink.search,'Exact selected choice survives both readable and UUID redirects');
    }
   }
-  const invalid=await get(path+'?olcu=definitely-not-a-choice');assert.equal(invalid.status,200);assert.doesNotMatch(await invalid.text(),/class="pd-variant-option"[^>]*aria-current="true"/,'Unknown choice is not silently replaced with another price');
+  const color=deepLink.searchParams.get('reng');if(color&&product.options.every(option=>option.color.trim()&&option.size.trim())){
+   const partial='?reng='+encodeURIComponent(color),partialResponse=await get(path+partial);assert.equal(partialResponse.status,200);const partialHtml=await partialResponse.text();assert.doesNotMatch(partialHtml,/<a[^>]+class="[^"]*pd-variant-option[^"]*"[^>]+aria-current="true"/,'A color-only link cannot silently choose a size');assert.match(partialHtml,/<button[^>]*class="pd-add-button"[^>]*disabled/,'Cart remains disabled until the exact variant is selected');
+   for(const old of [legacyPaths[0],path.slice(0,-1)]){const redirected=await get(old+partial);assert.equal(redirected.status,308);const target=new URL(redirected.headers.get('location'),origin);assert.equal(target.pathname,path);assert.equal(target.searchParams.get('reng'),color);assert.equal(target.searchParams.get('olcu'),null,'Redirect preserves partial color progress without inventing a size');}
+  }
+  const invalid=await get(path+'?olcu=definitely-not-a-choice');assert.equal(invalid.status,200);assert.doesNotMatch(await invalid.text(),/class="[^"]*pd-variant-option[^"]*"[^>]*aria-current="true"/,'Unknown choice is not silently replaced with another price');
  }
  console.log('PASS: code-first trailing-slash canonical for every product, direct308 old/renamed/UUID links, exact variant preservation, unchanged API slash guards, retired staff404, server HTML, sitemap without staff disclosure and private noindex.');
 }

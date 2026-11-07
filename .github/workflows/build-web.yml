@@ -28,6 +28,7 @@ jobs:
       - run: node scripts/test-commerce.mjs
       - run: node scripts/test-variant-editor.mjs
       - run: node scripts/test-product-variants.mjs
+      - run: node scripts/test-variant-selection.mjs
       - run: node scripts/test-delivery-payment.mjs
       - run: node scripts/test-delivery.mjs
       - run: node scripts/test-account-ui.mjs

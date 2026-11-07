@@ -128,6 +128,18 @@ try{
  for(let n=0;n<5;n++)assert.equal((await request('/api/auth',{method:'POST',body:{action:'login',userId:admin.id,password:'wrong-password'}})).status,401);
  assert.equal((await login()).status,429);await sql.unsafe('delete from staff_auth_attempts');await login();
  assert.equal((await request('/api/auth',{method:'DELETE'})).status,200);assert.equal((await request('/api/products')).status,401);
+ // Only this freshly-created isolated database receives the browser-proof item.
+ // Create it after financial assertions, so no expected revenue/COGS changes.
+ assert.equal((await login()).status,200);
+ const colorSizeOptions=[['30 sm','Qırmızı',7],['40 sm','Qırmızı',9],['40 sm','Qara',11]].map(([size,color,price],position)=>({label:size+' · '+color,size,color,kind:'',price,cost_price:2,position,is_active:true,attributes:{}}));
+ const colorSizeCreated=await request('/api/products',{method:'POST',body:{name:'Rəng və ölçü sınağı',sku:'COLOR-SIZE-UI-QA',category:'Manqallar',salePrice:7,costPrice:2,minStock:0,barcode:'',options:colorSizeOptions}});assert.equal(colorSizeCreated.status,201,JSON.stringify(colorSizeCreated.data));
+ const colorSizeId=colorSizeCreated.data.id;
+ assert.equal((await request('/api/stock/receipts',{method:'POST',body:{productId:colorSizeId,quantity:5,unitCost:2}})).status,201);
+ assert.ok((await request('/api/products')).data.find(product=>product.id===colorSizeId).stock>=5,'Browser fixture is available for adding to the cart');
+ const colorSizeProduct=(await request('/api/catalog',{auth:false})).data.products.find(product=>product.id===colorSizeId);assert.ok(colorSizeProduct);
+ assert.deepEqual(colorSizeProduct.options.map(({size,color,price,kind,attributes})=>({size,color,price,kind,attributes})),colorSizeOptions.map(({size,color,price,kind,attributes})=>({size,color,price,kind,attributes})),'Only the three real sparse color/size combinations exist');
+ await verifySeoHttp(origin,colorSizeId);
+ assert.equal((await request('/api/auth',{method:'DELETE'})).status,200);
  console.log('PASS: optional/custom variants, atomic product creation, variant cost/receipt snapshots, honest discount pricing, two-store cashier stock isolation and permissions, open-shift assignment lock, salary plans/payroll and expense idempotency, net profit with historical COGS, archive deletion preserving receipts, CSRF/HTTPS/session protections and catalogue privacy.');
  if(process.argv.includes('--serve')){
   const [uiDelete]=await sql.unsafe("insert into products(sku,name,sale_price,cost_price) values('UI-DELETE-QA','UI silmə sınağı',50,20) returning id");
@@ -136,6 +148,7 @@ try{
   const [uiOrder]=await sql.unsafe("insert into sales_orders(order_no,customer_id,total,created_by) values('UI-DELETE-GUARD',$1,50,$2) returning id",[uiCustomer.id,admin.id]);
   await sql.unsafe('insert into sales_order_items(sales_order_id,product_id,quantity,unit_price,line_total) values($1,$2,1,50,50)',[uiOrder.id,uiBlocked.id]);
   console.log('ISOLATED UI PREVIEW: '+origin+'/products/'+variantProduct.id+' | staff: '+origin+STAFF_PORTAL_PATH);
+  console.log('COLOR/SIZE UI FIXTURE: '+origin+'/mehsullar/'+colorSizeProduct.code+'-reng-ve-olcu-sinagi/');
   await new Promise(resolve=>{process.once('SIGINT',resolve);process.stdin.once('data',resolve);process.stdin.resume();});process.stdin.pause();
   const [state]=await sql.unsafe('select deleted_at from products where id=$1',[uiDelete.id]);
   if(state.deleted_at){assert.equal((await sql.unsafe("select count(*)::int n from audit_logs where entity_id=$1 and action='commerce.delete-product'",[uiDelete.id]))[0].n,1,'Only one successful deletion');assert.equal((await sql.unsafe('select deleted_at from products where id=$1',[uiBlocked.id]))[0].deleted_at,null);console.log('PASS: browser deletion fixture archived exactly once; rejected product remained untouched.');}

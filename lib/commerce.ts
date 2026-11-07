@@ -65,7 +65,10 @@ function variantToken(product:VariantProduct,option:ProductOption){
 }
 export function productVariantPath(product:VariantProduct,option:ProductOption){
  const query=variantDimensions(option),dimensions=query.toString();
- const ambiguous=product.options.filter(other=>variantDimensions(other).toString()===dimensions).length>1;
+ // Missing/unrepresentable fields can make this URL a prefix of another
+ // option's dimensions. Disambiguate every option matching the emitted params,
+ // not only options whose complete dimension maps happen to be identical.
+ const ambiguous=product.options.filter(other=>{const candidate=variantDimensions(other);return [...query].every(([key,value])=>candidate.get(key)===value);}).length>1;
  if(!dimensions||ambiguous||Object.keys(option.attributes||{}).length)query.set('secim',variantToken(product,option));
  return productPath(product)+'?'+query.toString();
 }

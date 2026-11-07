@@ -5,9 +5,11 @@ import Link from "next/link";
 import {useSearchParams} from 'next/navigation';
 import { useId, useRef, useState, type PointerEvent } from "react";
 import { ArrowLeft, ArrowRight, Check, ChevronRight, ImageIcon, Move, Package, ShoppingBag, Store, Truck } from "lucide-react";
-import { productPath,productVariantPath,productVariantKeys,productOptionFromQuery,productOptionLabel, relatedProducts, type CatalogProduct,type ProductOption } from "@/lib/commerce";
+import { productPath,productVariantKeys, relatedProducts, type CatalogProduct } from "@/lib/commerce";
+import {variantSelection} from '@/lib/variant-selection';
 import "./product-view.css";
 import ProductPrice from './product-price';
+import ProductVariantPicker from './product-variant-picker';
 
 type Props = {
   product: CatalogProduct;
@@ -91,15 +93,17 @@ function ProductImage({ product }: { product: CatalogProduct }) {const {t}=useTr
 
 export default function ProductView({ product, products, inCart, onAdd, onOpenCart,initialOptionId }: Props) {const {t}=useTranslations();
   const searchParams=useSearchParams();
-  const selectedOption=searchParams?productOptionFromQuery(product,searchParams):product.options.find(option=>option.id===initialOptionId);
+  const selection=variantSelection(product,searchParams??new URLSearchParams(initialOptionId?{variant:initialOptionId}:{}));
+  const selectedOption=selection.selectedOption;
   const optionId=selectedOption?.id||'';
-  const unitPrice=selectedOption?(selectedOption.price??product.basePrice??product.price):product.price;
-  const originalPrice=selectedOption?(selectedOption.price??product.baseOriginalPrice??product.originalPrice):product.originalPrice;
+  const pricedOption=selectedOption??selection.candidates.reduce<(typeof product.options)[number]|undefined>((lowest,option)=>!lowest||(option.price??product.basePrice??product.price)<(lowest.price??product.basePrice??product.price)?option:lowest,undefined);
+  const unitPrice=pricedOption?(pricedOption.price??product.basePrice??product.price):product.price;
+  const originalPrice=pricedOption?(pricedOption.price??product.baseOriginalPrice??product.originalPrice):product.originalPrice;
   const related = relatedProducts(product, products);
   const specifications = (product.specifications || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
 
-  function chooseOption(option:ProductOption){
-    const url=new URL(window.location.href),choice=new URL(productVariantPath(product,option),url.origin);
+  function chooseSelection(href:string){
+    const url=new URL(window.location.href),choice=new URL(href,url.origin);
     for(const key of productVariantKeys)url.searchParams.delete(key);
     for(const [key,value] of choice.searchParams)url.searchParams.set(key,value);
     url.pathname=choice.pathname;
@@ -123,9 +127,10 @@ export default function ProductView({ product, products, inCart, onAdd, onOpenCa
         {!product.available&&<p className="pd-stock pd-stock-empty">{t('Hazırda stokda yoxdur')}</p>}
         <div className="pd-price-row">
           <ProductPrice price={unitPrice} originalPrice={originalPrice}/>
+          {!!product.options.length&&!selectedOption&&<span className="pd-starting-price">{t('Başlayan qiymət')}</span>}
         </div>
         <p className="pd-intro">{product.description || "Məhsul haqqında sualınız var? Əlaqə bölməsindən bizə yazın, seçim etməkdə kömək edək."}</p>
-        {!!product.options?.length&&<fieldset className="pd-variant-picker"><legend>{t('Seçim edin')}</legend><div className="pd-variant-grid">{product.options.map(option=><a key={option.id} className="pd-variant-option" href={productVariantPath(product,option)} aria-current={optionId===option.id?'true':undefined} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();chooseOption(option);}}><span>{productOptionLabel(option)}</span><Check size={16} aria-hidden="true"/></a>)}</div></fieldset>}
+        <ProductVariantPicker product={product} selection={selection} onNavigate={chooseSelection}/>
         <div className="pd-purchase">
           <button className="pd-add-button" type="button" disabled={!product.available || inCart >= 100||Boolean(product.options?.length&&!optionId)} onClick={() => onAdd(product.id,optionId||undefined)}><ShoppingBag size={19} aria-hidden="true" />{!product.available ? t("Stokda yoxdur") : inCart >= 100 ? "Miqdar limiti: 100" : t("Səbətə əlavə et")}<ArrowRight size={18} aria-hidden="true" /></button>
           {inCart > 0 && <button className="pd-cart-link" type="button" onClick={onOpenCart}><Check size={16} aria-hidden="true" /><span>Səbətinizdə: {inCart}</span><span>Səbətə bax →</span></button>}

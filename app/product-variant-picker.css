@@ -1,0 +1,39 @@
+.pd-option-picker{margin:24px 0;color:#284936;min-width:0}
+.pd-starting-price{font-size:12px;color:#718167;line-height:1.6}
+.pd-option-picker *{box-sizing:border-box}
+.pd-choice-intro{margin:0 0 18px;color:#687b67;font-size:12px;line-height:1.7}
+.pd-choice-groups{display:grid;gap:20px}
+.pd-option-picker .pd-choice-group{min-width:0;margin:0;padding:0;border:0}
+.pd-option-picker .pd-choice-group legend{float:none;display:flex;align-items:baseline;flex-wrap:wrap;gap:10px;width:100%;margin:0 0 10px;padding:0;font-size:13px;font-weight:700;line-height:1.5;color:#2f503b}
+.pd-choice-chips{display:flex;flex-wrap:wrap;gap:9px}
+.pd-option-picker .pd-choice-chip{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:46px;min-width:68px;max-width:100%;padding:11px 15px;border:1px solid #d9e2d3;border-radius:11px;background:#fff;color:#3c573f;font-size:13px;line-height:1.5;font-weight:600;text-decoration:none;transition:border-color .15s,background .15s,box-shadow .15s}
+.pd-choice-chip>span{min-width:0;overflow-wrap:anywhere}
+.pd-choice-chip>svg{flex-shrink:0;visibility:hidden}
+.pd-option-picker .pd-choice-chip:hover{background:#f5f9f1;border-color:#a0ba92}
+.pd-option-picker .pd-choice-chip[aria-current=true]{border-color:#327249;background:#edf5e8;color:#215235;box-shadow:0 0 0 1px #327249}
+.pd-choice-chip[aria-current=true]>svg{visibility:visible}
+.pd-option-picker .pd-choice-chip:focus-visible,.pd-option-picker .pd-choice-exact:focus-visible,.pd-choice-all>summary:focus-visible{outline:3px solid #7d9f5f;outline-offset:3px}
+.pd-choice-disabled{display:flex;align-items:center;min-height:46px;margin:0;padding:11px 14px;border:1px dashed #dce3d5;border-radius:11px;background:#f7f8f3;color:#818c78;font-size:12px;line-height:1.7}
+.pd-option-picker .pd-choice-group[disabled] legend{color:#89937e}
+.pd-option-picker .pd-choice-remaining{margin-top:20px}
+.pd-choice-exact-list{display:grid;gap:8px;margin:0;padding:0;list-style:none;min-width:0}
+.pd-choice-exact-list>li{min-width:0}
+.pd-page .pd-option-picker .pd-choice-exact,.pd-option-picker .pd-choice-exact{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:44px;min-width:0;max-width:100%;padding:10px 13px;border:1px solid #e0e6d9;border-radius:10px;background:#fff;color:#496047;font-size:12px;font-weight:500;line-height:1.6;text-decoration:none;box-shadow:none;transition:border-color .15s,background .15s}
+.pd-choice-exact>span{min-width:0;overflow-wrap:anywhere}
+.pd-choice-exact>svg{flex-shrink:0;visibility:hidden}
+.pd-page .pd-option-picker .pd-choice-exact:hover,.pd-option-picker .pd-choice-exact:hover{border-color:#a6be96;background:#f5f9f1}
+.pd-page .pd-option-picker .pd-choice-exact[aria-current=true],.pd-option-picker .pd-choice-exact[aria-current=true]{border-color:#327249;background:#edf5e8;color:#215235}
+.pd-choice-exact[aria-current=true]>svg{visibility:visible}
+.pd-choice-summary{display:flex;align-items:flex-start;gap:8px;margin:17px 0 0;padding:11px 13px;border-radius:10px;background:#eef5e9;color:#46633d;font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+.pd-choice-summary>svg{flex-shrink:0;margin-top:2px}
+.pd-choice-summary strong{font-weight:650}
+.pd-choice-warning{margin:0 0 16px;padding:10px 13px;border:1px solid #ead9bd;border-radius:10px;background:#fff8ea;color:#866328;font-size:12px;line-height:1.7}
+.pd-choice-all{margin-top:18px;border-top:1px solid #e5e9df}
+.pd-choice-all>summary{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:44px;padding:12px 0;list-style:none;color:#718167;font-size:12px;line-height:1.6;cursor:pointer}
+.pd-choice-all>summary::-webkit-details-marker{display:none}
+.pd-choice-all>summary:hover{color:#355f3c}
+.pd-choice-all>summary>svg{flex-shrink:0;transition:transform .15s}
+.pd-choice-all[open]>summary>svg{transform:rotate(180deg)}
+.pd-choice-all>.pd-choice-exact-list{padding:0 0 3px}
+@media(max-width:480px){.pd-option-picker{margin:22px 0}.pd-choice-groups{gap:18px}.pd-choice-chips{gap:8px}.pd-option-picker .pd-choice-chip{min-width:64px;padding:10px 13px}}
+@media(prefers-reduced-motion:reduce){.pd-option-picker .pd-choice-chip,.pd-option-picker .pd-choice-exact,.pd-choice-all>summary>svg{transition:none}}
