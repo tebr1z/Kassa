@@ -14,6 +14,7 @@ async function load(path,mocks={}){
  return loaded.exports;
 }
 const delivery=await load('lib/delivery.ts');
+const customerContact=await load('lib/customer-contact.ts');
 const deliveryServer=await load('lib/delivery-server.ts');
 const adminSecurity=await load('lib/admin-security.ts');
 const staffAccess=await load('lib/staff-access.ts');
@@ -71,6 +72,7 @@ const admin=await load('app/api/admin/delivery/route.ts',{'@/lib/require-admin':
 const quote=await load('app/api/delivery-quote/route.ts',{'@/lib/store-db':dbMock,'@/lib/customer-session':customerMock,'@/lib/delivery-server':deliveryServer,'@/lib/delivery':delivery});
 const publicRoute=await load('app/api/delivery-settings/route.ts',{'@/lib/store-db':dbMock,'@/lib/delivery-server':deliveryServer});
 const orders=await load('app/api/customer-orders/route.ts',{
+ '@/lib/customer-contact':customerContact,
  '@/lib/store-db':dbMock,'@/lib/customer-session':customerMock,'@/lib/delivery-server':deliveryServer,
  '@/lib/product-options':{optionSnapshot:option=>option.label},
  '@/lib/commerce':{sellingPrice:product=>Number(product.discount_price||product.sale_price),couponDiscount:(subtotal,percent,max)=>Math.min(Math.round(subtotal*percent)/100,max??Infinity)},

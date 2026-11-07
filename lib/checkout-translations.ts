@@ -1,5 +1,7 @@
 // Checkout interface and server rejections. Product/address text is never translated.
 export const checkoutTranslations:[string,string,string,string,string][]=[
+  ['Seçim','Выбор','Option','Seçenek','选项'],
+  ['Seçin','Выберите','Choose','Seçin','请选择'],
   ['Ad, telefon və məhsulları düzgün daxil edin.','Укажите корректные имя, телефон и товары.','Enter a valid name, phone number and products.','Ad, telefon ve ürünleri doğru girin.','请正确填写姓名、电话和商品。'],
   ['Alış-verişə davam et','Продолжить покупки','Continue shopping','Alışverişe devam et','继续购物'],
   ['Bağlantı kəsildi. Eyni sifarişi yenidən yoxlayın.','Соединение прервано. Проверьте тот же заказ ещё раз.','Connection lost. Check the same order again.','Bağlantı kesildi. Aynı siparişi yeniden kontrol edin.','连接中断，请重新查询同一订单。'],
