@@ -1,0 +1,23 @@
+name: Build Azerbaijan routing data
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  routing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - run: node scripts/build-routing-data.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: restamarket-routing-azerbaijan
+          path: |
+            outputs/routing-build/restamarket-routing.tar.gz
+            outputs/routing-build/restamarket-routing.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
