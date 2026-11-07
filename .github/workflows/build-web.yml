@@ -29,6 +29,10 @@ jobs:
       - run: node scripts/test-variant-editor.mjs
       - run: node scripts/test-product-variants.mjs
       - run: node scripts/test-variant-selection.mjs
+      - run: node scripts/test-product-discounts.mjs
+      - run: node scripts/test-finance.mjs
+      - run: node scripts/test-staff-onboarding.mjs
+      - run: node scripts/test-google-address.mjs
       - run: node scripts/test-delivery-payment.mjs
       - run: node scripts/test-delivery.mjs
       - run: node scripts/test-account-ui.mjs

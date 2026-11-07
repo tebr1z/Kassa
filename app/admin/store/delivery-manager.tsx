@@ -4,6 +4,7 @@ import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {AlertCircle,Calculator,Check,ChevronDown,KeyRound,LoaderCircle,MapPin,Route,ShieldCheck,Truck} from 'lucide-react';
 import {languageAmount,t,useLanguage} from '@/lib/language';
 import './delivery-manager.css';
+import GoogleMapsSetup from './google-maps-setup';
 
 type DeliverySettings={
   mode:'manual'|'distance';
@@ -113,7 +114,7 @@ export default function DeliveryManager(){
         </div>
 
         <details className="da-keys"><summary><KeyRound size={19} aria-hidden="true"/><span><strong>{t('Google Maps bağlantısı')}</strong><small>{t('API açarları və təhlükəsiz giriş məhdudiyyətləri')}</small></span><span className={`da-key-status ${draft.serverConfigured&&!clearServerKey?'is-ready':''}`}>{draft.serverConfigured&&!clearServerKey?t('Server açarı saxlanılıb'):t('Server açarı yoxdur')}</span><ChevronDown size={17} className="da-details-chevron" aria-hidden="true"/></summary>
-          <div className="da-key-fields"><p className="da-billing-note"><AlertCircle size={17} aria-hidden="true"/>{t('Google Maps xidmətləri üçün öz Google Cloud hesabınız və ödəniş ayarlarınız tələb oluna bilər. Bu forma hesab yaratmır və ödənişli xidməti aktivləşdirmir.')}</p>
+          <div className="da-key-fields"><GoogleMapsSetup/><p className="da-billing-note"><AlertCircle size={17} aria-hidden="true"/>{t('Google Maps xidmətləri üçün öz Google Cloud hesabınız və ödəniş ayarlarınız tələb oluna bilər. Bu forma hesab yaratmır və ödənişli xidməti aktivləşdirmir.')}</p>
             <div className="da-two-fields"><label className="da-field">{t('Brauzer xəritə açarı')}<input type="text" autoComplete="off" maxLength={200} value={draft.browserKey} onChange={event=>update('browserKey',event.target.value)} placeholder="AIza…" spellCheck={false}/><small>{t('Bu açar xəritə üçün brauzerə göndərilir. Google Cloud-da yalnız saytınızın domenlərinə və lazım olan Maps API-lərə məhdudlaşdırın.')}</small></label><label className="da-field">{t('Server marşrut açarı')}<input type="password" autoComplete="new-password" maxLength={200} value={serverKey} disabled={clearServerKey} onChange={event=>{setServerKey(event.target.value);setNotice('');}} placeholder={draft.serverConfigured?t('Boş saxlasanız mövcud açar qalır'):t('Routes API server açarı')} spellCheck={false}/><small>{t('Gizli saxlanılır və brauzerə geri qaytarılmır. Routes API və server IP-si ilə məhdudlaşdırın.')}</small></label></div>
             {draft.serverConfigured&&<label className="da-clear-key"><input type="checkbox" checked={clearServerKey} onChange={event=>{setClearServerKey(event.target.checked);if(event.target.checked)setServerKey('');setNotice('');}}/><span>{t('Saxlanmış server açarını sil')}<small>{t('Avtomatik çatdırılma üçün yeni açar tələb olunacaq. Əvvəl əl rejimini seçin.')}</small></span></label>}
           </div>

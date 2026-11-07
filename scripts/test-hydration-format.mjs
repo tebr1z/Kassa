@@ -45,7 +45,8 @@ export function setExternalLanguage(language){current=language;}
 export function renderInLanguage(language,children){return createElement(LanguageContext.Provider,{value:language},children);}
 export function UnsafeProbe(){const language=useLanguage();return createElement('span',{'data-language':language},t('Qiymət')+' '+languageAmount(1234.5));}
 `));
-const language=await import(fixture),priceSource=(await readFile('app/product-price.tsx','utf8')).replace(/import ['"]\.\/product-price\.css['"];?/,'').replace("from '@/lib/language'",'from '+JSON.stringify(fixture));
+const discountUrl=moduleUrl(compile(await readFile('lib/product-discount.ts','utf8')));
+const language=await import(fixture),priceSource=(await readFile('app/product-price.tsx','utf8')).replace(/import ['"]\.\/product-price\.css['"];?/,'').replace("from '@/lib/language'",'from '+JSON.stringify(fixture)).replace("from '@/lib/product-discount'",'from '+JSON.stringify(discountUrl));
 const {default:ProductPrice}=await import(moduleUrl(compile(priceSource)));
 language.setExternalLanguage('ru');
 const unsafe=renderToStaticMarkup(createElement(language.LanguageProvider,null,createElement(language.UnsafeProbe)));assert.ok(unsafe.includes('data-language="az"'));assert.ok(unsafe.includes('Цена'),'This reproduces why module-global t can disagree with the hydration snapshot');

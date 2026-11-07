@@ -1,6 +1,7 @@
 "use client";
 import {useTranslations,languageAmount,LanguageSwitcher} from "@/lib/language";
 import ProductPrice from "./product-price";
+import {hasProductDiscount,productDiscountLabel} from '@/lib/product-discount';
 import {optionDetails} from "@/lib/product-options";
 import Link from "next/link";
 import {useCallback,useEffect,useRef,useState,type KeyboardEvent as ReactKeyboardEvent} from "react";
@@ -19,8 +20,8 @@ type Brand={name:string;kind:string;description:string;about:string;logo:string;
 type ShowcaseCategory={id:string;name:string;image:string};
 export type Customer={id:string;name:string;phone:string;address?:string}|null;
 export const money=(value:number)=>languageAmount(value);
-function ProductCard({product,inCart,onAdd,onOpen,pinned=false}:{product:CatalogProduct;inCart:number;onAdd:()=>void;onOpen:()=>void;pinned?:boolean}){const {t}=useTranslations();
- return <article className="sf-product"><Link className="sf-product-image" href={productPath(product)}>{product.image?<img src={product.image} alt={product.name} loading="lazy"/>:<Package size={56}/>}<span className="sf-category-tag">{product.category||t("Digər")}</span>{pinned&&<span className="sf-pin-tag">{t("Seçilmiş")}</span>}{product.originalPrice>product.price&&<span className="sf-sale-tag">−{Math.round((1-product.price/product.originalPrice)*100)}%</span>}</Link><div className="sf-product-copy"><span className="sf-product-meta"><i/> {productModel(product.name)}</span><h3><Link href={productPath(product)}>{product.name}</Link></h3><div className="sf-card-bottom"><ProductPrice price={product.price} originalPrice={product.originalPrice} compact/><button className={inCart?"sf-add is-added":"sf-add"} onClick={()=>inCart?onOpen():onAdd()}>{inCart?<><Check size={15}/> {t("Səbətdə")} · {inCart}</>:t("Səbətə əlavə et")}</button></div></div></article>;
+function ProductCard({product,inCart,onAdd,onOpen,pinned=false}:{product:CatalogProduct;inCart:number;onAdd:()=>void;onOpen:()=>void;pinned?:boolean}){const {t,languageAmount}=useTranslations();const discounted=hasProductDiscount(product.price,product.originalPrice);
+ return <article className={discounted?"sf-product is-discounted":"sf-product"}><Link className="sf-product-image" href={productPath(product)}>{product.image?<img src={product.image} alt={product.name} loading="lazy"/>:<Package size={56}/>}<span className="sf-category-tag">{product.category||t("Digər")}</span>{pinned&&<span className="sf-pin-tag">{t("Seçilmiş")}</span>}{discounted&&<span className="sf-sale-tag"><span>{t("Endirim")}</span><strong>{productDiscountLabel(product.price,product.originalPrice,languageAmount)||t("Sərfəli qiymət")}</strong></span>}</Link><div className="sf-product-copy"><span className="sf-product-meta"><i/> {productModel(product.name)}</span><h3><Link href={productPath(product)}>{product.name}</Link></h3><div className="sf-card-bottom"><ProductPrice price={product.price} originalPrice={product.originalPrice} compact/><button className={inCart?"sf-add is-added":"sf-add"} onClick={()=>inCart?onOpen():onAdd()}>{inCart?<><Check size={15}/> {t("Səbətdə")} · {inCart}</>:t("Səbətə əlavə et")}</button></div></div></article>;
 }
 function SearchField({products,query,onQuery}:{products:CatalogProduct[];query:string;onQuery:(value:string)=>void}){const {t,languageAmount:money}=useTranslations();
  const root=useRef<HTMLDivElement>(null);

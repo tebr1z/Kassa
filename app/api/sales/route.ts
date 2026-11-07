@@ -5,6 +5,7 @@ import { logSystemError } from "@/lib/log-error";
 import postgres from "postgres";
 import { findManagerByPin } from "@/lib/pin";
 import { salesWarehouseSql } from "@/lib/warehouse";
+import {sellingPrice} from '@/lib/commerce';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,7 +67,7 @@ async function handlePOST(request: Request) {
         const [productId,optionIdRaw]=lineKey.split(":");
         const optionId=optionIdRaw||null;
         const [product] = await tx.unsafe(
-          "select id, sku, name, sale_price, cost_price from products where id=$1 and is_active=true for update",
+          "select id, sku, name, sale_price, discount_price, cost_price from products where id=$1 and is_active=true for update",
           [productId],
         );
         if (!product) throw Object.assign(new Error("Məhsul tapılmadı"), { statusCode: 404 });
@@ -88,7 +89,7 @@ async function handlePOST(request: Request) {
           [product.id, warehouse.id],
         );
         const orderLine=linkedOrder?orderLines.find(l=>l.product_id===productId&&(l.option_id||null)===optionId):undefined;
-        const price = orderLine?Number(orderLine.unit_price):option?.price!=null?Number(option.price):Number(product.sale_price);
+        const price = orderLine?Number(orderLine.unit_price):option?.price!=null?Number(option.price):sellingPrice({sale_price:product.sale_price,discount_price:product.discount_price});
         lines.push({ id: product.id, sku:product.sku, name: product.name, optionId, optionLabel:orderLine?.option_snapshot||(option?optionSnapshot(option):""), quantity, price, cost: Number(option?.cost_price??product.cost_price), total: price * quantity, locationId: location?.location_id || null });
       }
 

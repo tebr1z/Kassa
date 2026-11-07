@@ -7,6 +7,7 @@ import { useId, useRef, useState, type PointerEvent } from "react";
 import { ArrowLeft, ArrowRight, Check, ChevronRight, ImageIcon, Move, Package, ShoppingBag, Store, Truck } from "lucide-react";
 import { productPath,productVariantKeys, relatedProducts, type CatalogProduct } from "@/lib/commerce";
 import {variantSelection} from '@/lib/variant-selection';
+import {hasProductDiscount,productDiscountLabel} from '@/lib/product-discount';
 import "./product-view.css";
 import ProductPrice from './product-price';
 import ProductVariantPicker from './product-variant-picker';
@@ -20,7 +21,7 @@ type Props = {
   initialOptionId?:string;
 };
 
-function ProductImage({ product }: { product: CatalogProduct }) {const {t}=useTranslations();
+function ProductImage({ product }: { product: CatalogProduct }) {const {t,languageAmount}=useTranslations();
   const hintId = useId();
   const frame = useRef<HTMLButtonElement>(null);
   const position = useRef({ x: 50, y: 50 });
@@ -84,7 +85,7 @@ function ProductImage({ product }: { product: CatalogProduct }) {const {t}=useTr
       onBlur={() => { setPinned(false); setHover(false); }}
     >
       {hasImage ? <img className="pd-main-image" src={current} alt={product.name} fetchPriority="high" decoding="async" draggable={false} onError={() => setFailed(true)} /> : <span className="pd-no-image"><ImageIcon size={52} strokeWidth={1} /><span>Şəkil əlavə edilməyib</span></span>}
-      {product.originalPrice > product.price && <span className="pd-discount-badge">−{Math.round((1 - product.price / product.originalPrice) * 100)}%</span>}
+      {hasProductDiscount(product.price,product.originalPrice) && <span className="pd-discount-badge">{productDiscountLabel(product.price,product.originalPrice,languageAmount)||t('Endirim')}</span>}
     </button>
     {photos.length > 1 && <div className="pd-thumbs" role="tablist" aria-label={t("Məhsul şəkilləri")}>{photos.map((src, photoIndex) => <button key={src} type="button" className={photoIndex === index ? "is-selected" : ""} aria-label={`${product.name} şəkli ${photoIndex + 1}`} aria-pressed={photoIndex === index} onClick={() => { setIndex(photoIndex); setFailed(false); setPinned(false); setHover(false); place(50, 50); }}><img src={src} alt="" /></button>)}</div>}
     <p className="pd-image-hint" id={hintId}><Move size={15} aria-hidden="true" /><span className="pd-desktop-hint">Detalları görmək üçün siçanı şəkil üzərində hərəkət etdirin.</span><span className="pd-touch-hint">Böyütmək üçün toxunun, baxmaq üçün sürüşdürün.</span><span className="pd-sr-only">Klaviatura: Enter ilə böyüdün, oxlarla hərəkət edin, Escape ilə kiçildin.</span></p>

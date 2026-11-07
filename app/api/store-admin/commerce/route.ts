@@ -5,6 +5,7 @@ import {z} from "zod";
 import {mediaUrl} from "@/lib/desktop-media";
 import {productOptionInput as optionFields,productOptionList} from '@/lib/product-option-input';
 import {saveProductOptions} from '@/lib/save-product-options';
+import {resolveProductDiscount} from '@/lib/product-discount';
 export const dynamic="force-dynamic";
 async function handleGET(){
  const sql=storeDb();try{
@@ -17,7 +18,7 @@ async function handleGET(){
  return Response.json({local,canManageProducts:true,products,coupons,messages});
  }catch{return Response.json({error:"Məlumatlar yüklənmədi."},{status:503});}finally{await sql.end();}
 }
-const product=z.object({action:z.literal("product"),id:z.string().uuid().optional(),name:z.string().trim().min(2).max(200),sku:z.string().trim().min(1).max(100),category:z.string().trim().max(100),unit:z.string().trim().min(1).max(30),sale_price:z.number().positive().max(1000000),cost_price:z.number().min(0).max(1000000),description:z.string().max(5000),specifications:z.string().max(3000),discount_price:z.number().positive().nullable(),is_active:z.boolean(),barcode:z.string().trim().max(64).optional().default(""),options:productOptionList.optional()}).refine(p=>p.discount_price===null||p.discount_price<p.sale_price);
+const product=z.object({action:z.literal("product"),id:z.string().uuid().optional(),name:z.string().trim().min(2).max(200),sku:z.string().trim().min(1).max(100),category:z.string().trim().max(100),unit:z.string().trim().min(1).max(30),sale_price:z.number().finite().positive().max(1000000),cost_price:z.number().finite().min(0).max(1000000),description:z.string().max(5000),specifications:z.string().max(3000),discount_price:z.number().finite().positive().nullable().optional(),discount_percent:z.number().finite().optional(),is_active:z.boolean(),barcode:z.string().trim().max(64).optional().default(""),options:productOptionList.optional()});
 const option=optionFields.extend({action:z.literal('option'),id:z.string().uuid().optional(),product_id:z.string().uuid()});
 const coupon=z.object({action:z.literal("coupon"),id:z.string().uuid().optional(),code:z.string().trim().toUpperCase().regex(/^[A-Z0-9_-]{3,30}$/),percent:z.number().int().min(1).max(90),minimum:z.number().min(0).max(1000000),max_discount:z.number().positive().max(1000000).nullable(),expires_at:z.string().datetime(),usage_limit:z.number().int().min(1).max(1000000),is_active:z.boolean()});
 const schema=z.union([product,option,coupon,z.object({action:z.literal("read"),id:z.string().uuid()}),z.object({action:z.literal('delete-product'),id:z.string().uuid(),confirm:z.literal('SİL')})]);
@@ -27,12 +28,14 @@ async function handlePOST(request:Request){
  await sql.begin(async tx=>{
  let entityId="";
  if(b.action==="product"){
- const values=[b.name,b.sku,b.category,b.unit,b.sale_price,b.cost_price,b.description,b.specifications,b.discount_price,b.is_active];
+ const discountFields={discountPrice:b.discount_price,discountPercent:b.discount_percent};
  if(b.id){
  const [old]=await tx.unsafe("select * from products where id=$1 and deleted_at is null for update",[b.id]);if(!old)throw new Error("Məhsul tapılmadı.");
+ const discountPrice=resolveProductDiscount(b.sale_price,discountFields,old.discount_price);
+ const values=[b.name,b.sku,b.category,b.unit,b.sale_price,b.cost_price,b.description,b.specifications,discountPrice,b.is_active];
  await tx.unsafe("update products set name=$1,sku=$2,category=$3,unit=$4,sale_price=$5,cost_price=$6,description=$7,specifications=$8,discount_price=$9,is_active=$10 where id=$11",[...values,b.id]);entityId=b.id;
  if(Number(old.sale_price)!==b.sale_price||Number(old.cost_price)!==b.cost_price)await tx.unsafe("insert into product_price_history(product_id,old_sale_price,new_sale_price,old_cost_price,new_cost_price,changed_by) values($1,$2,$3,$4,$5,$6)",[b.id,old.sale_price,b.sale_price,old.cost_price,b.cost_price,request.headers.get("x-birkassa-user-id")]);
- }else{const [row]=await tx.unsafe("insert into products(name,sku,category,unit,sale_price,cost_price,description,specifications,discount_price,is_active) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id",values);entityId=row.id;}
+ }else{const discountPrice=resolveProductDiscount(b.sale_price,discountFields);const values=[b.name,b.sku,b.category,b.unit,b.sale_price,b.cost_price,b.description,b.specifications,discountPrice,b.is_active];const [row]=await tx.unsafe("insert into products(name,sku,category,unit,sale_price,cost_price,description,specifications,discount_price,is_active) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id",values);entityId=row.id;}
  await savePrimaryBarcode(tx,entityId,b.barcode);
  if(b.options!==undefined)await saveProductOptions(tx,entityId,b.options);
  }else if(b.action==="option"){

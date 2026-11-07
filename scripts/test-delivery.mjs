@@ -162,14 +162,16 @@ try{
  for(const row of desktopRows)previousTranslations.add(row[0]);
  const {checkoutTranslations:translationRows,checkoutTurkishOverrides}=await load('lib/checkout-translations.ts'),translated=new Set(previousTranslations);
  for(const row of translationRows){assert.equal(row.length,5);assert.ok(row.every(text=>typeof text==='string'&&text.trim()),'Each checkout key has all five languages: '+row[0]);assert.equal(translated.has(row[0]),false,'New checkout rows must not duplicate an existing key: '+row[0]);translated.add(row[0]);}
+ const {googleMapsTranslations}=await load('lib/google-maps-translations.ts');
+ for(const row of googleMapsTranslations){assert.equal(row.length,5);assert.ok(row.every(text=>typeof text==='string'&&text.trim()),'Each Google Maps key has all five languages: '+row[0]);assert.equal(translated.has(row[0]),false,'New Google Maps rows must not duplicate an existing key: '+row[0]);translated.add(row[0]);}
  const requiredTranslations=new Set();
- for(const path of ['app/cart-sheet.tsx','app/delivery-location-picker.tsx','app/api/admin/delivery/route.ts','app/api/delivery-quote/route.ts','app/api/customer-orders/route.ts']){
+ for(const path of ['app/cart-sheet.tsx','app/delivery-location-picker.tsx','app/admin/store/google-maps-setup.tsx','app/api/admin/delivery/route.ts','app/api/delivery-quote/route.ts','app/api/customer-orders/route.ts']){
   const tree=ts.createSourceFile(path,await readFile(path,'utf8'),ts.ScriptTarget.Latest,true);
   function textValues(node){if(ts.isStringLiteral(node))requiredTranslations.add(node.text);else if(ts.isConditionalExpression(node)){textValues(node.whenTrue);textValues(node.whenFalse);}else ts.forEachChild(node,textValues);}
   function scan(node){
    if(ts.isCallExpression(node)){
     const name=node.expression.getText(tree);
-    if(['t','setError','setSettingsError','checkoutRejection'].includes(name))for(const arg of node.arguments)textValues(arg);
+    if(['t','text.current','setError','setSearchError','setSettingsError','checkoutRejection'].includes(name))for(const arg of node.arguments)textValues(arg);
     if(ts.isPropertyAccessExpression(node.expression)&&node.expression.name.text==='json')for(const arg of node.arguments)if(ts.isObjectLiteralExpression(arg))for(const field of arg.properties)if(ts.isPropertyAssignment(field)&&field.name.getText(tree)==='error')textValues(field.initializer);
    }
    if(ts.isNewExpression(node)&&node.expression.getText(tree)==='Error')for(const arg of node.arguments||[])if(ts.isStringLiteral(arg)&&/[^\x00-\x7F]/.test(arg.text))requiredTranslations.add(arg.text);
@@ -180,7 +182,7 @@ try{
  for(const row of desktopRows)if(requiredTranslations.has(row[0])&&row[3]===row[0])assert.ok(checkoutTurkishOverrides[row[0]]&&checkoutTurkishOverrides[row[0]]!==row[0],'An old checkout label must have actual Turkish, not the old Azerbaijani fallback: '+row[0]);
  for(const [key,value]of Object.entries(checkoutTurkishOverrides)){assert.ok(previousTranslations.has(key),'Turkish overrides target existing keys only: '+key);assert.ok(value.trim()&&value!==key);}
  assert.equal(checkoutTurkishOverrides['Ünvan'],'Adres');assert.equal(checkoutTurkishOverrides['Məhsul'],'Ürün');assert.equal(checkoutTurkishOverrides['Səbətdən çıxar'],'Sepetten çıkar');
- console.log(`PASS: ${translationRows.length} new checkout translation keys have AZ/RU/EN/TR/ZH coverage; every cart/map literal and delivery/order rejection is translated without duplicate keys.`);
+ console.log(`PASS: ${translationRows.length} checkout and ${googleMapsTranslations.length} Google Maps translation keys have AZ/RU/EN/TR/ZH coverage; every cart/map/setup literal and delivery/order rejection is translated without duplicate keys.`);
  console.log('PASS: delivery exact-metre/cent/floor maths, null coordinates, private/public settings, real admin boundary auth/HTTPS/CSRF, key keep/replace/delete without leakage, Google DRIVE request contract, rate limits/provider errors, quote ownership/expiry/revision/address, authoritative order fee/minimum/coupon/pickup, deliberate checkout confirmation; no external requests.');
 }finally{
  globalThis.fetch=previousFetch;

@@ -63,9 +63,24 @@ export async function verifyStaffPortalHttp({origin,request,sql,admin,adminSessi
   online_assistant:{nav:[],forbiddenNav:['Satış / POS','Maliyyə','Anbar','Tənzimləmələr'],allowed:['/api/online-orders'],denied:['/api/products','/api/dashboard','/api/finance','/api/settings','/api/locations']},
  };
  try{
+  const provisioned=new Map();
+  for(const role of roles){
+   setSession(adminSession);const created=await request('/api/settings',{method:'POST',body:{action:'create_user',fullName:'İzolə edilmiş '+role,role,branchId:admin.branch_id,password}});assert.equal(created.status,200,'Admin provisions strong web password via real settings API for '+role+': '+JSON.stringify(created.data));provisioned.set(role,{id:created.data.id});
+   const state=await request('/api/auth',{auth:false});assert.ok(state.data.users.some(user=>user.id===created.data.id&&user.hasPassword),'New '+role+' is available for password sign-in');
+  }
+  for(const role of ['admin','cashier']){
+   const signed=await request('/api/auth',{method:'POST',auth:false,body:{action:'login',userId:provisioned.get(role).id,password}});assert.equal(signed.status,200);assert.equal(signed.data.user.role,role);assert.equal((await request('/api/settings')).status,role==='admin'?200:403);assert.equal((await request('/api/auth',{method:'DELETE'})).status,200);
+  }
+  setSession(adminSession);
+  const [pinOnly]=await sql.unsafe("insert into users(branch_id,full_name,role,pin_hash) select branch_id,'İzolə edilmiş PIN-only anbardar','warehouse',pin_hash from users where id=$1 returning id",[admin.id]);
+  assert.ok(!(await request('/api/auth',{auth:false})).data.users.some(user=>user.id===pinOnly.id),'PIN-only staff must not appear as password-ready');
+  assert.equal((await request('/api/settings')).data.users.find(user=>user.id===pinOnly.id).hasPassword,false,'Settings explicitly exposes the unready status, not a hash');
+  assert.equal((await request('/api/locations',{method:'POST',body:{action:'password',userId:pinOnly.id,password}})).status,200,'Only the admin explicitly sets the existing staff password');
+  assert.ok((await request('/api/auth',{auth:false})).data.users.some(user=>user.id===pinOnly.id&&user.hasPassword),'Explicitly configured staff now appear for password sign-in');
+  assert.equal((await request('/api/auth',{method:'POST',auth:false,body:{action:'login',userId:pinOnly.id,password}})).status,200);assert.equal((await request('/api/warehouses')).status,200);assert.equal((await request('/api/finance')).status,403,'Onboarding does not elevate warehouse permissions');assert.equal((await request('/api/auth',{method:'DELETE'})).status,200);
   for(const [role,policy] of Object.entries(matrix)){
    setSession(adminSession);
-   const [staff]=await sql.unsafe('insert into users(branch_id,full_name,role,password_hash) select branch_id,$2,$3,password_hash from users where id=$1 returning id',[admin.id,'İzolə edilmiş '+role,role]);
+   const staff=provisioned.get(role);
    const signed=await request('/api/auth',{method:'POST',auth:false,body:{action:'login',userId:staff.id,password}});
    assert.equal(signed.status,200,'Password login for '+role+': '+JSON.stringify(signed.data));assert.equal(signed.data.user.role,role);
    const permissions=signed.data.user.permissions;assert.ok(Array.isArray(permissions),'Role has an explicit navigation policy: '+role);assert.ok(!permissions.includes('*'),'Non-admin is not a wildcard administrator');if(role.startsWith('online_'))assert.deepEqual(permissions,[],'Online staff use the separate order workspace, not POS navigation');else assert.ok(permissions.length);

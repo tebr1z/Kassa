@@ -7,6 +7,8 @@ import { ensurePrimaryBarcodes, savePrimaryBarcode } from "@/lib/barcode";
 import {z} from 'zod';
 import {productOptionList} from '@/lib/product-option-input';
 import {saveProductOptions} from '@/lib/save-product-options';
+import {sellingPrice} from '@/lib/commerce';
+import {resolveProductDiscount} from '@/lib/product-discount';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +25,7 @@ async function handleGET(request: Request) {
   try {
     await ensurePrimaryBarcodes(sql);
     const rows = await sql.unsafe(`
-      select p.id, p.name, p.sku, p.category, p.sale_price, p.cost_price,
+      select p.id, p.name, p.sku, p.category, p.sale_price, p.discount_price, p.cost_price,
              p.min_stock, coalesce(b.barcode, '') as barcode,coalesce(bc.barcodes,'[]'::jsonb) barcodes,coalesce(ph.history,'[]'::jsonb) price_history,coalesce(po.options,'[]'::jsonb) as "options",
              coalesce(sum(sm.quantity), 0) as stock,
              coalesce(max(wl.code), 'Təyin edilməyib') as location
@@ -49,7 +51,9 @@ async function handleGET(request: Request) {
       location: row.location,
       stock: Number(row.stock),
       min: Number(row.min_stock),
-      price: Number(row.sale_price),
+      price: sellingPrice({sale_price:row.sale_price,discount_price:row.discount_price}),
+      regularPrice:Number(row.sale_price),
+      discountPrice:row.discount_price==null?null:Number(row.discount_price),
       cost: request.headers.get("x-birkassa-role")==="cashier"?0:Number(row.cost_price),
       barcodes: row.barcodes,
       options:((row.options||[]) as PublicOption[]).map(option=>({...option,price:option.price==null?null:Number(option.price)})),
@@ -67,6 +71,7 @@ async function handleGET(request: Request) {
 const productInput=z.object({
  name:z.string().trim().min(2).max(200),sku:z.string().trim().min(1).max(100),category:z.string().trim().max(100).default(''),
  salePrice:z.coerce.number().finite().positive().max(1000000),costPrice:z.coerce.number().finite().min(0).max(1000000),
+ discountPrice:z.union([z.number(),z.string(),z.null()]).optional(),discountPercent:z.union([z.number(),z.string()]).optional(),
  minStock:z.coerce.number().finite().min(0).max(1000000).default(0),barcode:z.string().trim().max(64).default(''),options:productOptionList.optional(),
 });
 const updateInput=productInput.extend({productId:z.string().uuid(),additionalBarcode:z.string().trim().max(64).default('')});
@@ -94,13 +99,14 @@ async function handlePATCH(request:Request){
     return {id:old.id,isActive:false};
    }
    const body=updateInput.parse(raw);
+   const discountPrice=resolveProductDiscount(body.salePrice,body,old.discount_price);
    if(body.salePrice!==Number(old.sale_price)||body.costPrice!==Number(old.cost_price))await tx.unsafe('insert into product_price_history(product_id,old_sale_price,new_sale_price,old_cost_price,new_cost_price,changed_by) values($1,$2,$3,$4,$5,$6)',[old.id,old.sale_price,body.salePrice,old.cost_price,body.costPrice,userId]);
-   await tx.unsafe('update products set name=$1,sku=$2,category=$3,sale_price=$4,cost_price=$5,min_stock=$6,discount_price=case when discount_price >= $4 then null else discount_price end where id=$7',[body.name,body.sku,body.category||null,body.salePrice,body.costPrice,body.minStock,old.id]);
+   await tx.unsafe('update products set name=$1,sku=$2,category=$3,sale_price=$4,cost_price=$5,min_stock=$6,discount_price=$7 where id=$8',[body.name,body.sku,body.category||null,body.salePrice,body.costPrice,body.minStock,discountPrice,old.id]);
    await savePrimaryBarcode(tx,old.id,body.barcode);
    if(body.additionalBarcode)await tx.unsafe('insert into product_barcodes(product_id,barcode,is_primary) values($1,$2,false)',[old.id,body.additionalBarcode]);
    if(body.options!==undefined)await saveProductOptions(tx,old.id,body.options);
-   await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,after_json) values($1,'product.updated','product',$2,$3)",[userId,old.id,JSON.stringify({name:body.name,salePrice:body.salePrice,costPrice:body.costPrice,optionCount:body.options?.length})]);
-   return {id:old.id,name:body.name,salePrice:body.salePrice,costPrice:body.costPrice};
+   await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,after_json) values($1,'product.updated','product',$2,$3)",[userId,old.id,JSON.stringify({name:body.name,salePrice:body.salePrice,discountPrice,oldDiscountPrice:old.discount_price,costPrice:body.costPrice,optionCount:body.options?.length})]);
+   return {id:old.id,name:body.name,salePrice:body.salePrice,discountPrice,costPrice:body.costPrice};
   });
   return NextResponse.json(result);
  }catch(error){return productError(error);}finally{await sql.end({timeout:2});}
@@ -111,10 +117,11 @@ async function handlePOST(request:Request){
  const body=parsed.data,userId=request.headers.get('x-birkassa-user-id'),sql=connection();
  try{
   const result=await sql.begin(async tx=>{
-   const [row]=await tx.unsafe('insert into products(sku,name,category,sale_price,cost_price,min_stock) values($1,$2,$3,$4,$5,$6) returning id,sku,name',[body.sku,body.name,body.category||null,body.salePrice,body.costPrice,body.minStock]);
+   const discountPrice=resolveProductDiscount(body.salePrice,body);
+   const [row]=await tx.unsafe('insert into products(sku,name,category,sale_price,cost_price,min_stock,discount_price) values($1,$2,$3,$4,$5,$6,$7) returning id,sku,name',[body.sku,body.name,body.category||null,body.salePrice,body.costPrice,body.minStock,discountPrice]);
    await savePrimaryBarcode(tx,row.id,body.barcode);
    if(body.options!==undefined)await saveProductOptions(tx,row.id,body.options);
-   await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,after_json) values($1,'product.created','product',$2,$3)",[userId,row.id,JSON.stringify({name:body.name,optionCount:body.options?.length||0})]);
+   await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,after_json) values($1,'product.created','product',$2,$3)",[userId,row.id,JSON.stringify({name:body.name,salePrice:body.salePrice,discountPrice,optionCount:body.options?.length||0})]);
    return row;
   });
   return NextResponse.json(result,{status:201});

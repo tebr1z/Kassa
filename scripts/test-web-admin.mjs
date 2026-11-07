@@ -139,6 +139,62 @@ try{
  const colorSizeProduct=(await request('/api/catalog',{auth:false})).data.products.find(product=>product.id===colorSizeId);assert.ok(colorSizeProduct);
  assert.deepEqual(colorSizeProduct.options.map(({size,color,price,kind,attributes})=>({size,color,price,kind,attributes})),colorSizeOptions.map(({size,color,price,kind,attributes})=>({size,color,price,kind,attributes})),'Only the three real sparse color/size combinations exist');
  await verifySeoHttp(origin,colorSizeId);
+ // Discount integration intentionally runs after every finance/role-metric
+ // assertion. Only this newly-created isolated DB receives these test sales.
+ const discountBody={name:'Endirim sınağı',sku:'DISCOUNT-UI-QA',category:'Endirim sınağı',salePrice:100,costPrice:20,minStock:0,barcode:''};
+ const discountCreated=await request('/api/products',{method:'POST',body:{...discountBody,discountPercent:20}});assert.equal(discountCreated.status,201,JSON.stringify(discountCreated.data));
+ const discountId=discountCreated.data.id;
+ async function assertDiscount(expected){
+  const privateProduct=(await request('/api/products')).data.find(item=>item.id===discountId);assert.ok(privateProduct);assert.equal(privateProduct.regularPrice,100);assert.equal(privateProduct.discountPrice,expected===100?null:expected);assert.equal(privateProduct.price,expected,'POS DTO exposes the effective discount price');
+  const publicProduct=(await request('/api/catalog',{auth:false})).data.products.find(item=>item.id===discountId);assert.ok(publicProduct);assert.equal(publicProduct.price,expected);assert.equal(publicProduct.originalPrice,100);assert.equal(publicProduct.basePrice,expected);return publicProduct;
+ }
+ await assertDiscount(80);
+ assert.equal((await request('/api/products',{method:'PATCH',body:{...discountBody,productId:discountId,discountPercent:25}})).status,200);await assertDiscount(75);
+ const cmsDiscountBody={action:'product',id:discountId,name:discountBody.name,sku:discountBody.sku,category:discountBody.category,unit:'ədəd',sale_price:100,cost_price:20,description:'',specifications:'',is_active:true,barcode:''};
+ assert.equal((await request('/api/store-admin/commerce',{method:'POST',body:{...cmsDiscountBody,discount_percent:10}})).status,200);await assertDiscount(90);
+ assert.equal((await request('/api/store-admin/commerce',{method:'POST',body:{...cmsDiscountBody,discount_price:87.65}})).status,200);await assertDiscount(87.65);
+ assert.equal((await request('/api/products',{method:'PATCH',body:{...discountBody,productId:discountId}})).status,200,'A normal product edit preserves an exact existing discounted amount');await assertDiscount(87.65);
+ assert.equal((await request('/api/products',{method:'PATCH',body:{...discountBody,productId:discountId,discountPercent:0}})).status,200);await assertDiscount(100);
+ assert.equal((await request('/api/products',{method:'PATCH',body:{...discountBody,productId:discountId,discountPercent:20}})).status,200);await assertDiscount(80);
+ const [beforeInvalidDiscount]=await sql.unsafe('select sale_price,discount_price from products where id=$1',[discountId]);
+ for(const percent of [-1,100,101,20.001]){
+  assert.equal((await request('/api/products',{method:'PATCH',body:{...discountBody,productId:discountId,discountPercent:percent}})).status,400,'Invalid main product percent is rejected: '+percent);
+  assert.equal((await request('/api/store-admin/commerce',{method:'POST',body:{...cmsDiscountBody,discount_percent:percent}})).status,400,'Invalid CMS product percent is rejected: '+percent);
+  assert.deepEqual((await sql.unsafe('select sale_price,discount_price from products where id=$1',[discountId]))[0],beforeInvalidDiscount,'Rejected discounts cannot change the stored prices');
+ }
+ assert.equal((await request('/api/stock/receipts',{method:'POST',body:{productId:discountId,quantity:5,unitCost:20}})).status,201);
+ const discountPublic=await assertDiscount(80);assert.equal(discountPublic.options.length,0);assert.equal((await request('/api/products')).data.find(item=>item.id===discountId).stock,5);
+
+ // A separate product proves actual server receipt/order prices without
+ // consuming the no-options stock-5 homepage proof item above.
+ const discountPosBody={name:'Endirim qiymət sınağı',sku:'DISCOUNT-POS-PRICE-QA',category:'İzolə edilmiş sınaq',salePrice:100,costPrice:20,minStock:0,barcode:''};
+ const discountPosCreated=await request('/api/products',{method:'POST',body:{...discountPosBody,discountPercent:20}});assert.equal(discountPosCreated.status,201,JSON.stringify(discountPosCreated.data));const discountPosId=discountPosCreated.data.id;
+ assert.equal((await request('/api/stock/receipts',{method:'POST',body:{productId:discountPosId,quantity:10,unitCost:20}})).status,201);
+ async function discountedSale(optionId,expected,salesOrderId){
+  const result=await request('/api/sales',{method:'POST',body:{paymentMethod:'card',discount:0,...(salesOrderId?{salesOrderId}:{}),items:[{productId:discountPosId,...(optionId?{optionId}:{}),quantity:1}]}});assert.equal(result.status,201,JSON.stringify(result.data));assert.equal(result.data.total,expected);assert.equal(result.data.receipt.subtotal,expected);assert.equal(result.data.receipt.items[0].unitPrice,expected);assert.equal(result.data.receipt.items[0].lineTotal,expected);return result.data;
+ }
+ async function discountedOrder(optionId,expected){
+  const result=await request('/api/orders',{method:'POST',body:{customerName:'İzolə edilmiş endirim qiymət sınağı',items:[{productId:discountPosId,...(optionId?{optionId}:{}),quantity:1}]}});assert.equal(result.status,201,JSON.stringify(result.data));assert.equal(result.data.total,expected);
+  const order=(await request('/api/orders')).data.find(item=>item.id===result.data.orderId);assert.ok(order);assert.equal(order.items[0].unitPrice,expected);assert.equal(order.items[0].lineTotal,expected);return result.data.orderId;
+ }
+ await discountedSale(undefined,80);
+ const baseDiscountOrder=await discountedOrder(undefined,80);
+ assert.equal((await request('/api/orders',{method:'POST',body:{action:'status',orderId:baseDiscountOrder,status:'ready'}})).status,201);
+ assert.equal((await request('/api/products',{method:'PATCH',body:{...discountPosBody,productId:discountPosId,discountPercent:25}})).status,200);
+ await discountedSale(undefined,80,baseDiscountOrder); // Accepted order snapshot wins over the current 75 price.
+ const pricingChoices=[{label:'Əsas qiymətlə',size:'30 sm',color:'',kind:'',price:null,cost_price:20,position:0,is_active:true,attributes:{}},{label:'Öz qiyməti ilə',size:'40 sm',color:'',kind:'',price:45,cost_price:20,position:1,is_active:true,attributes:{}}];
+ assert.equal((await request('/api/products',{method:'PATCH',body:{...discountPosBody,productId:discountPosId,discountPercent:20,options:pricingChoices}})).status,200);
+ const discountPosProduct=(await request('/api/products')).data.find(item=>item.id===discountPosId);assert.equal(discountPosProduct.price,80);
+ const inheritedChoice=discountPosProduct.options.find(item=>item.price===null),explicitChoice=discountPosProduct.options.find(item=>item.price===45);assert.ok(inheritedChoice);assert.ok(explicitChoice);
+ for(const [choice,expected] of [[inheritedChoice,80],[explicitChoice,45]]){
+  await discountedSale(choice.id,expected);
+  const orderId=await discountedOrder(choice.id,expected);
+  assert.equal((await request('/api/orders',{method:'POST',body:{action:'status',orderId,status:'cancelled'}})).status,201);
+ }
+ const discountPosPublic=(await request('/api/catalog',{auth:false})).data.products.find(item=>item.id===discountPosId);assert.equal(discountPosPublic.price,45);assert.equal(discountPosPublic.originalPrice,45,'A cheaper explicit option is not advertised as a base-product discount');
+ assert.equal((await request('/api/products',{method:'PATCH',body:{action:'deactivate',productId:discountPosId}})).status,200,'Retain test receipts but hide the technical pricing fixture from the preview catalogue');
+ assert.equal((await request('/api/products')).data.find(item=>item.id===discountId).stock,5,'Receipt and order pricing tests did not consume the homepage discount fixture');
+ console.log('PASS: real isolated product/CMS percent and amount edits, invalid-discount rollback, effective DTO/catalogue pricing, POS/base/inherited/explicit prices and accepted-order snapshots.');
  assert.equal((await request('/api/auth',{method:'DELETE'})).status,200);
  console.log('PASS: optional/custom variants, atomic product creation, variant cost/receipt snapshots, honest discount pricing, two-store cashier stock isolation and permissions, open-shift assignment lock, salary plans/payroll and expense idempotency, net profit with historical COGS, archive deletion preserving receipts, CSRF/HTTPS/session protections and catalogue privacy.');
  if(process.argv.includes('--serve')){
@@ -149,6 +205,7 @@ try{
   await sql.unsafe('insert into sales_order_items(sales_order_id,product_id,quantity,unit_price,line_total) values($1,$2,1,50,50)',[uiOrder.id,uiBlocked.id]);
   console.log('ISOLATED UI PREVIEW: '+origin+'/products/'+variantProduct.id+' | staff: '+origin+STAFF_PORTAL_PATH);
   console.log('COLOR/SIZE UI FIXTURE: '+origin+'/mehsullar/'+colorSizeProduct.code+'-reng-ve-olcu-sinagi/');
+  console.log('DISCOUNT UI FIXTURE: '+origin+'/mehsullar/'+discountPublic.code+'-endirim-sinagi/ | 100 → 80 AZN, 20%, stock 5, no options');
   await new Promise(resolve=>{process.once('SIGINT',resolve);process.stdin.once('data',resolve);process.stdin.resume();});process.stdin.pause();
   const [state]=await sql.unsafe('select deleted_at from products where id=$1',[uiDelete.id]);
   if(state.deleted_at){assert.equal((await sql.unsafe("select count(*)::int n from audit_logs where entity_id=$1 and action='commerce.delete-product'",[uiDelete.id]))[0].n,1,'Only one successful deletion');assert.equal((await sql.unsafe('select deleted_at from products where id=$1',[uiBlocked.id]))[0].deleted_at,null);console.log('PASS: browser deletion fixture archived exactly once; rejected product remained untouched.');}
