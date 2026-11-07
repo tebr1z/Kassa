@@ -19,7 +19,11 @@ if(!response.ok||Number(response.headers.get('content-length'))>200_000_000)thro
 const pbf=path.join(data,'azerbaijan.osm.pbf');
 await pipeline(Readable.fromWeb(response.body),createWriteStream(pbf));
 const hash=async(file,algorithm)=>{const digest=createHash(algorithm);for await(const chunk of createReadStream(file))digest.update(chunk);return digest.digest('hex');};
-const checksum=await fetch(source+'.md5',{signal:AbortSignal.timeout(15000)});
+let checksum;
+for(let attempt=0;attempt<3;attempt++){
+ try{checksum=await fetch(source+'.md5',{signal:AbortSignal.timeout(45000)});if(checksum.ok)break;}catch(error){if(attempt===2)throw error;}
+}
+if(!checksum)throw Error('Source checksum unavailable');
 if(!checksum.ok||(await checksum.text()).trim().split(/\s+/)[0]!==await hash(pbf,'md5'))throw Error('Source extract checksum mismatch');
 const common=['run','--rm','--network','none','--cpus','2','--memory','5g','-v',data+':/data',image];
 run('docker',[...common,'osrm-extract','-t','2','-p','/opt/car.lua','/data/azerbaijan.osm.pbf']);
