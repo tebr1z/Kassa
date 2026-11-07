@@ -25,13 +25,15 @@ for(let attempt=0;attempt<3;attempt++){
 }
 if(!checksum)throw Error('Source checksum unavailable');
 if(!checksum.ok||(await checksum.text()).trim().split(/\s+/)[0]!==await hash(pbf,'md5'))throw Error('Source extract checksum mismatch');
-const common=['run','--rm','--network','none','--cpus','2','--memory','5g','-v',data+':/data',image];
+const common=['run','--rm','--network','none','--user',process.getuid()+':'+process.getgid(),'--cpus','2','--memory','5g','-v',data+':/data',image];
 run('docker',[...common,'osrm-extract','-t','2','-p','/opt/car.lua','/data/azerbaijan.osm.pbf']);
 run('docker',[...common,'osrm-partition','-t','2','/data/azerbaijan.osrm']);
 run('docker',[...common,'osrm-customize','-t','2','/data/azerbaijan.osrm']);
 const manifest={schema:1,image,region:'Azerbaijan',profile:'car',algorithm:'mld',source,sourceModified:response.headers.get('last-modified'),sourceSha256:await hash(pbf,'sha256'),builtAt:new Date().toISOString(),attribution:'© OpenStreetMap contributors',license:'https://www.openstreetmap.org/copyright'};
 await fs.writeFile(path.join(data,'routing-manifest.json'),JSON.stringify(manifest,null,2));
-run('docker',['run','-d','--rm','--name',name,'--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--memory','384m','--memory-swap','512m','--cpus','1','-p','127.0.0.1:5099:5000','-v',data+':/data:ro',image,'osrm-routed','--algorithm','mld','--threads','1','/data/azerbaijan.osrm']);
+await fs.chmod(data,0o755);
+for(const file of await fs.readdir(data))if(file.startsWith('azerbaijan.osrm.')||file==='routing-manifest.json')await fs.chmod(path.join(data,file),0o444);
+run('docker',['run','-d','--rm','--name',name,'--user','65534:65534','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--memory','384m','--memory-swap','512m','--cpus','1','-p','127.0.0.1:5099:5000','-v',data+':/data:ro',image,'osrm-routed','--algorithm','mld','--threads','1','/data/azerbaijan.osrm']);
 try{
  let healthy=false;
  for(let attempt=0;attempt<30;attempt++){
