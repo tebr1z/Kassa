@@ -2,12 +2,12 @@
 import {t,useLanguage} from "@/lib/language";
 
 import Link from "next/link";
+import {useSearchParams} from 'next/navigation';
 import { useId, useRef, useState, type PointerEvent } from "react";
 import { ArrowLeft, ArrowRight, Check, ChevronRight, ImageIcon, Move, Package, ShoppingBag, Store, Truck } from "lucide-react";
-import { productPath, relatedProducts, type CatalogProduct } from "@/lib/commerce";
+import { productPath,productVariantPath,productVariantKeys,productOptionFromQuery,productOptionLabel, relatedProducts, type CatalogProduct,type ProductOption } from "@/lib/commerce";
 import "./product-view.css";
 import ProductPrice from './product-price';
-import {optionDetails} from '@/lib/product-options';
 
 type Props = {
   product: CatalogProduct;
@@ -17,8 +17,6 @@ type Props = {
   onOpenCart: () => void;
   initialOptionId?:string;
 };
-
-const money = (value: number) => `${Number(value).toFixed(2)} AZN`;
 
 function ProductImage({ product }: { product: CatalogProduct }) {useLanguage();
   const hintId = useId();
@@ -92,12 +90,22 @@ function ProductImage({ product }: { product: CatalogProduct }) {useLanguage();
 }
 
 export default function ProductView({ product, products, inCart, onAdd, onOpenCart,initialOptionId }: Props) {useLanguage();
-  const [optionId,setOptionId]=useState(initialOptionId||"");
-  const selectedOption=product.options?.find(option=>option.id===optionId);
+  const searchParams=useSearchParams();
+  const selectedOption=searchParams?productOptionFromQuery(product,searchParams):product.options.find(option=>option.id===initialOptionId);
+  const optionId=selectedOption?.id||'';
   const unitPrice=selectedOption?(selectedOption.price??product.basePrice??product.price):product.price;
   const originalPrice=selectedOption?(selectedOption.price??product.baseOriginalPrice??product.originalPrice):product.originalPrice;
   const related = relatedProducts(product, products);
   const specifications = (product.specifications || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+
+  function chooseOption(option:ProductOption){
+    const url=new URL(window.location.href),choice=new URL(productVariantPath(product,option),url.origin);
+    for(const key of productVariantKeys)url.searchParams.delete(key);
+    for(const [key,value] of choice.searchParams)url.searchParams.set(key,value);
+    url.pathname=choice.pathname;
+    const target=url.pathname+url.search+url.hash;
+    if(target!==window.location.pathname+window.location.search+window.location.hash)window.history.pushState(null,'',target);
+  }
 
   return <div className="pd-page">
     <nav className="pd-breadcrumb" aria-label="Səhifə yolu">
@@ -117,7 +125,7 @@ export default function ProductView({ product, products, inCart, onAdd, onOpenCa
           <ProductPrice price={unitPrice} originalPrice={originalPrice}/>
         </div>
         <p className="pd-intro">{product.description || "Məhsul haqqında sualınız var? Əlaqə bölməsindən bizə yazın, seçim etməkdə kömək edək."}</p>
-        {!!product.options?.length&&<fieldset className="pd-variant-picker"><legend>{t('Seçim edin')}</legend><div className="pd-variant-grid">{product.options.map(option=><button key={option.id} type="button" aria-pressed={optionId===option.id} onClick={()=>setOptionId(option.id)}><strong>{option.label}</strong>{optionDetails(option)&&<small>{optionDetails(option)}</small>}<b>{money(option.price??product.basePrice??product.price)}</b></button>)}</div></fieldset>}
+        {!!product.options?.length&&<fieldset className="pd-variant-picker"><legend>{t('Seçim edin')}</legend><div className="pd-variant-grid">{product.options.map(option=><a key={option.id} className="pd-variant-option" href={productVariantPath(product,option)} aria-current={optionId===option.id?'true':undefined} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();chooseOption(option);}}><span>{productOptionLabel(option)}</span><Check size={16} aria-hidden="true"/></a>)}</div></fieldset>}
         <div className="pd-purchase">
           <button className="pd-add-button" type="button" disabled={!product.available || inCart >= 100||Boolean(product.options?.length&&!optionId)} onClick={() => onAdd(product.id,optionId||undefined)}><ShoppingBag size={19} aria-hidden="true" />{!product.available ? t("Stokda yoxdur") : inCart >= 100 ? "Miqdar limiti: 100" : t("Səbətə əlavə et")}<ArrowRight size={18} aria-hidden="true" /></button>
           {inCart > 0 && <button className="pd-cart-link" type="button" onClick={onOpenCart}><Check size={16} aria-hidden="true" /><span>Səbətinizdə: {inCart}</span><span>Səbətə bax →</span></button>}

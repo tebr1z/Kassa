@@ -7,6 +7,7 @@ import {canUseStaffApi,staffRoles} from './lib/staff-access';
 
 type Rule={prefix:string;read:string[];write:string[]};
 const rules:Rule[]=[
+  {prefix:'/api/admin/delivery',read:['admin'],write:['admin']},
   {prefix:'/api/locations',read:['admin'],write:['admin']},
   {prefix:"/api/desktop-media",read:["admin","manager","cashier","warehouse","accountant"],write:[]},
   {prefix:"/api/desktop-link",read:["admin"],write:["admin"]},
@@ -64,7 +65,7 @@ export async function proxy(request:NextRequest){
   }
  }
   if(["/api/customer-account","/api/my-orders","/api/contact","/api/coupon","/api/account-chat","/api/places"].includes(request.nextUrl.pathname))return forward(request);
-  if(request.nextUrl.pathname==="/api/catalog"||request.nextUrl.pathname==="/api/customer-orders")return forward(request);
+  if(["/api/catalog","/api/customer-orders","/api/delivery-settings","/api/delivery-quote"].includes(request.nextUrl.pathname))return forward(request);
   if(request.nextUrl.pathname==="/api/auth")return secureAdminRequest(request)?forward(request):NextResponse.json({error:'Administrator girişi üçün HTTPS tələb olunur.'},{status:426});
   const rule=rules.find(item=>request.nextUrl.pathname===item.prefix||request.nextUrl.pathname.startsWith(item.prefix+"/"));
   if(!rule&&!adminPage)return NextResponse.json({error:"API marşrutu üçün icazə qaydası yoxdur"},{status:403});

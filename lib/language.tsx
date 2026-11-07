@@ -3,6 +3,9 @@ import {createContext,useContext,useEffect,useSyncExternalStore,type ReactNode} 
 import {desktopTranslations} from "./desktop-translations";
 import {storefrontTranslations} from "./storefront-translations";
 import {productRemovalTranslations} from './product-removal-translations';
+import {deliveryTranslations} from './delivery-translations';
+import {accountUiTranslations} from './account-ui-translations';
+import {checkoutTranslations,checkoutTurkishOverrides} from './checkout-translations';
 import {Check,Languages,ChevronDown} from "lucide-react";
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuLabel,DropdownMenuRadioGroup,DropdownMenuRadioItem,DropdownMenuSeparator} from '@/components/ui/dropdown-menu';
 import {languageOptions,languageMenuCopy,isLanguage,type Language} from './language-options';
@@ -152,8 +155,9 @@ const rows=[
  ["Aktiv","Активен","Active","Aktif","启用"],
  ["Deaktiv","Неактивен","Inactive","Pasif","停用"]
 ];
-rows.push(...desktopTranslations.map(row=>[row[0],row[1],row[2],rows.find(existing=>existing[0]===row[0])?.[3]||row[3],row[4]]),...storefrontTranslations,...productRemovalTranslations);
+rows.push(...desktopTranslations.map(row=>[row[0],row[1],row[2],rows.find(existing=>existing[0]===row[0])?.[3]||row[3],row[4]]),...storefrontTranslations,...productRemovalTranslations,...deliveryTranslations,...accountUiTranslations,...checkoutTranslations);
 export const translationKeys=rows.map(row=>row[0]);
+for(const row of rows)if(checkoutTurkishOverrides[row[0]])row[3]=checkoutTurkishOverrides[row[0]];
 const translations=new Map(rows.map(row=>[row[0],row]));
 const upperTranslations=new Map(rows.map(row=>[row[0].toLocaleUpperCase("az"),row]));
 export function t(text:string):string{const exact=translations.get(text),row=exact||upperTranslations.get(text);const translated=row?.[(["az","ru","en","tr","zh"] as const).indexOf(current)]||text;if(row)return !exact?translated.toLocaleUpperCase(current):translated;const prefix=desktopTranslations.find(entry=>entry[0].endsWith(": ")&&text.startsWith(entry[0]));return prefix?t(prefix[0])+text.slice(prefix[0].length):text;}

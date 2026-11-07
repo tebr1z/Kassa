@@ -22,6 +22,54 @@ export function productSlug(name:string){
 export function productPath(product:{id:string;name:string;code?:string}){
  return product.code&&/^\d{6}$/.test(product.code)?`/mehsullar/${productSlug(product.name)}/${product.code}`:`/mehsullar/${product.id}`;
 }
+export type ProductVariantQuery=Record<string,string|string[]|undefined>;
+export const productVariantKeys=['olcu','reng','nov','secim','variant'] as const;
+type VariantProduct={id:string;name:string;code?:string;options:ProductOption[]};
+type VariantSearch={get:(name:string)=>string|null;getAll:(name:string)=>string[]};
+export function productVariantSearchParams(query:ProductVariantQuery){
+ const result=new URLSearchParams();
+ for(const key of productVariantKeys){const value=query[key];for(const entry of Array.isArray(value)?value:value===undefined?[]:[value])result.append(key,entry);}
+ return result;
+}
+export function productVariantSlug(value:string){
+ const folded=[...value].map(ch=>slugLetters[ch]??ch).join('').normalize('NFKD').replace(/\p{M}/gu,'');
+ return folded.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'-').replace(/^-+|-+$/g,'');
+}
+// A single concise label replaces the old label + repeated size/colour details.
+export function productOptionLabel(option:ProductOption){
+ const parts=[option.label.trim()].filter(Boolean);
+ const normalized=(value:string)=>foldSearch(value).replace(/(\d)\s+(sm|cm|mm|ml|kg|qr|q|l)\b/g,'$1$2');
+ for(const value of [option.size,option.color,option.kind,...Object.entries(option.attributes||{}).map(([key,value])=>`${key}: ${value}`)]){
+  if(value?.trim()&&!(` ${normalized(parts.join(' '))} `).includes(` ${normalized(value)} `))parts.push(value.trim());
+ }
+ return parts.join(' · ');
+}
+function variantDimensions(option:ProductOption){
+ const query=new URLSearchParams();
+ for(const [key,value] of [['olcu',option.size],['reng',option.color],['nov',option.kind]])if(value?.trim()&&productVariantSlug(value))query.set(key,productVariantSlug(value));
+ return query;
+}
+function variantToken(product:VariantProduct,option:ProductOption){
+ const label=productVariantSlug(productOptionLabel(option))||'secim';
+ return product.options.some(other=>other.id!==option.id&&(productVariantSlug(productOptionLabel(other))||'secim')===label)?label+'-'+productVariantSlug(option.id):label;
+}
+export function productVariantPath(product:VariantProduct,option:ProductOption){
+ const query=variantDimensions(option),dimensions=query.toString();
+ const ambiguous=product.options.filter(other=>variantDimensions(other).toString()===dimensions).length>1;
+ if(!dimensions||ambiguous||Object.keys(option.attributes||{}).length)query.set('secim',variantToken(product,option));
+ return productPath(product)+'?'+query.toString();
+}
+export function productOptionFromQuery(product:VariantProduct,query:VariantSearch){
+ if(productVariantKeys.some(key=>query.getAll(key).length>1))return undefined;
+ const readable=['olcu','reng','nov','secim'].filter(key=>query.get(key)!==null);
+ if(!readable.length){const id=query.get('variant');return product.options.find(option=>option.id===id);}
+ const candidates=product.options.filter(option=>readable.every(key=>{
+  const expected=key==='secim'?variantToken(product,option):variantDimensions(option).get(key);
+  return Boolean(expected)&&productVariantSlug(query.get(key)||'')===expected;
+ }));
+ const selected=candidates.length===1?candidates[0]:undefined;
+ return selected&&(!query.get('variant')||query.get('variant')===selected.id)?selected:undefined;
+}
 export function productModel(name:string){
  const cleaned=name.replace(/\s{2,}/g," ").trim();
  const model=cleaned.replace(/\s+\d+(?:[.,]\d+)?\s*(?:sm|mm|ml|l|q|qr|kg)\b.*$/i,"").replace(/-\d+\s*(?:sm|mm)?$/i,"").replace(/\s+\d+-lük$/i,"").trim();

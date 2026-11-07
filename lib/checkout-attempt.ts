@@ -5,6 +5,7 @@ const checkoutPayloadSchema = z.object({
   coupon: z.string().max(30),
   expectedTotal: z.number().finite().min(0),
   fulfillment: z.enum(["pickup", "delivery"]),
+  deliveryQuoteId: z.string().uuid().nullable().optional(),
   address: z.string().max(500),
   name: z.string().min(2).max(100),
   phone: z.string().min(7).max(25),

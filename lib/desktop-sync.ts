@@ -9,6 +9,8 @@ import {cacheProductMedia} from "@/lib/desktop-media";
 
 export const isDesktop = () => process.env.BIRKASSA_LOCAL === "1";
 export const feedKeyName = "desktop_order_feed_key_hash";
+export const desktopDeliveryUpgradeMessage='Masaüstü tətbiqi yeniləyin. Çatdırılma haqqı olan sifarişlər köhnə kassaya köçürülmür.';
+export const isDeliveryUpgradeError=(error:unknown)=>error instanceof Error&&'deliveryUpgrade' in error&&error.deliveryUpgrade===true;
 export const hashKey = (key:string) => createHash("sha256").update(key).digest("hex");
 export function matchesKey(key:string, hash:string) {
   return /^[a-f0-9]{64}$/.test(hash) && timingSafeEqual(Buffer.from(hashKey(key), "hex"), Buffer.from(hash, "hex"));
@@ -36,17 +38,27 @@ const amount = z.coerce.number().finite().min(0).max(999999999999);
 export const remoteOrderSchema = z.object({
   id:z.string().uuid(), order_no:z.string().max(150), status:z.enum(["pending","ready","completed","cancelled"]),
   fulfillment:z.enum(["pickup","delivery"]), delivery_address:z.string().nullable(), delivery_stage:z.string(),
-  total:amount, coupon_discount:amount, note:z.string().nullable(), full_name:z.string(), phone:z.string().nullable(),
+  total:amount, coupon_discount:amount,delivery_fee:amount.default(0),
+  distance_meters:z.coerce.number().finite().int().min(0).nullable().default(null),
+  delivery_lat:z.coerce.number().finite().min(-90).max(90).nullable().default(null),
+  delivery_lng:z.coerce.number().finite().min(-180).max(180).nullable().default(null),
+  delivery_pricing:z.enum(['manual','distance']).default('manual'),
+  note:z.string().nullable(), full_name:z.string(), phone:z.string().nullable(),
   created_at:z.string(), updated_at:z.string(),
   items:z.array(z.object({sku:z.string(), name:z.string(), option_snapshot:z.string().nullable(),
     quantity:z.coerce.number().finite().positive().max(999999999), unit_price:amount, line_total:amount})).min(1).max(500)
+}).superRefine((order,context)=>{
+ const subtotal=order.items.reduce((sum,item)=>sum+item.line_total,0);
+ if(order.coupon_discount>subtotal||Math.abs(order.total-Number((subtotal-order.coupon_discount+order.delivery_fee).toFixed(2)))>.009)context.addIssue({code:z.ZodIssueCode.custom,path:['total'],message:'Sifarişin məhsul, endirim və çatdırılma məbləğləri uyğun deyil.'});
+ if(order.fulfillment==='pickup'&&order.delivery_fee!==0)context.addIssue({code:z.ZodIssueCode.custom,path:['delivery_fee'],message:'Mağazadan götürmə üçün çatdırılma haqqı ola bilməz.'});
 });
 export type RemoteOrder = z.infer<typeof remoteOrderSchema>;
 const pageSchema = z.object({rows:z.array(remoteOrderSchema).max(100), next:z.string().max(1000).nullable()});
 export async function fetchOrderPage(config:Config, cursor="") {
   const response = await fetch(config.url+"/api/desktop-feed"+(cursor?"?after="+encodeURIComponent(cursor):""), {
-    headers:{Authorization:"Bearer "+config.key},cache:"no-store",redirect:"error",signal:AbortSignal.timeout(15000)
+    headers:{Authorization:"Bearer "+config.key,'X-Restamarket-Delivery':'1'},cache:"no-store",redirect:"error",signal:AbortSignal.timeout(15000)
   });
+  if(response.status===409)throw Object.assign(new Error(desktopDeliveryUpgradeMessage),{deliveryUpgrade:true});
   if(!response.ok)throw new Error(response.status===401?"Bağlantı açarı etibarsızdır.":"Mağaza ilə əlaqə qurulmadı.");
   return pageSchema.parse(await response.json());
 }

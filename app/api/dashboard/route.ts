@@ -73,7 +73,7 @@ async function handleGET(request: Request) {
       weekly: weekly.map((row) => ({ day: row.day, total: Number(row.total) })),
       recent: recent.map((row) => ({
         id: row.id, receiptNo: row.receipt_no, total: Number(row.total), status: row.status, createdAt: row.created_at,
-        cashier: row.full_name, buyerName:row.buyer_name||"", paymentMethod: row.payment_method, subtotal:Number(row.subtotal),discount:Number(row.discount),store:row.receipt_store,orderNo:row.order_no,
+        cashier: row.full_name, buyerName:row.buyer_name||"", paymentMethod: row.payment_method, subtotal:Number(row.subtotal),discount:Number(row.discount),deliveryFee:Number(row.delivery_fee||0),store:row.receipt_store,orderNo:row.order_no,
         paymentDetails:row.payment_details.map((p:{method:string;amount:string})=>({method:p.method,amount:Number(p.amount)})),
         items: row.items.map((item: any) => ({ ...item, quantity: Number(item.quantity), unitPrice: Number(item.unitPrice), lineTotal: Number(item.lineTotal) })),
       })),

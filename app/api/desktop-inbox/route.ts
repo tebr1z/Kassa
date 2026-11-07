@@ -1,7 +1,7 @@
 import {withAdminSession} from '@/lib/require-admin';
 import {z} from "zod";
 import {storeDb} from "@/lib/store-db";
-import {isDesktop,remoteOrderSchema,syncOrders} from "@/lib/desktop-sync";
+import {isDesktop,remoteOrderSchema,syncOrders,isDeliveryUpgradeError,desktopDeliveryUpgradeMessage} from "@/lib/desktop-sync";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 async function handleGET() {
@@ -18,7 +18,7 @@ async function handlePOST(request:Request) {
   const body=await request.json().catch(()=>null);
   if(z.object({action:z.literal("sync")}).safeParse(body).success) {
     try {return Response.json(await syncOrders());}
-    catch {return Response.json({error:"Sifarişlər yenilənmədi. Bağlantını yoxlayın; yerli məlumatlar saxlanılıb."},{status:502});}
+    catch(error) {return Response.json({error:isDeliveryUpgradeError(error)?desktopDeliveryUpgradeMessage:"Sifarişlər yenilənmədi. Bağlantını yoxlayın; yerli məlumatlar saxlanılıb."},{status:isDeliveryUpgradeError(error)?409:502});}
   }
   const stage=z.object({action:z.literal('delivery-stage'),id:z.string().uuid(),stage:z.enum(['preparing','ready','dispatched','delivered'])}).safeParse(body);
   if(stage.success){
@@ -59,8 +59,8 @@ async function handlePOST(request:Request) {
       let [customer]=order.phone?await tx.unsafe("select id from customers where phone=$1 limit 1",[order.phone]):[];
       if(!customer)[customer]=await tx.unsafe("insert into customers(full_name,phone) values($1,$2) returning id",[order.full_name,order.phone]);
       const [local]=await tx.unsafe(`insert into sales_orders(order_no,customer_id,status,total,note,created_by,source,
-        fulfillment,delivery_address,delivery_stage,coupon_discount) values($1,$2,'pending',$3,$4,$5,'catalog',$6,$7,$8,$9) returning id`,
-        ["WEB-"+inbox.id,customer.id,order.total,[order.order_no,order.note].filter(Boolean).join(" · "),request.headers.get("x-birkassa-user-id"),order.fulfillment,order.delivery_address,order.delivery_stage,order.coupon_discount]);
+        fulfillment,delivery_address,delivery_stage,coupon_discount,delivery_fee,distance_meters,delivery_lat,delivery_lng,delivery_pricing) values($1,$2,'pending',$3,$4,$5,'catalog',$6,$7,$8,$9,$10,$11,$12,$13,$14) returning id`,
+        ["WEB-"+inbox.id,customer.id,order.total,[order.order_no,order.note].filter(Boolean).join(" · "),request.headers.get("x-birkassa-user-id"),order.fulfillment,order.delivery_address,order.delivery_stage,order.coupon_discount,order.delivery_fee,order.distance_meters,order.delivery_lat,order.delivery_lng,order.delivery_pricing]);
       for(const item of lines)await tx.unsafe(`insert into sales_order_items(sales_order_id,product_id,option_id,option_snapshot,quantity,unit_price,line_total,product_name_snapshot)
         values($1,$2,$3,$4,$5,$6,$7,$8)`,[local.id,item.productId,item.optionId,item.option_snapshot,item.quantity,item.unit_price,item.line_total,item.name]);
       await tx.unsafe("update desktop_order_inbox set local_order_id=$1 where id=$2",[local.id,inbox.id]);

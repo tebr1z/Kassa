@@ -4,10 +4,12 @@ import {customerAccount} from "@/lib/customer-session";
 import {z} from "zod";
 import {sellingPrice,couponDiscount} from "@/lib/commerce";
 import {notifyCatalogOrder,vexiraSettings,whatsappPhone} from "@/lib/vexira";
+import {deliverySettings,sameOriginMutation} from '@/lib/delivery-server';
 export const dynamic="force-dynamic";
-const schema=z.object({requestKey:z.string().uuid(),expectedTotal:z.number().min(0).optional(),coupon:z.string().trim().toUpperCase().max(30).default(""),fulfillment:z.enum(["pickup","delivery"]),address:z.string().max(500),name:z.string().trim().min(2).max(100),phone:z.string().trim().regex(/^[+0-9 ()-]{7,25}$/).refine(value=>value.replace(/\D/g,'').length>=7&&value.replace(/\D/g,'').length<=15),note:z.string().max(1000),items:z.array(z.object({id:z.string().uuid(),optionId:z.string().uuid().nullable().optional(),quantity:z.number().int().min(1).max(100)})).min(1).max(50)});
+const schema=z.object({requestKey:z.string().uuid(),expectedTotal:z.number().finite().min(0).optional(),deliveryQuoteId:z.string().uuid().nullable().optional(),coupon:z.string().trim().toUpperCase().max(30).default(""),fulfillment:z.enum(["pickup","delivery"]),address:z.string().max(500),name:z.string().trim().min(2).max(100),phone:z.string().trim().regex(/^[+0-9 ()-]{7,25}$/).refine(value=>value.replace(/\D/g,'').length>=7&&value.replace(/\D/g,'').length<=15),note:z.string().max(1000),items:z.array(z.object({id:z.string().uuid(),optionId:z.string().uuid().nullable().optional(),quantity:z.number().int().min(1).max(100)})).min(1).max(50)});
 function checkoutRejection(message:string){return Object.assign(new Error(message),{statusCode:400});}
 export async function POST(request:Request){
+ if(!sameOriginMutation(request))return Response.json({error:'Başqa saytdan göndərilən sorğu qəbul edilmir.'},{status:403});
  if(Number(request.headers.get("content-length")||0)>20000)return Response.json({error:"Sorğu çox böyükdür"},{status:413});
  const account=await customerAccount();if(!account)return Response.json({error:"Sifariş üçün hesabınıza daxil olun."},{status:401});
  const parsed=schema.safeParse(await request.json().catch(()=>null));
@@ -47,13 +49,25 @@ export async function POST(request:Request){
    discount=couponDiscount(subtotal,Number(coupon.percent),coupon.max_discount==null?null:Number(coupon.max_discount));
    await tx.unsafe("update commerce_coupons set used=used+1 where id=$1",[coupon.id]);
   }
-  if(b.expectedTotal!==undefined&&Math.abs(b.expectedTotal-Number((subtotal-discount).toFixed(2)))>0.009)throw checkoutRejection("Qiymət yenilənib. Səbəti yeniləyib kuponu təkrar tətbiq edin.");
+  let deliveryFee=0,distanceMeters:number|null=null,deliveryLat:number|null=null,deliveryLng:number|null=null,deliveryPricing='manual';
+  if(b.fulfillment==='delivery'){
+   await tx.unsafe('select id from delivery_settings where id=1 for share');
+   const settings=await deliverySettings(tx);
+   if(Number((subtotal-discount).toFixed(2))<settings.minimumOrder)throw checkoutRejection('Çatdırılma üçün minimum sifariş məbləği ödənmir.');
+   if(settings.mode==='distance'){
+    const [quote]=b.deliveryQuoteId?await tx.unsafe('select * from delivery_quotes where id=$1 and account_id=$2 and expires_at>now() and settings_revision=$3 for share',[b.deliveryQuoteId,account.id,settings.revision]):[];
+    if(!quote||quote.address!==b.address.trim())throw checkoutRejection('Çatdırılma hesablaması köhnəlib. Ünvanı yenidən hesablayın.');
+    deliveryFee=Number(quote.fee);distanceMeters=Number(quote.distance_meters);deliveryLat=Number(quote.lat);deliveryLng=Number(quote.lng);deliveryPricing='distance';
+   }else if(b.deliveryQuoteId)throw checkoutRejection('Çatdırılma şərtləri dəyişib. Səbəti yeniləyin.');
+  }
+  const finalTotal=Number((subtotal-discount+deliveryFee).toFixed(2));
+  if(b.expectedTotal!==undefined&&Math.abs(b.expectedTotal-finalTotal)>0.009)throw checkoutRejection("Qiymət yenilənib. Səbəti yeniləyib kuponu təkrar tətbiq edin.");
   const c={id:account.customer_id};
   const [seq]=await tx.unsafe("select nextval('catalog_order_seq')::text as order_no");
-  const [o]=await tx.unsafe("insert into sales_orders(order_no,customer_id,total,note,source,request_key,account_id,fulfillment,delivery_address,coupon_code,coupon_discount,customer_name_snapshot,customer_phone_snapshot) values($1,$2,$3,$4,'catalog',$5,$6,$7,$8,$9,$10,$11,$12) returning id,order_no",[seq.order_no,c.id,Number((subtotal-discount).toFixed(2)),b.note,b.requestKey,account.id,b.fulfillment,b.fulfillment==='delivery'?b.address.trim():'',b.coupon||null,discount,b.name,b.phone]);
+  const [o]=await tx.unsafe("insert into sales_orders(order_no,customer_id,total,note,source,request_key,account_id,fulfillment,delivery_address,coupon_code,coupon_discount,customer_name_snapshot,customer_phone_snapshot,delivery_fee,distance_meters,delivery_lat,delivery_lng,delivery_pricing) values($1,$2,$3,$4,'catalog',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) returning id,order_no",[seq.order_no,c.id,finalTotal,b.note,b.requestKey,account.id,b.fulfillment,b.fulfillment==='delivery'?b.address.trim():'',b.coupon||null,discount,b.name,b.phone,deliveryFee,distanceMeters,deliveryLat,deliveryLng,deliveryPricing]);
   for(const l of lines)await tx.unsafe("insert into sales_order_items(sales_order_id,product_id,option_id,option_snapshot,quantity,unit_price,line_total,product_name_snapshot) values($1,$2,$3,$4,$5,$6,$7,$8)",[o.id,l.id,l.optionId,l.optionLabel||null,l.quantity,l.price,l.total,String(l.name).replace(l.optionLabel?" · "+l.optionLabel:"","")]);
   await tx.unsafe("insert into audit_logs(action,entity_type,entity_id,after_json) values('order.catalog_created','sales_order',$1,$2)",[o.id,JSON.stringify({orderNo:o.order_no})]);
-  return {created:true as const,order_no:o.order_no,total:Number((subtotal-discount).toFixed(2)),name:b.name,phone:b.phone,fulfillment:b.fulfillment,address:b.address,lines:lines.map(line=>({name:line.name,quantity:line.quantity}))};
+  return {created:true as const,order_no:o.order_no,total:finalTotal,name:b.name,phone:b.phone,fulfillment:b.fulfillment,address:b.address,lines:lines.map(line=>({name:line.name,quantity:line.quantity}))};
  });
  if(result.created){const settings=await vexiraSettings();let storePhones=settings.phones;if(!storePhones.length){const [brand]=await sql.unsafe("select whatsapp from storefront_config where id=1");const fallback=whatsappPhone(String(brand?.whatsapp||""));storePhones=fallback?[fallback]:[];}await notifyCatalogOrder({orderNo:result.order_no,total:result.total,name:result.name,phone:result.phone,fulfillment:result.fulfillment,address:result.address,lines:result.lines,storePhones}).catch(()=>{});}
  return Response.json({order_no:result.order_no},{status:201});

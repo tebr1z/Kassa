@@ -53,10 +53,10 @@ async function handlePOST(request: Request) {
       if (!shift) throw Object.assign(new Error("Satış üçün əvvəlcə kassa növbəsini açın"), { statusCode: 409 });
       if(shift.branch_id!==warehouse.branch_id)throw Object.assign(new Error('Növbənin mağazası dəyişib. Növbəni bağlayıb düzgün mağazada yenidən açın.'),{statusCode:409});
 
-      let linkedOrder: {id:string;status:string;customer_id:string;source:string;coupon_discount:string}|undefined;
+      let linkedOrder: {id:string;status:string;customer_id:string;source:string;coupon_discount:string;delivery_fee:string}|undefined;
       let orderLines: {product_id:string;option_id:string|null;option_snapshot:string|null;quantity:string;unit_price:string}[]=[];
       if(body.salesOrderId){
-       [linkedOrder]=await tx.unsafe("select id,status,customer_id,source,coupon_discount from sales_orders where id=$1 for update",[body.salesOrderId]) as unknown as typeof linkedOrder[];
+       [linkedOrder]=await tx.unsafe("select id,status,customer_id,source,coupon_discount,delivery_fee from sales_orders where id=$1 for update",[body.salesOrderId]) as unknown as typeof linkedOrder[];
        if(!linkedOrder||linkedOrder.status!=="ready")throw Object.assign(new Error("Yalnız hazır sifariş ödənilə bilər"),{statusCode:409});
        orderLines=await tx.unsafe("select product_id,option_id,option_snapshot,quantity,unit_price from sales_order_items where sales_order_id=$1",[linkedOrder.id]) as unknown as typeof orderLines;
        if(orderLines.length!==merged.size||orderLines.some(l=>merged.get(`${l.product_id}:${l.option_id||""}`)!==Number(l.quantity)))throw Object.assign(new Error("Sifariş məhsulları, seçimləri və miqdarı dəyişdirilə bilməz"),{statusCode:409});
@@ -111,7 +111,10 @@ async function handlePOST(request: Request) {
         if(order.status!=="ready")throw Object.assign(new Error("Yalnız hazır sifariş kassada ödənilə bilər"),{statusCode:409});
         salesOrderId=order.id;
       }
-      const total=Number((subtotal-discount).toFixed(2));
+      // Delivery is a server-owned order charge, never a client-controlled product line.
+      const deliveryFee=Number(linkedOrder?.delivery_fee??0);
+      if(!Number.isFinite(deliveryFee)||deliveryFee<0)throw Object.assign(new Error('Sifarişin çatdırılma məbləğini yoxlayın.'),{statusCode:409});
+      const total=Number((subtotal-discount+deliveryFee).toFixed(2));
       const cashAmount=paymentMethod==='cash'?total:paymentMethod==='mixed'?Number(body.cashAmount):0;
       const cardAmount=paymentMethod==='card'?total:paymentMethod==='mixed'?Number(body.cardAmount):0;
       if(!Number.isFinite(cashAmount)||!Number.isFinite(cardAmount)||cashAmount<0||cardAmount<0||Math.abs(cashAmount+cardAmount-total)>.009)throw Object.assign(new Error("Nağd və kart məbləğlərinin cəmi yekuna bərabər olmalıdır"),{statusCode:400});
@@ -123,8 +126,8 @@ async function handlePOST(request: Request) {
       const [{ next_no: nextNo }] = await tx.unsafe("select coalesce(max((regexp_replace(receipt_no, '[^0-9]', '', 'g'))::bigint),0)+1 as next_no from sales");
       const receiptNo = `#${String(nextNo).padStart(6, '0')}`;
       const [sale] = await tx.unsafe(
-        "insert into sales (receipt_no, shift_id, cashier_id, customer_id, sales_order_id, buyer_name, subtotal, discount, total, receipt_store) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::text::jsonb) returning id, created_at",
-        [receiptNo, shift.id, cashier.id, linkedOrder?.customer_id||body.customerId||null, salesOrderId, String(body.buyerName||"").trim()||null, subtotal,discount,total,JSON.stringify(receiptStore)],
+        "insert into sales (receipt_no, shift_id, cashier_id, customer_id, sales_order_id, buyer_name, subtotal, discount, total, receipt_store, delivery_fee) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::text::jsonb,$11) returning id, created_at",
+        [receiptNo, shift.id, cashier.id, linkedOrder?.customer_id||body.customerId||null, salesOrderId, String(body.buyerName||"").trim()||null, subtotal,discount,total,JSON.stringify(receiptStore),deliveryFee],
       );
 
       for (const line of lines) {
@@ -144,9 +147,9 @@ async function handlePOST(request: Request) {
       if(cardAmount>0)await tx.unsafe("insert into payments (sale_id, method, amount) values ($1,'card',$2)", [sale.id,cardAmount]);
       await tx.unsafe(
         "insert into audit_logs (user_id, action, entity_type, entity_id, after_json) values ($1,'sale.completed','sale',$2,$3)",
-        [cashier.id, sale.id, JSON.stringify({ receiptNo, paymentMethod, subtotal,discount,total,customerId:body.customerId||null,salesOrderId,approvedBy,itemCount: lines.length })],
+        [cashier.id, sale.id, JSON.stringify({ receiptNo, paymentMethod, subtotal,discount,deliveryFee,total,customerId:body.customerId||null,salesOrderId,approvedBy,itemCount: lines.length })],
       );
-      return { saleId: sale.id, receiptNo, total, paymentMethod, createdAt: sale.created_at,receipt:{id:sale.id,receiptNo,total,subtotal,discount,status:"completed",createdAt:sale.created_at,cashier:cashier.full_name,buyerName:String(body.buyerName||"").trim(),paymentMethod,store:receiptStore,paymentDetails:[{method:"cash",amount:cashAmount},{method:"card",amount:cardAmount}].filter(p=>p.amount>0),items:lines.map(line=>({code:line.sku,name:line.name,optionLabel:line.optionLabel,quantity:line.quantity,unitPrice:line.price,lineTotal:line.total}))} };
+      return { saleId: sale.id, receiptNo, total, deliveryFee, paymentMethod, createdAt: sale.created_at,receipt:{id:sale.id,receiptNo,total,subtotal,discount,deliveryFee,status:"completed",createdAt:sale.created_at,cashier:cashier.full_name,buyerName:String(body.buyerName||"").trim(),paymentMethod,store:receiptStore,paymentDetails:[{method:"cash",amount:cashAmount},{method:"card",amount:cardAmount}].filter(p=>p.amount>0),items:lines.map(line=>({code:line.sku,name:line.name,optionLabel:line.optionLabel,quantity:line.quantity,unitPrice:line.price,lineTotal:line.total}))} };
     });
 
     return NextResponse.json(result, { status: 201 });

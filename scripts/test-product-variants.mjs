@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import ts from 'typescript';
+const js=ts.transpileModule(await readFile('lib/commerce.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2020}}).outputText;
+const {productVariantPath,productOptionFromQuery,productVariantSearchParams,productOptionLabel,productVariantSlug}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+const option=(id,label,size='',color='',kind='',attributes={})=>({id,label,size,color,kind,attributes,price:null});
+const product={id:'product-id',code:'123456',name:'Dəmir sac 2 30sm',options:[option('first','30 sm · Qara','30 sm','Qara'),option('second','40 sm · Qırmızı','40 sm','Qırmızı')]};
+const query=path=>new URL(path,'https://restamarket.az').searchParams;
+assert.equal(productVariantPath(product,product.options[0]),'/mehsullar/demir-sac-2-30sm/123456?olcu=30-sm&reng=qara');
+assert.equal(productOptionLabel(product.options[0]),'30 sm · Qara','Size and colour are not repeated below the label');
+assert.equal(productOptionLabel(option('unit','30sm · Qara','30 sm','Qara')),'30sm · Qara','Common unit spacing cannot duplicate the label');
+assert.equal(productOptionLabel(option('custom','Premium','50 sm','Qara')),'Premium · 50 sm · Qara','Explicit names still show otherwise missing choice dimensions');
+assert.equal(productOptionFromQuery(product,query(productVariantPath(product,product.options[1])))?.id,'second');
+assert.equal(productOptionFromQuery(product,new URLSearchParams('variant=first'))?.id,'first','Existing shared UUID links remain valid');
+for(const params of ['','variant=unknown','olcu=90-sm','olcu=30-sm&reng=qirmizi','olcu=30-sm&variant=second','olcu=30-sm&olcu=40-sm'])assert.equal(productOptionFromQuery(product,new URLSearchParams(params)),undefined,'No silent fallback for '+params);
+assert.equal(productVariantSearchParams({olcu:['30-sm','40-sm'],reng:'qara',tracking:'ignored'}).toString(),'olcu=30-sm&olcu=40-sm&reng=qara');
+const custom={...product,options:[option('a','30 sm','30 sm','Qara','Dəmir',{'Qalınlıq':'2 mm'}),option('b','30 sm ağır','30 sm','Qara','Dəmir',{'Qalınlıq':'3 mm'})]};
+assert.equal(productOptionFromQuery(custom,new URLSearchParams('olcu=30-sm&reng=qara&nov=demir')),undefined,'Ambiguous dimensions require an exact custom choice');
+for(const choice of custom.options){const path=productVariantPath(custom,choice);assert.match(path,/secim=/);assert.doesNotMatch(path,/variant=/);assert.equal(productOptionFromQuery(custom,query(path))?.id,choice.id);}
+const collision={...product,options:[option('different-a','Əla'),option('different-b','Ela')]};
+assert.notEqual(productVariantPath(collision,collision.options[0]),productVariantPath(collision,collision.options[1]),'Readable slug collisions still have unique URLs');
+for(const choice of collision.options)assert.equal(productOptionFromQuery(collision,query(productVariantPath(collision,choice)))?.id,choice.id);
+const international={...product,options:[option('ru','Большой красный','','Красный'),option('cn','蓝色','','蓝色'),option('emoji','🔥')]};
+for(const choice of international.options)assert.equal(productOptionFromQuery(international,query(productVariantPath(international,choice)))?.id,choice.id);
+assert.equal(productVariantSlug('40 SM / Qırmızı'),'40-sm-qirmizi');
+// Selection is derived from each history URL, not from a one-time initial useState.
+const history=['',productVariantPath(product,product.options[0]),productVariantPath(product,product.options[1])];
+assert.deepEqual([2,1,0,1,2].map(index=>productOptionFromQuery(product,query(history[index]||'/mehsullar/test'))?.id),['second','first',undefined,'first','second']);
+const view=await readFile('app/product-view.tsx','utf8');assert.match(view,/useSearchParams\(\)/);assert.match(view,/window\.history\.pushState/);assert.ok(!view.includes('setOptionId'));assert.ok(!view.includes('optionDetails(option)'));assert.ok(view.includes('href={productVariantPath(product,option)}'));
+console.log('PASS: readable variant URLs, exact deep links, legacy UUID compatibility, ambiguous/custom/international choices, label deduplication, URL-driven history and price-free crawlable chips.');

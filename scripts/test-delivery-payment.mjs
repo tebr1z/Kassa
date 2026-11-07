@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {createRequire} from 'node:module';
+import {pathToFileURL} from 'node:url';
+import ts from 'typescript';
+const source=await readFile('lib/desktop-sync.ts','utf8');
+const schemaSource=source.slice(source.indexOf('const amount ='),source.indexOf('export type RemoteOrder'));
+const require=createRequire(import.meta.url),zodUrl=pathToFileURL(require.resolve('zod')).href;
+const js=ts.transpileModule('import {z} from '+JSON.stringify(zodUrl)+';\n'+schemaSource,{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText;
+const {remoteOrderSchema}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+const legacy={id:'a5be99a9-7600-4878-a737-68fa30e07b74',order_no:'WEB-1',status:'ready',fulfillment:'delivery',delivery_address:'Bakı',delivery_stage:'ready',total:'40.00',coupon_discount:'0',note:null,full_name:'Alıcı',phone:null,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),items:[{sku:'QA',name:'Qazan',option_snapshot:null,quantity:'1',unit_price:'40',line_total:'40'}]};
+const parsed=remoteOrderSchema.parse(legacy);assert.equal(parsed.delivery_fee,0);assert.equal(parsed.distance_meters,null);assert.equal(parsed.delivery_lat,null);assert.equal(parsed.delivery_lng,null);assert.equal(parsed.delivery_pricing,'manual');
+const charged=remoteOrderSchema.parse({...legacy,total:'47.25',delivery_fee:'7.25',distance_meters:12345,delivery_lat:40.4,delivery_lng:49.8,delivery_pricing:'distance'});assert.equal(charged.delivery_fee,7.25);assert.equal(charged.total,47.25);assert.equal(charged.items[0].line_total,40);
+for(const field of [{delivery_fee:-1},{delivery_fee:'NaN'},{distance_meters:-1},{delivery_lat:91},{delivery_lng:181},{delivery_pricing:'unknown'},{total:47.25},{delivery_fee:7.25},{coupon_discount:41},{fulfillment:'pickup',delivery_fee:7.25,total:47.25}])assert.equal(remoteOrderSchema.safeParse({...legacy,...field}).success,false);
+const sale=await readFile('app/api/sales/route.ts','utf8'),pos=await readFile('app/admin/page.tsx','utf8'),receipt=await readFile('app/admin/thermal-receipt.tsx','utf8'),mapping=await readFile('lib/receipt-query.ts','utf8');
+assert.match(sale,/Number\(linkedOrder\?\.delivery_fee\?\?0\)/);assert.ok(sale.includes('subtotal-discount+deliveryFee'));assert.ok(sale.includes('subtotal,discount,deliveryFee,status:'));assert.ok(pos.includes('subtotal-discount+deliveryFee'));assert.ok(pos.includes('Number(incomingOrder.deliveryFee||0)-Number(incomingOrder.total)'));assert.ok(receipt.includes('sale.deliveryFee'));assert.ok(mapping.includes('s.delivery_fee'));
+const feed=await readFile('app/api/desktop-feed/route.ts','utf8');assert.ok(source.includes("'X-Restamarket-Delivery':'1'"));assert.ok(source.includes('response.status===409'));assert.ok(feed.includes("request.headers.get('x-restamarket-delivery')!=='1'&&rows.some(row=>Number(row.delivery_fee)>0)"));assert.ok(feed.indexOf('status:409')<feed.indexOf('const last=rows.at(-1)'),'An incompatible client cannot advance past a charged order');
+console.log('PASS: old desktop payload defaults, delivery quote metadata, non-negative fee/coordinate validation, authoritative POS fee and separate receipt charge.');

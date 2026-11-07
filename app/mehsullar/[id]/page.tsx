@@ -1,9 +1,11 @@
 import {notFound,permanentRedirect} from 'next/navigation';
-import {productPath} from '@/lib/commerce';
-import {findProductById} from '@/lib/product-route';
+import {productPath,productVariantPath,productOptionFromQuery,productVariantSearchParams,type ProductVariantQuery} from '@/lib/commerce';
+import {findProductById,findProductBySlug} from '@/lib/product-route';
 export const dynamic='force-dynamic';
-export default async function ProductIdPage({params}:{params:Promise<{id:string}>}){
- const product=await findProductById((await params).id);
+export default async function ProductIdPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<ProductVariantQuery>}){
+ const {id}=await params;
+ const product=await findProductById(id)||await findProductBySlug(id);
  if(!product||!product.code)notFound();
- permanentRedirect(productPath(product));
+ const selected=productOptionFromQuery(product,productVariantSearchParams(await searchParams));
+ permanentRedirect(selected?productVariantPath(product,selected):productPath(product));
 }
