@@ -55,6 +55,17 @@ export async function proxy(request:NextRequest){
  // Do not reveal the unlisted replacement with a legacy redirect, even to a
  // signed-in user. The legacy page modules independently return notFound too.
  if(path==='/admin'||path.startsWith('/admin/'))return new NextResponse('Səhifə tapılmadı.',{status:404,headers:{'Cache-Control':'private, no-store','X-Robots-Tag':'noindex, nofollow, noarchive','X-Content-Type-Options':'nosniff'}});
+ // The legal document has its own public trailing-slash canonical, independent
+ // of product URLs and the slashless staff/API policy below.
+ if(path==='/istifadeci-sertleri'){
+  const target=new URL(request.url);target.pathname='/istifadeci-sertleri/';
+  return NextResponse.redirect(target,308);
+ }
+ if(path==='/istifadeci-sertleri/'){
+  const headers=new Headers(request.headers);
+  headers.delete('x-birkassa-user-id');headers.delete('x-birkassa-role');
+  return NextResponse.next({request:{headers}});
+ }
  const productDetail=/^\/(?:mehsullar|products)\/.+/.test(path);
  if(!productDetail&&path!=='/'&&path.endsWith('/')){
   const target=new URL(request.url);target.pathname=path.replace(/\/+$/,'');
@@ -107,4 +118,4 @@ export async function proxy(request:NextRequest){
 }
 
 // Matcher paths must be literals for Next.js build-time analysis.
-export const config={matcher:["/api/:path*","/admin/:path*","/heyet-g7m4q9x2k8/:path*","/mehsullar/:path*","/products/:path*","/account/:path*","/categories/:path*","/sizin-ucun/:path*"]};
+export const config={matcher:["/api/:path*","/admin/:path*","/heyet-g7m4q9x2k8/:path*","/mehsullar/:path*","/products/:path*","/account/:path*","/categories/:path*","/sizin-ucun/:path*","/istifadeci-sertleri/:path*"]};

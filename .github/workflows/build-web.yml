@@ -33,6 +33,8 @@ jobs:
       - run: node scripts/test-finance.mjs
       - run: node scripts/test-staff-onboarding.mjs
       - run: node scripts/test-google-address.mjs
+      - run: node scripts/test-terms-content.mjs
+      - run: node scripts/test-terms-ui.mjs
       - run: node scripts/test-delivery-payment.mjs
       - run: node scripts/test-delivery.mjs
       - run: node scripts/test-account-ui.mjs

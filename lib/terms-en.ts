@@ -1,0 +1,98 @@
+import type {TermsContent} from './terms-types';
+
+export const termsEn:TermsContent={
+ title:'Terms of use',
+ version:'2026-11-07.1',status:'published',updatedDate:'7 November 2026',
+ intro:[
+  'These terms explain the rules for using the RestaMarket website, selecting products, placing online orders, receiving goods, making payments and submitting enquiries. Their purpose is to clarify the conditions of a purchase in advance and help prevent incorrect orders and unfounded disputes.',
+  'This text must be considered together with the applicable legislation of the Republic of Azerbaijan. Mandatory statutory rights take precedence over these terms. Opening this page or browsing the website does not constitute separate consent to marketing, location access or unrestricted use of personal data.',
+ ],
+ sections:[
+  {id:'magaza-elaqe',title:'Shop and contact details',paragraphs:[
+   'Shop name: RestaMarket. Contact telephone and WhatsApp: +994 70 232 80 80. Shop address: Abşeron Trade Centre, Abşeron Mall, row 1, building 6, shop 4.',
+   'When contacting us about an order, collection or delivery, an exchange, a defect or your data, provide your order number, the product name and your contact number. Before sending a product back, confirm the receiving address and method with the shop. This coordination does not extend statutory claim periods or remove your rights.',
+  ]},
+  {id:'tetbiq-dairesi',title:'Scope of the terms and purpose of the purchase',paragraphs:[
+   'The website is used to present and order restaurant, kitchen and other supplies. You must place orders on your own behalf or have authority to act on behalf of the person or organisation you represent.',
+   'The legal rules for purchases for personal needs may differ from those for commercial activities, resale or business supplies. Rights and obligations are determined by the buyer’s actual status and the law; merely labelling a purchase “wholesale” or the purchaser a “business buyer” does not remove mandatory rights for purchases for personal needs. Special wholesale prices, manufacturing, installation or ongoing supply arrangements must be agreed separately in writing.',
+  ]},
+  {id:'mehsul-secimi',title:'Product information, colour, size and suitability',paragraphs:[
+   'Before ordering, check the product name, code, intended purpose, description, included items and selected variant. If a colour, size, thickness or type must be selected, add the exact combination you want to your basket. Where a variant has its own price, that price may differ from the base product price.',
+   'Props and decorations shown in photographs are included in the sale only if the product description states that they are part of the set. Screen settings and lighting may affect how a colour appears, but this does not justify an actual product failing to match the agreed colour or specifications. If dimensions, material or the intended place of use are important, clarify them before ordering. Obtain written confirmation of technical compatibility, electrical and gas connections, installation and any special use.',
+  ]},
+  {id:'hesab-tehlukesizliyi',title:'Your account and accuracy of information',paragraphs:[
+   'You must sign in to your account to place an online order. Enter your name, telephone number, address and collection or delivery details accurately, and do not share your account password with third parties. You must not enter another person’s details without permission or impersonate someone else. Notify the shop as soon as possible if you suspect unauthorised use of your account.',
+   'The shop may contact you to clarify missing information. If you cannot be reached or the address is unclear, collection or delivery planning may be paused until the details are clarified. Any charge for an additional service or repeat delivery must be disclosed and agreed in advance; incorrect information does not automatically justify a penalty.',
+  ]},
+  {id:'sifaris-tesdiqi',title:'Order steps and confirmation',bullets:[
+   'Select the product and, where applicable, the exact variant, then check the quantity in your basket.',
+   'Choose collection from the shop or delivery, and enter your contact and address details.',
+   'On the final review screen, check the products, variants, prices, coupon and collection or delivery conditions. You can correct an error before sending your order.',
+   'Only the “Confirm order” button sends your order. Selecting a collection or delivery method or moving to the next screen does not itself send an order.',
+  ],paragraphs:[
+   'An automatically issued order number means that the request has been recorded in the system; it does not by itself confirm receipt of payment, reserve stock or guarantee a specific delivery time. The shop clarifies product availability and collection or delivery arrangements. Whether a contract has been concluded is determined by the law and the content of the parties’ specific offers and confirmations; a technical acknowledgement of receipt is not the same as confirmation of a sale.',
+   'Your order history and status appear in the “My orders” section of your account. Contact the shop to request changes after ordering; provide the existing order number instead of simply creating another order. If a connection error occurs, check the outcome of the previous order to avoid placing a duplicate.',
+  ]},
+  {id:'qiymet-endirim',title:'Prices, discounts and technical errors',paragraphs:[
+   'Prices are shown in Azerbaijani manat. Where a discount applies, the previous and current prices are shown, together with the discount percentage where possible. The coupon’s expiry date, minimum amount, usage limit and other disclosed conditions apply. A variant with its own separate price does not automatically receive the base product discount as an additional discount; check the final price shown for the selection and in your basket.',
+   'The product price and delivery charge are separate. The final amount payable, including applicable taxes and agreed additional services, must be clarified before the purchase. When an order is sent, the server checks the price and coupon again. If they have changed, do not assume that the order will be completed at the previous amount without reviewing the updated total.',
+   'If an obvious typographical, calculation or catalogue error is discovered, the shop may explain it and provide the correct information. A new price is not automatically applied to a contract that has already been concluded without the buyer’s agreement. If no agreement is reached, the matter is resolved according to the law and the status of the contract; a substitute product or compulsory store credit is not imposed unilaterally.',
+  ]},
+  {id:'odenis-sened',title:'Payment and purchase documents',paragraphs:[
+   'The main payment arrangement presented on the website is payment when the goods are received. Confirm with the shop whether cash, card or another method is available for your particular order. The website does not currently accept online card payments; an order number is not confirmation of a bank payment. Do not send your card PIN, CVV or one-time banking password to a shop employee or in messages.',
+   'Keep the purchase and payment document, order confirmation and any warranty document for the product. If you require an invoice for a legal entity, buyer details or special documents, notify the shop in advance. Requests concerning incorrect details or a lost document are considered according to the law and the evidence of purchase.',
+  ]},
+  {id:'tehvil-catdirilma',title:'Collection from the shop and delivery',paragraphs:[
+   'For collection, wait for the shop to confirm that the product is ready and clarify when to come. For delivery, the availability of the service, delivery address and time, and whether additional lifting, unloading or installation services are provided must be agreed in advance. Unless expressly stated, these services are not automatically included in the product price.',
+   'In manual confirmation mode, the amount in the basket covers the products only; the delivery charge is agreed separately with the shop. If per-kilometre mode is active, the charge is calculated using driving distance and cannot be lower than the configured minimum delivery fee. The minimum order threshold applies to the product amount after coupon discounts; the delivery charge does not count towards that threshold.',
+   'An automatic distance quote is valid for 10 minutes and must be refreshed if the address, map point or settings change. No hidden additional charge is added to a confirmed order without the customer’s agreement. Unless the parties agree on another period, an electronic order must be fulfilled no later than 30 days from the date it is sent. If the product cannot be supplied because it is unavailable, the buyer is informed and any amount paid in advance is returned within 7 days.',
+  ]},
+  {id:'qebul-yoxlama',title:'Checking goods when receiving them',paragraphs:[
+   'When receiving the goods, check their quantity, code, size, colour, completeness and any visible damage as far as reasonably possible. Record any discrepancy in the document or in your enquiry to the shop; photographs and video may help an investigation, but the absence of a video does not mean that every claim is automatically rejected.',
+   'Signing a handover document does not waive mandatory statutory rights concerning hidden defects, safety problems or other matters. Promptly reporting a visible problem is recommended; these terms do not impose an artificial 24-hour deadline for all defects.',
+  ]},
+  {id:'legv-imtina',title:'Changing an order and withdrawing from an electronic contract',paragraphs:[
+   'To change or stop an order, contact the shop and provide the order number. Signing out, closing the browser or removing a product from the basket does not automatically cancel an order that has already been sent. Where a product is being prepared or has been dispatched, both the actual circumstances and statutory rights are taken into account.',
+   'Where Article 9 of the Law “On Electronic Commerce” applies, the buyer may, subject to statutory exceptions, withdraw from performance of the contract within 7 working days without giving a reason or paying a penalty. The start of the period is calculated according to the rules on concluding the contract and providing the confirmation information required by law, including Articles 9.2–9.3; no general rule is stated that it always begins on the day of delivery.',
+   'For a withdrawal under Article 9.4 of that Law, the amount paid is returned within 7 days without an additional charge; only return transport costs permitted by law may be taken into account. No additional “penalty”, “restocking fee” or compulsory store credit is imposed. These periods and costs do not restrict separate rights relating to defective goods.',
+  ]},
+  {id:'deyisdirme-qusur',title:'Exchanges, returns and defective goods',paragraphs:[
+   'Where non-food goods of proper quality purchased for personal needs are unsuitable for a reason specified by law, the right to exchange them within 14 days, calculated from the date the goods are physically received and excluding the day of receipt, is taken into account. Whether the goods are unused, their appearance and properties, preservation of seals and labels, evidence of purchase and the statutory list of exceptions are taken into account. If a suitable replacement is unavailable, the other options provided by law and the right to a refund remain available.',
+   'This is not an unconditional guarantee that all goods may be used for 14 days and then returned. For example, plastic articles intended for food may fall within a statutory exception to exchange; there is no blanket ban covering all metal, glass, porcelain and kitchen goods. An exchange exception does not automatically remove all rights to withdraw from an electronic contract or make a defect claim.',
+   'Claims concerning defective, incomplete or incorrectly supplied goods, including repair, replacement, a price reduction, reimbursement of expenses or termination of the contract, are assessed under the conditions prescribed by law. Selling an item at a discount does not remove claims concerning a defect that was not clearly agreed in advance. Investigation costs and transport costs that the seller must bear by law are not generally passed on to the buyer.',
+  ]},
+  {id:'ferdi-istehsal',title:'Made-to-order and specially customised products',paragraphs:[
+   'Manufacturing to individual measurements, cutting, welding, special painting and other customisation are included in an order only when the technical requirements, price and timeframe are separately confirmed. Selecting a colour or size button in the standard catalogue does not by itself mean that a product is made to order.',
+   'A statutory exception to withdrawal may apply to goods that cannot be returned because they have been manufactured or customised to special requirements, and in other cases provided by law. The exception and its reason must be clearly explained to the buyer in advance; this does not remove liability for defective manufacturing or failure to meet the agreed specifications.',
+  ]},
+  {id:'zemanet-istifade',title:'Warranty, correct use and safety',paragraphs:[
+   'Where a separate warranty is provided for a product, its duration, provider and service procedure are stated in the product document or confirmation. These terms do not promise a single additional warranty period for all goods; statutory rights concerning defects and safety remain unaffected.',
+   'Follow the manufacturer’s instructions, load and temperature limits, and cleaning and storage rules. Electrical, gas and professional equipment must be installed by a suitable specialist and operated in accordance with safety rules. When assessing damage caused by unauthorised modifications, incorrect connections or use outside the intended purpose, causation and evidence are considered; not every defect is automatically attributed to the buyer.',
+  ]},
+  {id:'melumat-mexfilik',title:'Account information, maps and privacy',paragraphs:[
+   'For accounts, orders and support, we may process names, telephone numbers, email addresses, protected password hashes, addresses, coordinates of selected locations, and order and correspondence information. The purposes are account management, arranging orders and collection or delivery, providing support, ensuring security and maintaining legally required records. Do not send unnecessary sensitive documents, banking passwords or third-party information.',
+   'When Google maps and address search are used, search and location information may be transmitted to Google; coordinates are sent to a routing service to calculate distance. The account address feature may use OpenStreetMap, Nominatim and the provider of the map library. Product images may be loaded from external media services. Opening WhatsApp links and enabled WhatsApp/Vexira order notifications may involve processing by separate service providers. We do not promise that information will never leave the country or be transmitted to any provider; such processing must have a separate lawful basis and applicable safeguards.',
+   'Essential login cookies and browser storage are used for language preferences, the basket and recovery of an unfinished order. Signing out does not delete orders, correspondence or records that must legally be retained. On a public computer, sign out and clear browser storage. You may contact the shop to request access to or correction of your information and, to the extent permitted by law, cessation of processing and deletion. Advertising and processing that require additional consent are not automatically authorised by opening this page.',
+  ]},
+  {id:'sui-istifade-huquqlar',title:'Proper website use and content rights',paragraphs:[
+   'Fake orders, automated bulk requests, attempts to access another person’s account, misuse of payment and coupon rules, malicious files and unlawful content are prohibited. Where there is a substantiated security risk, the shop may temporarily restrict access and refer an order for additional checks. These measures do not justify retaining money improperly or refusing to investigate a legitimate enquiry.',
+   'Commercial use of logos, text, photographs and other content belonging to RestaMarket may require the rights holder’s permission. Rights in third-party marks and materials belong to their respective owners. This provision does not prohibit lawful personal use or keeping information as evidence of a purchase or for a complaint.',
+  ]},
+  {id:'mesuliyyet-deyisiklik',title:'Delays, liability and updates to the terms',paragraphs:[
+   'If a technical failure, transport restriction or event outside the parties’ control occurs, the shop seeks to reduce its impact and provide information about the order. A delay does not automatically remove all liability in every case. Questions of performance, cancellation and refunds are resolved according to the cause of the event, the agreement and the law.',
+   'These terms do not remove mandatory rights concerning intentional misconduct, conduct for which liability cannot legally be excluded, harm to life or health, or unsafe or defective goods. No blanket condition that “the shop is not responsible for anything” is applied to remove statutory obligations.',
+   'An updated text may be published on the website with its revision date and version. Later changes do not retroactively alter an earlier order’s agreed price or statutory rights. You may keep your order confirmation and a copy of the applicable terms.',
+  ]},
+  {id:'muraciet-mubahise',title:'Enquiries and dispute resolution',paragraphs:[
+   'First contact us on +994 70 232 80 80, at the stated shop address, through the website contact form or through the support section in your account. Provide evidence of the order and purchase, your request and a description of the matter; reasonable additional information may be requested where necessary for an investigation. Keep a copy of the correspondence.',
+   'If no agreement is reached, the buyer retains the right to approach the competent public authorities and courts. These terms do not impose a mandatory prior settlement, a single court chosen by the shop or a general waiver of statutory rights. Disputes are considered under the applicable legislation of the Republic of Azerbaijan and mandatory rules on jurisdiction.',
+  ]},
+ ],
+ sources:[
+  {label:'Law “On Electronic Commerce”',href:'https://frameworks.e-qanun.az/10/f_10406.html'},
+  {label:'Law “On Protection of Consumer Rights”',href:'https://frameworks.e-qanun.az/9/f_9479.html'},
+  {label:'Civil Code of the Republic of Azerbaijan',href:'https://frameworks.e-qanun.az/46/f_46944.html'},
+  {label:'Decision No. 114 on goods not subject to exchange',href:'https://frameworks.e-qanun.az/3/f_3724.html'},
+  {label:'Law “On Personal Data”',href:'https://frameworks.e-qanun.az/19/f_19675.html'},
+ ],
+};

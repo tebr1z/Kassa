@@ -28,7 +28,7 @@
 .language-menu-footer>span:first-child{width:5px;height:5px;border-radius:50%;background:#358350;flex-shrink:0}
 .language-menu-footer strong{font-weight:600;color:#355e40}
 .language-utility{display:flex;justify-content:flex-end;padding:10px 5%;background:#f8faf8;border-bottom:1px solid #e4ebe5}
-body:has(.storefront,.account,.app-shell,.auth-page,.auth-loading) .language-utility{display:none}
+body:has(.storefront,.account,.app-shell,.auth-page,.auth-loading,.legal-page) .language-utility{display:none}
 .auth-language{position:absolute;right:24px;top:24px;z-index:2}
 .auth-page,.auth-loading{position:relative}
 @media(max-width:640px){.language-switcher>.language-switcher-trigger{min-width:76px;gap:6px;padding:6px 9px;min-height:44px}.language-current-name{display:none}.language-current-code{display:inline}.language-trigger-icon{width:20px;height:26px;background:transparent}.language-chevron{width:12px}.auth-language{right:16px;top:16px}.auth-page{padding-top:85px}}

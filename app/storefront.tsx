@@ -135,7 +135,7 @@ export default function Storefront({productId,categoryId,picksPage,catalogPage,i
   </>}
   <section id="contact" className="sf-contact"><div className="sf-contact-heading"><span className="sf-eyebrow">{t("ƏLAQƏ")}</span><h2>{t("Bir sualınız var?")}</h2><p>{t("Məhsul və sifarişlə bağlı sizə kömək edək.")}</p>{brand?.address&&<p className="sf-contact-detail"><MapPin size={18}/>{brand.address}</p>}{brand?.phone&&<a className="sf-phone" href={"tel:"+brand.phone.replace(/[^+0-9]/g,"")}>{brand.phone}</a>}</div><ContactBox whatsapp={brand?.whatsapp}/></section>
   </main>
-  <footer className="sf-footer"><strong>{brand?.name||t("Mağazamız")}</strong><nav><Link href="/mehsullar">{t("Məhsullar")}</Link><Link href="/#about">{t("Haqqımızda")}</Link><Link href="/account">{t("Sifarişlərim")}</Link></nav><span>© {new Date().getFullYear()} · {t("Rahat seçim, rahat sifariş.")}</span></footer>
+  <footer className="sf-footer"><strong>{brand?.name||t("Mağazamız")}</strong><nav><Link href="/mehsullar">{t("Məhsullar")}</Link><Link href="/#about">{t("Haqqımızda")}</Link><Link href="/account">{t("Sifarişlərim")}</Link><Link href="/istifadeci-sertleri/">{t("İstifadəçi şərtləri")}</Link></nav><span>© {new Date().getFullYear()} · {t("Rahat seçim, rahat sifariş.")}</span></footer>
   <WhatsAppButton whatsapp={brand?.whatsapp}/>
   {notice&&<div className="sf-toast" role="status"><Check size={17}/>{t(notice)}<button onClick={()=>{setOpen(true);setNotice("");}}>{t("Səbətə bax")}</button></div>}
   {optionProduct&&<OptionDialog product={optionProduct} onPick={id=>add(optionProduct.id,id)} onClose={()=>setOptionProduct(null)}/>}
