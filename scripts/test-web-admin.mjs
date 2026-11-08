@@ -33,7 +33,7 @@ try{
  const remoteStatus=await new Promise((resolve,reject)=>{const call=http.get(origin+'/api/auth',{headers:{Host:'shop.example'}},response=>{response.resume();resolve(response.statusCode);});call.on('error',reject);});
  assert.equal(remoteStatus,426,'Remote HTTP is not a loopback preview');
  const [admin]=await sql.unsafe("select id,branch_id from users where role='admin' limit 1");
- const privatePaths=['/api/products','/api/dashboard','/api/finance','/api/orders','/api/warehouses','/api/reports','/api/employees','/api/settings','/api/audit','/api/system?view=backups','/api/store-admin/commerce','/api/locations'];
+ const privatePaths=['/api/products','/api/dashboard','/api/finance','/api/orders','/api/warehouses','/api/reports','/api/employees','/api/settings','/api/audit','/api/system?view=backups','/api/store-admin/commerce','/api/locations','/api/admin/smtp','/api/store-admin/chat?view=summary'];
  for(const url of privatePaths)assert.equal((await request(url,{auth:false})).status,401,'No anonymous access: '+url);
  assert.equal((await request('/api/products',{auth:false,headers:{'x-birkassa-user-id':admin.id,'x-birkassa-role':'admin'}})).status,401,'Cannot forge identity headers');
  await verifyStaffPortalPolicy();
@@ -87,7 +87,7 @@ try{
  assert.equal((await request('/api/locations',{method:'POST',body:{action:'assign',userId:cashierId,branchId,warehouseId:originalWarehouse.id}})).status,409,'Warehouse must belong to the assigned store');
  await sql.unsafe("insert into stock_movements(product_id,warehouse_id,type,quantity,unit_cost,performed_by) values($1,$2,'receipt',7,21,$3)",[product.id,warehouseId,admin.id]);
  const cashierLogin=await request('/api/auth',{method:'POST',body:{action:'login',userId:cashierId,password}});assert.equal(cashierLogin.status,200,JSON.stringify(cashierLogin.data));assert.deepEqual(cashierLogin.data.user.permissions,['Satış / POS']);
- for(const endpoint of ['/api/finance','/api/locations','/api/store-admin/commerce','/api/employees'])assert.equal((await request(endpoint)).status,403,'Cashier is not an administrator: '+endpoint);
+ for(const endpoint of ['/api/finance','/api/locations','/api/store-admin/commerce','/api/employees','/api/admin/smtp','/api/store-admin/chat?summary=1'])assert.equal((await request(endpoint)).status,403,'Cashier is not an administrator: '+endpoint);
  const cashierProducts=(await request('/api/products')).data;assert.equal(cashierProducts.find(p=>p.id===product.id).stock,7);assert.equal(cashierProducts.find(p=>p.id===product.id).cost,0);assert.deepEqual(cashierProducts.find(p=>p.id===product.id).priceHistory,[]);assert.ok(!('editableOptions' in cashierProducts.find(p=>p.id===product.id)),'Cashier never receives private editable option costs');
  const cashierDashboard=(await request('/api/dashboard')).data;assert.equal(cashierDashboard.branchName,'İkinci mağaza');assert.deepEqual(cashierDashboard.recent,[]);
  assert.equal((await request('/api/store-admin/commerce',{method:'POST',body:{action:'delete-product',id:product.id,confirm:'SİL'}})).status,403);
@@ -198,6 +198,13 @@ try{
  assert.equal((await request('/api/auth',{method:'DELETE'})).status,200);
  console.log('PASS: optional/custom variants, atomic product creation, variant cost/receipt snapshots, honest discount pricing, two-store cashier stock isolation and permissions, open-shift assignment lock, salary plans/payroll and expense idempotency, net profit with historical COGS, archive deletion preserving receipts, CSRF/HTTPS/session protections and catalogue privacy.');
  if(process.argv.includes('--serve')){
+  const [careCustomer]=await sql.unsafe("insert into customers(full_name,phone) values('Müştəri dəstəyi UI sınağı','+994501234567') returning id");
+  const careSalt='isolated-care-fixture',careHash=careSalt+':'+scryptSync(password,careSalt,64).toString('hex');
+  const [careAccount]=await sql.unsafe("insert into customer_accounts(customer_id,email,password_hash) values($1,'care.ui@example.test',$2) returning id",[careCustomer.id,careHash]);
+  const [careTicket]=await sql.unsafe("insert into support_tickets(ticket_no,account_id,subject,kind) values(nextval('support_ticket_seq')::text,$1,'Məhsul seçimi barədə təklif','suggestion') returning id",[careAccount.id]);
+  await sql.unsafe("insert into support_ticket_messages(ticket_id,sender,body) values($1,'customer','Salam, məhsulları ölçü və rəngə görə seçmək istəyirəm.')",[careTicket.id]);
+  await sql.unsafe("insert into sales_orders(order_no,customer_id,account_id,total,source,fulfillment,created_by) values('UI-CARE-CANCEL',$1,$2,60,'catalog','pickup',$3)",[careCustomer.id,careAccount.id,admin.id]);
+  console.log('CUSTOMER CARE UI FIXTURE: isolated cancellation order UI-CARE-CANCEL and one unread/unanswered suggestion; SMTP disabled, no real email.');
   const [uiDelete]=await sql.unsafe("insert into products(sku,name,sale_price,cost_price) values('UI-DELETE-QA','UI silmə sınağı',50,20) returning id");
   const [uiBlocked]=await sql.unsafe("insert into products(sku,name,sale_price,cost_price) values('UI-DELETE-BLOCKED','UI silmə xətası sınağı',50,20) returning id");
   const [uiCustomer]=await sql.unsafe("insert into customers(full_name) values('İzolə edilmiş UI sınağı') returning id");

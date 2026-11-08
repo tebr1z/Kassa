@@ -2,7 +2,7 @@ import ts from 'typescript';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const keys=new Set();
-for(const file of ['lib/language.tsx','lib/storefront-translations.ts','lib/desktop-translations.ts','lib/account-ui-translations.ts']){
+for(const file of ['lib/language.tsx','lib/storefront-translations.ts','lib/desktop-translations.ts','lib/account-ui-translations.ts','lib/order-cancellation-translations.ts']){
  const source=await readFile(file,'utf8'),tree=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
  function scan(node){if(ts.isArrayLiteralExpression(node)&&node.elements.length===5&&node.elements.every(ts.isStringLiteral))keys.add(node.elements[0].text.toLocaleUpperCase('az'));ts.forEachChild(node,scan);}scan(tree);
  if(file.includes('desktop-translations'))for(const line of source.split('\n'))if(line.split('|').length===4)keys.add(line.split('|')[0].toLocaleUpperCase('az'));

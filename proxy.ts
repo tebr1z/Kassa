@@ -8,6 +8,7 @@ import {STAFF_PORTAL_PATH,isStaffPortalPath,canOpenStaffPage} from './lib/staff-
 
 type Rule={prefix:string;read:string[];write:string[]};
 const rules:Rule[]=[
+  {prefix:'/api/admin/smtp',read:['admin'],write:['admin']},
   {prefix:'/api/admin/delivery',read:['admin'],write:['admin']},
   {prefix:'/api/locations',read:['admin'],write:['admin']},
   {prefix:"/api/desktop-media",read:["admin","manager","cashier","warehouse","accountant"],write:[]},

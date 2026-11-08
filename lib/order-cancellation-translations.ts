@@ -1,0 +1,17 @@
+export const orderCancellationTranslations:[string,string,string,string,string][]=[
+ ['Ləğv səbəbi','Причина отмены','Cancellation reason','İptal nedeni','取消原因'],
+ ['Sifarişi ləğv etmək istəyirsiniz?','Отменить заказ?','Cancel this order?','Bu siparişi iptal etmek istiyor musunuz?','确定取消此订单吗？'],
+ ['Səbəb müştərinin sifariş tarixçəsində görünəcək. E-poçt bildirişi aktivdirsə, müştəriyə göndəriləcək.','Причина будет видна покупателю в истории заказов. Если уведомления по электронной почте включены, покупатель получит письмо.','The customer will see the reason in order history. An email will be sent if email notifications are enabled.','Müşteri nedeni sipariş geçmişinde görecek. E-posta bildirimleri etkinse müşteriye e-posta gönderilecek.','客户将在订单记录中看到原因。若已启用邮件通知，系统将向客户发送邮件。'],
+ ['Məsələn: Seçilən məhsul hazırda stokda yoxdur.','Например: выбранного товара сейчас нет в наличии.','For example: The selected product is currently out of stock.','Örneğin: Seçilen ürün şu anda stokta yok.','例如：所选商品目前缺货。'],
+ ['Ləğv səbəbini aydın yazın (5–500 simvol).','Укажите понятную причину отмены (5–500 символов).','Enter a clear cancellation reason (5–500 characters).','Açık bir iptal nedeni yazın (5–500 karakter).','请填写明确的取消原因（5–500个字符）。'],
+ ['Bəli, sifarişi ləğv et','Да, отменить заказ','Yes, cancel order','Evet, siparişi iptal et','是，取消订单'],
+ ['Ləğv edilir…','Отмена…','Cancelling…','İptal ediliyor…','正在取消…'],
+ ['Sifariş ləğv edilmədi. Bağlantını yoxlayıb yenidən cəhd edin.','Заказ не отменён. Проверьте соединение и повторите попытку.','The order was not cancelled. Check your connection and try again.','Sipariş iptal edilemedi. Bağlantınızı kontrol edip tekrar deneyin.','订单未取消。请检查连接后重试。'],
+ ['Mağazanın ləğv səbəbi','Причина отмены магазином','Store cancellation reason','Mağazanın iptal nedeni','商家取消原因'],
+ ['Bu köhnə sifariş üçün ləğv səbəbi qeyd edilməyib.','Для этого старого заказа причина отмены не была записана.','No cancellation reason was recorded for this older order.','Bu eski sipariş için iptal nedeni kaydedilmemiş.','此历史订单未记录取消原因。'],
+ ['Sifariş artıq bağlanıb','Заказ уже закрыт','This order is already closed','Bu sipariş zaten kapatılmış','此订单已关闭'],
+ ['Sifarişin ləğv səbəbi artıq saxlanılıb və dəyişdirilə bilməz.','Причина отмены уже сохранена и не может быть изменена.','The cancellation reason has already been saved and cannot be changed.','İptal nedeni zaten kaydedilmiş ve değiştirilemez.','取消原因已保存，无法更改。'],
+ ['Geri qayıt','Назад','Go back','Geri dön','返回'],
+ ['Ləğv üçün menecer səlahiyyəti lazımdır','Для отмены требуются права менеджера','Manager permission is required to cancel','İptal için yönetici yetkisi gerekir','取消订单需要经理权限'],
+ ['Bu sifariş kassada ödənilib. Ləğv üçün çekdən qaytarın.','Этот заказ оплачен на кассе. Для отмены оформите возврат по чеку.','This order has been paid at the till. Process a receipt return to reverse it.','Bu sipariş kasada ödenmiş. İptal için fiş üzerinden iade işlemi yapın.','此订单已在收银台付款。请通过收据办理退货。'],
+];

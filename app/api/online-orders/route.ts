@@ -1,20 +1,29 @@
 import {withAdminSession} from '@/lib/require-admin';
 import {storeDb} from "@/lib/store-db";
 import {z} from "zod";
+import {isOrderCancellationReason,normalizeOrderCancellationReason,orderCancellationReasonError,orderCancellationEmail,type OrderCancellationNotification} from '@/lib/order-cancellation';
+import {notifyCustomerEmail} from '@/lib/smtp-mail';
 export const dynamic="force-dynamic";
 async function handleGET(request:Request){
  const sql=storeDb();try{
- const rows=await sql.unsafe("select o.id,o.order_no,o.status,o.fulfillment,o.delivery_address,o.delivery_stage,o.total,o.delivery_fee,o.distance_meters,o.delivery_pricing,o.coupon_code,o.coupon_discount,o.note,o.created_at,coalesce(o.customer_name_snapshot,c.full_name) full_name,coalesce(o.customer_phone_snapshot,c.phone) phone,(select json_agg(json_build_object('name',coalesce(i.product_name_snapshot,p.name)||case when i.option_snapshot is not null then ' · '||i.option_snapshot else '' end,'quantity',i.quantity)) from sales_order_items i join products p on p.id=i.product_id where i.sales_order_id=o.id) items from sales_orders o join customers c on c.id=o.customer_id where o.source='catalog' order by o.created_at desc limit 200");
+ const rows=await sql.unsafe("select o.id,o.order_no,o.status,o.cancellation_reason,o.cancelled_at,o.fulfillment,o.delivery_address,o.delivery_stage,o.total,o.delivery_fee,o.distance_meters,o.delivery_pricing,o.coupon_code,o.coupon_discount,o.note,o.created_at,coalesce(o.customer_name_snapshot,c.full_name) full_name,coalesce(o.customer_phone_snapshot,c.phone) phone,(select json_agg(json_build_object('name',coalesce(i.product_name_snapshot,p.name)||case when i.option_snapshot is not null then ' · '||i.option_snapshot else '' end,'quantity',i.quantity)) from sales_order_items i join products p on p.id=i.product_id where i.sales_order_id=o.id) items from sales_orders o join customers c on c.id=o.customer_id where o.source='catalog' order by o.created_at desc limit 200");
  return Response.json({rows,canManage:true,canCancel:request.headers.get('x-birkassa-role')!=='online_assistant'});
  }finally{await sql.end()}
 }
 async function handlePATCH(request:Request){
- const b=z.object({id:z.string().uuid(),status:z.enum(['preparing','ready','dispatched','delivered','completed','cancelled'])}).safeParse(await request.json().catch(()=>null));
+ const b=z.object({id:z.string().uuid(),status:z.enum(['preparing','ready','dispatched','delivered','completed','cancelled']),cancellationReason:z.string().max(2000).optional()}).safeParse(await request.json().catch(()=>null));
  if(!b.success)return Response.json({error:'Yanlış sorğu'},{status:400});
  if(b.data.status==='cancelled'&&request.headers.get('x-birkassa-role')==='online_assistant')return Response.json({error:'Ləğv üçün menecer səlahiyyəti lazımdır'},{status:403});
+ if(b.data.status==='cancelled'&&!isOrderCancellationReason(b.data.cancellationReason))return Response.json({error:orderCancellationReasonError},{status:400});
+ const reason=b.data.status==='cancelled'?normalizeOrderCancellationReason(b.data.cancellationReason!):null;
+ let notification:OrderCancellationNotification|undefined;
  const sql=storeDb();try{const ok=await sql.begin(async tx=>{
- const [row]=await tx.unsafe("select id,status,fulfillment,delivery_stage from sales_orders where id=$1 and source='catalog' for update",[b.data.id]);
+ const [row]=await tx.unsafe("select id,order_no,status,cancellation_reason,account_id,fulfillment,delivery_stage from sales_orders where id=$1 and source='catalog' for update",[b.data.id]);
  if(!row)return false;
+ if(row.status==='cancelled'&&b.data.status==='cancelled'){
+  if(row.cancellation_reason===reason)return true;
+  throw new Error('Sifarişin ləğv səbəbi artıq saxlanılıb və dəyişdirilə bilməz.');
+ }
  if(b.data.status==='completed'){if(row.status!=='ready')return false;}
  else if(b.data.status==='cancelled'){
   if(!['pending','ready','completed'].includes(row.status))return false;
@@ -25,10 +34,13 @@ async function handlePATCH(request:Request){
   const transitions:Record<string,string[]>={received:['preparing'],preparing:['ready'],ready:row.fulfillment==='delivery'?['dispatched']:[],dispatched:['delivered']};
   if(!transitions[row.delivery_stage]?.includes(b.data.status))return false;
  }
- await tx.unsafe("update sales_orders set status=case when $1='cancelled' then 'cancelled' when $1='completed' then 'completed' when $1 in ('ready','dispatched','delivered') then 'ready' else status end,delivery_stage=case when $1 in ('cancelled','completed') then delivery_stage else $1 end,updated_at=now() where id=$2",[b.data.status,row.id]);
- await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,before_json,after_json) values($1,'order.online_updated','sales_order',$2,$3,$4)",[request.headers.get('x-birkassa-user-id'),row.id,JSON.stringify({status:row.status}),JSON.stringify({status:b.data.status})]);return true});
+ await tx.unsafe("update sales_orders set status=case when $1='cancelled' then 'cancelled' when $1='completed' then 'completed' when $1 in ('ready','dispatched','delivered') then 'ready' else status end,delivery_stage=case when $1 in ('cancelled','completed') then delivery_stage else $1 end,cancellation_reason=case when $1='cancelled' then $3 else cancellation_reason end,cancelled_at=case when $1='cancelled' then now() else cancelled_at end,updated_at=now() where id=$2",[b.data.status,row.id,reason]);
+ await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,before_json,after_json) values($1,'order.online_updated','sales_order',$2,$3,$4)",[request.headers.get('x-birkassa-user-id'),row.id,JSON.stringify({status:row.status}),JSON.stringify({status:b.data.status,...(reason?{cancellationReason:reason}:{})})]);
+ if(reason&&row.account_id){const [account]=await tx.unsafe('select email from customer_accounts where id=$1',[row.account_id]);if(account?.email)notification={id:row.id,orderNo:row.order_no,reason,to:account.email};}
+ return true});
+ if(notification)await notifyCustomerEmail(orderCancellationEmail(notification)).catch(()=>{});
  return Response.json(ok?{ok:true}:{error:'Sifariş artıq bağlanıb'},{status:ok?200:409});
- }catch(e){const message=e instanceof Error?e.message:"";if(message.startsWith("Bu sifariş"))return Response.json({error:message},{status:409});throw e;}finally{await sql.end()}
+ }catch(e){const message=e instanceof Error?e.message:"";if(message.startsWith("Bu sifariş")||message.startsWith('Sifarişin ləğv səbəbi'))return Response.json({error:message},{status:409});throw e;}finally{await sql.end()}
 }
 
 export const GET=withAdminSession(handleGET);

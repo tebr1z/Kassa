@@ -126,7 +126,7 @@ const mocks={
 };
 const auth=await load('lib/desktop-auth.ts',mocks);
 const {withAdminSession}=await load('lib/require-admin.ts',mocks);
-const onlineOrders=await load('app/api/online-orders/route.ts',{'@/lib/require-admin':{withAdminSession},'@/lib/store-db':mocks['@/lib/store-db']});
+const onlineOrders=await load('app/api/online-orders/route.ts',{'@/lib/require-admin':{withAdminSession},'@/lib/store-db':mocks['@/lib/store-db'],'@/lib/order-cancellation':await load('lib/order-cancellation.ts'),'@/lib/smtp-mail':{notifyCustomerEmail:async()=>{throw Error('A rejected cancellation must never notify');}}});
 let handled=0;
 const guarded=withAdminSession(request=>{
  handled++;
