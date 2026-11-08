@@ -95,6 +95,13 @@ const baseOrder={...row,total:'10.00',created_at:'2026-11-08T10:00:00Z',items:[]
 const render=reason=>renderToStaticMarkup(createElement(OrderList,{orders:[{...baseOrder,status:'cancelled',cancellation_reason:reason}],onRefresh(){},unavailable:false,refreshing:false}));
 assert.ok(render(reason).includes(reason));assert.ok(render(null).includes('Bu köhnə sifariş üçün ləğv səbəbi qeyd edilməyib.'));
 const unsafe=render('<script>alert("fixture")</script>');assert(!unsafe.includes('<script>'));assert.ok(unsafe.includes('&lt;script&gt;'),'Untrusted stored reasons render as text, never HTML');
+for(const [status,label]of [['cancelled','Ləğv edilib'],['completed','Tamamlandı'],['pending','Qəbul edildi']]){
+ let stateIndex=0;const fixture={...baseOrder,id,order_no:'UI-CARE-CANCEL',status,delivery_stage:'received',cancellation_reason:reason,full_name:'Fixture customer',phone:''};
+ const react={...require('react'),useEffect:()=>{},useState:initial=>[stateIndex++===0?[fixture]:stateIndex===2?status:initial,()=>{}]};
+ const {default:OnlineOrders}=await load('app/admin/online/online-page.tsx',{'react':react,'@/lib/language':language,'@/lib/staff-portal':{staffPortalPath:()=>'/fixture-staff'},'@/lib/use-admin-activity':{useAdminActivity:()=>{}},'@/components/ui/button':{Button:({children,...props})=>createElement('button',props,children)},'./order-cancel-dialog':()=>null,'../store/store-admin.css':{}});
+ const html=renderToStaticMarkup(createElement(OnlineOrders));assert.ok(html.includes('<p>'+label+'</p>'),'Actual online card terminal status must override retained fulfillment stage: '+status);
+ if(status!=='pending')assert.ok(!html.includes('<p>Qəbul edildi</p>'),'Terminal order must not appear received');
+}
 const dialog=await readFile('app/admin/online/order-cancel-dialog.tsx','utf8');assert.ok(dialog.includes('isOrderCancellationReason(reason)'));assert.ok(dialog.includes('cancellationReason:normalizeOrderCancellationReason(reason)'));assert.ok(dialog.includes('pending.current'));assert.ok(dialog.includes('<textarea'));assert.ok(dialog.includes('minLength={5}'));assert.ok(!dialog.includes('window.confirm'));
 for(const path of ['app/admin/online/online-page.tsx','app/admin/staff-dashboard.tsx'])assert.ok((await readFile(path,'utf8')).includes('<OrderCancelDialog'),path);
 const translations=(await load('lib/order-cancellation-translations.ts')).orderCancellationTranslations;assert.ok(translations.length>=12);for(const row of translations){assert.equal(row.length,5);assert.ok(row.every(value=>typeof value==='string'&&value.trim()));}
