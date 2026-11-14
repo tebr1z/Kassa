@@ -49,7 +49,7 @@ async function loadPublicCatalog():Promise<PublicCatalog>{
   let categories:{id:string;name:string;image:string}[]=[];
   try{
    const categoryRows=await query("select id,name,image_url from product_categories where is_active=true and show_on_home=true order by name");
-   categories=categoryRows.map(row=>({id:row.id,name:row.name,image:String(row.image_url||"").startsWith("https://res.cloudinary.com/")?row.image_url:""}));
+   categories=categoryRows.map(row=>({id:row.id,name:row.name,image:isProductOptionImage(row.image_url)?row.image_url:""}));
   }catch(error){if((error as {code?:string}).code!=="42703")throw error;}
   const visible=new Set(publicProducts.map(p=>p.id));
   for(const product of publicProducts){product.image=await mediaUrl(product.image);product.images=await Promise.all(product.images.map(mediaUrl));for(const option of product.options)option.image=await mediaUrl(option.image);}

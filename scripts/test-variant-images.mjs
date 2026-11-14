@@ -51,11 +51,22 @@ const productMocks={
  'next/link':Link,'next/navigation':{useSearchParams:()=>new URL(browserUrl).searchParams},
  '@/lib/language':language,'@/lib/commerce':commerce,'@/lib/variant-selection':variants,'@/lib/variant-images':images,
  '@/lib/product-discount':await load('lib/product-discount.ts'),'lucide-react':icons,'./product-view.css':{},
+ '@/lib/catalog-illustrations':await load('lib/catalog-illustrations.ts'),
  './product-price':()=>null,'./product-variant-picker':Picker,
 };
 const {default:View}=await load('app/product-view.tsx',productMocks);
 const props={product,products:[],inCart:0,onAdd(){},onOpenCart(){}};
 const renderAt=value=>{browserUrl=new URL(value,'https://restamarket.az').href;return renderToStaticMarkup(createElement(View,props));};
+const illustrations=await load('lib/catalog-illustrations.ts');
+for(const image of Object.values(illustrations.catalogIllustrations)){
+ assert.equal(illustrations.isCatalogIllustration(image),true);
+ assert.equal(illustrations.isCatalogIllustration(image.replace('/catalog-media/','/desktop-media/')),true);
+ const illustrationProduct={...product,image,images:[image],options:[]};
+ const html=renderToStaticMarkup(createElement(View,{...props,product:illustrationProduct}));
+ assert.match(html,/İllüstrativ şəkil/,'Generated product images must not masquerade as actual SKU photographs');
+ assert.match(html,/Görünüş nümunə üçündür/);
+}
+for(const value of ['',null,undefined,'https://evil.test/'+illustrations.catalogIllustrations.grill,illustrations.catalogIllustrations.grill+'?x=1','/api/catalog-media/'+'a'.repeat(64)])assert.equal(illustrations.isCatalogIllustration(value),false);
 const mainSource=html=>html.match(/<img class="pd-main-image" src="([^"]+)"/)?.[1];
 for(const [path,expected] of [[base,'/media/main.jpg'],[base+'?reng=qirmizi','/media/red-30.jpg'],[red30Path,'/media/red-30.jpg'],[base+'?reng=yasil','/media/green.jpg'],[base+'?reng=boz','/media/main.jpg'],[base+'?reng=yasil&olcu=30-sm','/media/main.jpg']]){
  const html=renderAt(path);assert.equal(mainSource(html),expected,'SSR initial photo matches the current exact/partial URL: '+path);
@@ -98,6 +109,7 @@ try{
 }finally{if(originalWindow===undefined)delete globalThis.window;else globalThis.window=originalWindow;}
 
 const {default:Cart}=await load('app/cart-sheet.tsx',{
+ '@/lib/catalog-illustrations':illustrations,
  'next/link':Link,'@/lib/language':language,'lucide-react':icons,'@/lib/commerce':commerce,'@/lib/variant-images':images,
  '@/lib/storefront-cart':await load('lib/storefront-cart.ts'),'@/lib/delivery':await load('lib/delivery.ts'),'@/lib/checkout-attempt':{},
  '@/lib/customer-contact':await load('lib/customer-contact.ts'),'./commerce-ui':{CouponBox:()=>null},'./delivery-location-picker':()=>null,'./checkout.css':{},

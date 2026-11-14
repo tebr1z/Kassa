@@ -31,6 +31,8 @@ jobs:
       - run: node scripts/test-variant-selection.mjs
       - run: node scripts/test-variant-images.mjs
       - run: node scripts/test-product-option-images.mjs
+      - run: node scripts/test-category-media.mjs
+      - run: node scripts/test-storefront-marketing.mjs
       - run: node scripts/test-web-inventory-boundary.mjs
       - run: node scripts/test-local-stock-ui.mjs
       - run: node scripts/test-variant-image-editor.mjs

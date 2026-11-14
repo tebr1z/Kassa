@@ -210,7 +210,7 @@ try{
  assert.ok(checkout.includes('matchingDeliveryQuote(quote,address,pin)'),'Changed address or coordinates invalidate a quote before review and submission');
  assert.ok(checkout.includes('{distanceMode&&settings?.freeOrderFrom!=null&&'),'Manual pricing must not advertise a saved automatic free-delivery threshold');
  const previousTranslations=new Set();
- for(const path of ['lib/language.tsx','lib/storefront-translations.ts','lib/delivery-translations.ts','lib/product-removal-translations.ts']){
+ for(const path of ['lib/language.tsx','lib/storefront-translations.ts','lib/delivery-translations.ts','lib/product-removal-translations.ts','lib/storefront-marketing-translations.ts']){
   const tree=ts.createSourceFile(path,await readFile(path,'utf8'),ts.ScriptTarget.Latest,true);
   function scan(node){if(ts.isArrayLiteralExpression(node)&&node.elements.length===5&&node.elements.every(ts.isStringLiteral))previousTranslations.add(node.elements[0].text);ts.forEachChild(node,scan);}scan(tree);
  }

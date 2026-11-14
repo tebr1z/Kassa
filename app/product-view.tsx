@@ -9,6 +9,7 @@ import { productPath,productVariantKeys, relatedProducts, type CatalogProduct } 
 import {variantSelection} from '@/lib/variant-selection';
 import {productGalleryImages,variantPreviewImage} from '@/lib/variant-images';
 import {hasProductDiscount,productDiscountLabel} from '@/lib/product-discount';
+import {isCatalogIllustration} from '@/lib/catalog-illustrations';
 import "./product-view.css";
 import ProductPrice from './product-price';
 import ProductVariantPicker from './product-variant-picker';
@@ -35,6 +36,7 @@ function ProductImage({ product,preferredImage='' }: { product: CatalogProduct;p
   const current = photos[index] || "";
   const zoomed = hover || pinned;
   const hasImage = Boolean(current) && !failed;
+  const illustrative=hasImage&&isCatalogIllustration(current);
 
   function place(x: number, y: number) {
     position.current = { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) };
@@ -88,6 +90,7 @@ function ProductImage({ product,preferredImage='' }: { product: CatalogProduct;p
       {hasImage ? <img className="pd-main-image" src={current} alt={product.name} fetchPriority="high" decoding="async" draggable={false} onError={() => setFailed(true)} /> : <span className="pd-no-image"><ImageIcon size={52} strokeWidth={1} /><span>Şəkil əlavə edilməyib</span></span>}
       {hasProductDiscount(product.price,product.originalPrice) && <span className="pd-discount-badge">{productDiscountLabel(product.price,product.originalPrice,languageAmount)||t('Endirim')}</span>}
     </button>
+    {illustrative&&<p className="pd-illustration-notice"><strong>{t('İllüstrativ şəkil')}</strong><span>{t('Görünüş nümunə üçündür. Dəqiq görünüşü sifarişdən əvvəl mağaza ilə dəqiqləşdirin.')}</span></p>}
     {photos.length > 1 && <div className="pd-thumbs" role="tablist" aria-label={t("Məhsul şəkilləri")}>{photos.map((src, photoIndex) => <button key={src} type="button" className={photoIndex === index ? "is-selected" : ""} aria-label={`${product.name} şəkli ${photoIndex + 1}`} aria-pressed={photoIndex === index} onClick={() => { setIndex(photoIndex); setFailed(false); setPinned(false); setHover(false); place(50, 50); }}><img src={src} alt="" /></button>)}</div>}
     <p className="pd-image-hint" id={hintId}><Move size={15} aria-hidden="true" /><span className="pd-desktop-hint">Detalları görmək üçün siçanı şəkil üzərində hərəkət etdirin.</span><span className="pd-touch-hint">Böyütmək üçün toxunun, baxmaq üçün sürüşdürün.</span><span className="pd-sr-only">Klaviatura: Enter ilə böyüdün, oxlarla hərəkət edin, Escape ilə kiçildin.</span></p>
   </div>;
@@ -169,7 +172,7 @@ export default function ProductView({ product, products, inCart, onAdd, onOpenCa
     {related.length > 0 && <section className="pd-related" aria-labelledby="pd-related-title">
       <div className="pd-related-heading"><div><p className="pd-eyebrow">Seçiminizi tamamlayın</p><h2 className="pd-section-title" id="pd-related-title">Bunlar da xoşunuza gələ bilər</h2></div><Link href="/#catalog">{t("Bütün məhsullar")}<ArrowRight size={17} aria-hidden="true" /></Link></div>
       <div className="pd-related-grid">{related.map(item => <Link className="pd-related-card" key={item.id} href={productPath(item)}>
-        <div className="pd-related-image">{item.image ? <img src={item.image} alt={item.name} loading="lazy" /> : <ImageIcon size={40} strokeWidth={1} aria-hidden="true" />}{item.originalPrice > item.price && <span className="pd-related-sale">{t("Endirim")}</span>}</div>
+        <div className="pd-related-image">{item.image ? <img src={item.image} alt={item.name} loading="lazy" /> : <ImageIcon size={40} strokeWidth={1} aria-hidden="true" />}{item.originalPrice > item.price && <span className="pd-related-sale">{t("Endirim")}</span>}{isCatalogIllustration(item.image)&&<span className="pd-related-illustration">{t('İllüstrativ şəkil')}</span>}</div>
         <div className="pd-related-body"><p className="pd-related-category">{item.category || t("Məhsul")}</p><h3 className="pd-related-name">{item.name}</h3><div className="pd-related-bottom"><ProductPrice price={item.price} originalPrice={item.originalPrice} compact/><span className="pd-related-arrow"><ArrowRight size={18} aria-hidden="true" /></span></div></div>
       </Link>)}</div>
     </section>}
