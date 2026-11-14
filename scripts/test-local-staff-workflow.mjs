@@ -65,7 +65,7 @@ try{
  const varianted=await request('/api/store-admin/commerce',{method:'POST',body:{action:'product',name:'Ölçülü mangal',sku:'VARIANT-NEW-01',category:'Manqallar',unit:'ədəd',sale_price:100,cost_price:30,description:'',specifications:'',discount_price:80,is_active:true,options:[{label:'30 sm',size:'30 sm',color:'Qara',kind:'Dəmir',price:50,is_active:true,position:0,attributes:{'Qalınlıq':'2 mm','Ayaq':'Sökülən'}},{label:'40 sm',size:'40 sm',color:'Qara',kind:'Dəmir',price:null,is_active:true,position:1,attributes:{'Qalınlıq':'3 mm'}}]}});assert.equal(varianted.status,200,JSON.stringify(varianted.data));
  const [variantProduct]=await sql.unsafe("select id from products where sku='VARIANT-NEW-01'");
  const variantCatalogue=(await request('/api/catalog',{auth:false})).data.products.find(p=>p.id===variantProduct.id);assert.equal(variantCatalogue.options.length,2);assert.equal(variantCatalogue.options[0].attributes['Qalınlıq'],'2 mm');assert.ok(!('cost_price' in variantCatalogue.options[0]));assert.equal(variantCatalogue.price,50);assert.equal(variantCatalogue.originalPrice,50,'A cheaper size is not a fake discount');assert.equal(variantCatalogue.basePrice,80,'Inherited option price must not use the cheapest variant');
- await verifySeoHttp(origin,variantProduct.id);
+ await verifySeoHttp(origin,variantProduct.id,{localInventory:true});
  // The main POS product dialogs and the web CMS must save the same optional choices atomically.
  const panelOption=(label,size,color,price)=>({label,size,color,kind:'',price,cost_price:20,position:0,is_active:true,attributes:{}});
  const panelBody={name:'Panel seçimli məhsul',sku:'PANEL-CHOICES-QA',category:'Manqallar',salePrice:100,costPrice:30,minStock:2,barcode:'',options:[panelOption('30 sm · Qara','30 sm','Qara',55),panelOption('40 sm · Qırmızı','40 sm','Qırmızı',85)]};
@@ -161,7 +161,7 @@ try{
  assert.equal(redPage.status,200);assert.ok(redPage.data.includes('class="pd-main-image" src="'+variantPhotos.red+'"'),'Color-only URL selects the color photo in server-rendered HTML');
  console.log('PASS: isolated variant-photo API validation, clear/restore, omitted-photo compatibility, public PNG serving and color-only server image.');
  assert.deepEqual(colorSizeProduct.options.map(({size,color,price,kind,attributes})=>({size,color,price,kind,attributes})),colorSizeOptions.map(({size,color,price,kind,attributes})=>({size,color,price,kind,attributes})),'Only the three real sparse color/size combinations exist');
- await verifySeoHttp(origin,colorSizeId);
+ await verifySeoHttp(origin,colorSizeId,{localInventory:true});
  // Discount integration intentionally runs after every finance/role-metric
  // assertion. Only this newly-created isolated DB receives these test sales.
  const discountBody={name:'Endirim sınağı',sku:'DISCOUNT-UI-QA',category:'Endirim sınağı',salePrice:100,costPrice:20,minStock:0,barcode:''};

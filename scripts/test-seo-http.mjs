@@ -10,7 +10,10 @@ function assertSelectedPrice(html,product,option){
  const area=html.split('<div class="pd-price-row">')[1]?.split('<p class="pd-intro">')[0];assert.ok(area,'Main price must be present in real server HTML');
  const amount=area.match(/<strong\b[^>]*>([\s\S]*?)<\/strong>/)?.[1]?.replace(/<!--[\s\S]*?-->/g,'').replace(/<[^>]*>/g,'').trim();assert.equal(amount,azAmount(option.price??product.basePrice??product.price)+' ₼','SSR price must be the exact selected variant, not a different cheaper option or merely a JSON-LD value');
 }
-export async function verifySeoHttp(origin,productId){
+// Only the test harness that starts a genuine BIRKASSA_LOCAL=1 process supplies
+// localInventory. Never infer runtime mode from a request header or a URL.
+export async function verifySeoHttp(origin,productId,{localInventory=false}={}){
+ assert.equal(typeof localInventory,'boolean');
  const catalog=await (await fetch(origin+'/api/catalog')).json();
  const product=catalog.products.find(p=>p.id===productId)||catalog.products.find(p=>p.options.length)||catalog.products[0];assert.ok(product);
  const get=path=>fetch(origin+path,{redirect:'manual',headers:{'User-Agent':'Googlebot'}});
@@ -30,11 +33,16 @@ export async function verifySeoHttp(origin,productId){
  for(const legacy of ['/admin','/admin/','/admin/store','/admin/online']){const retired=await get(legacy);assert.equal(retired.status,404);assert.equal(retired.headers.get('location'),null);assert.ok(!(await retired.text()).includes(STAFF_PORTAL_PATH),'Old staff URLs cannot reveal the new entry');}
  const homeHtml=await (await get('/')).text();assert.ok(homeHtml.includes('href="'+path+'"'),'Home links exist without JavaScript');
  const listHtml=await (await get('/mehsullar')).text();assert.ok(listHtml.includes('href="'+path+'"'));assert.ok(listHtml.includes('<h1>Məhsullar</h1>'));assert.ok(markup(listHtml).some(node=>node['@type']==='CollectionPage'));
- const sitemap=await (await get('/sitemap.xml')).text();assert.ok(sitemap.includes('https://restamarket.az'+path));assert.doesNotMatch(sitemap,/127\.0\.0\.1|localhost|\/admin|\/account|\/products\/|variant=/);assert.ok(!sitemap.includes(STAFF_PORTAL_PATH));for(const item of catalog.products)assert.ok(sitemap.includes('https://restamarket.az'+pathFor(item)),'All products, not only the selected fixture, use code-first canonical sitemap paths');
+ const sitemap=await (await get('/sitemap.xml')).text();
+ if(localInventory)assert.doesNotMatch(sitemap,/<loc(?:\s|>)/,'The EXE must never publish a searchable product sitemap');
+ else{assert.ok(sitemap.includes('https://restamarket.az'+path));for(const item of catalog.products)assert.ok(sitemap.includes('https://restamarket.az'+pathFor(item)),'All products, not only the selected fixture, use code-first canonical sitemap paths');}
+ assert.doesNotMatch(sitemap,/127\.0\.0\.1|localhost|\/admin|\/account|\/products\/|variant=/);assert.ok(!sitemap.includes(STAFF_PORTAL_PATH));
  for(const category of catalog.categories.filter(c=>catalog.products.some(p=>p.category===c.name))){const r=await get('/categories/'+category.id);assert.equal(r.status,200);assert.ok((await r.text()).includes(escape(category.name)));}
  const robots=await (await get('/robots.txt')).text();assert.match(robots,/Disallow: \/\s/);assert.doesNotMatch(robots,/Sitemap:/);
  const publicRobots=await new Promise((resolve,reject)=>{const req=http.get(origin+'/robots.txt',{headers:{Host:'restamarket.az'}},r=>{let data='';r.on('data',chunk=>data+=chunk);r.on('end',()=>resolve(data));});req.on('error',reject);});
- assert.match(publicRobots,/Sitemap: https:\/\/restamarket\.az\/sitemap\.xml/);assert.match(publicRobots,/Disallow: \/admin/);assert.match(publicRobots,/Allow: \/api\/catalog-media\//);assert.doesNotMatch(publicRobots,/variant=/);assert.ok(!publicRobots.includes(STAFF_PORTAL_PATH),'Robots policy does not advertise the staff entry');
+ if(localInventory){assert.match(publicRobots,/Disallow: \/\s/);assert.doesNotMatch(publicRobots,/Sitemap:/,'A forged public Host must not enable EXE indexing');}
+ else{assert.match(publicRobots,/Sitemap: https:\/\/restamarket\.az\/sitemap\.xml/);assert.match(publicRobots,/Disallow: \/admin/);assert.match(publicRobots,/Allow: \/api\/catalog-media\//);}
+ assert.doesNotMatch(publicRobots,/variant=/);assert.ok(!publicRobots.includes(STAFF_PORTAL_PATH),'Robots policy does not advertise the staff entry');
  for(const privatePath of [STAFF_PORTAL_PATH,'/account']){const r=await get(privatePath);assert.match(await r.text(),/<meta name="robots" content="noindex/);}
  if(product.options.length){
   const option=product.options.at(-1),group=graph.find(node=>node['@type']==='ProductGroup'),variant=group.hasVariant.find(node=>node.sku===(product.code||product.id)+'-'+option.id);assert.ok(variant);
