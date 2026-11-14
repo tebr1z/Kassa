@@ -58,8 +58,9 @@ const sql={end:async()=>{},begin:async fn=>fn(sql),unsafe:async(query,args=[])=>
   if(query.includes('insert into audit_logs')||query.includes('insert into product_price_history'))return [];
   throw Error('Unexpected fixture SQL: '+query);
 }};
-const optionInput=await load('lib/product-option-input.ts');
-const common={'@/lib/require-admin':{withAdminSession:fn=>fn},'@/lib/barcode':{ensurePrimaryBarcodes:async()=>{},savePrimaryBarcode:async()=>{}},'@/lib/product-option-input':optionInput,'@/lib/save-product-options':{saveProductOptions:async()=>{}},'@/lib/commerce':commerce,'@/lib/product-discount':discounts};
+const optionImage=await load('lib/product-option-image.ts');
+const optionInput=await load('lib/product-option-input.ts',{'./product-option-image':optionImage});
+const common={'@/lib/require-admin':{withAdminSession:fn=>fn},'@/lib/barcode':{ensurePrimaryBarcodes:async()=>{},savePrimaryBarcode:async()=>{}},'@/lib/product-option-input':optionInput,'@/lib/save-product-options':{saveProductOptions:async()=>{}},'@/lib/commerce':commerce,'@/lib/product-discount':discounts,'@/lib/desktop-media':{mediaUrl:async value=>value}};
 const oldDatabase=process.env.DATABASE_URL;process.env.DATABASE_URL='postgres://isolated.invalid/test';
 try{
   const api=await load('app/api/products/route.ts',{...common,'next/server':{NextResponse:Response},'@/lib/log-error':{logSystemError:async()=>{}},'@/lib/warehouse':{salesWarehouseSql:()=>''},postgres:()=>sql});

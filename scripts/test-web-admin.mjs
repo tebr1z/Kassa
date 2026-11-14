@@ -145,7 +145,7 @@ try{
  const colorSizeProduct=(await request('/api/catalog',{auth:false})).data.products.find(product=>product.id===colorSizeId);assert.ok(colorSizeProduct);
  assert.deepEqual(colorSizeProduct.options.map(o=>o.image),[variantPhotos.red,variantPhotos.red,variantPhotos.black],'Public images follow actual variant assignments');
  const colorPrivate=(await request('/api/products')).data.find(p=>p.id===colorSizeId);
- const imageOptions=colorPrivate.editableOptions;
+ const imageOptions=colorPrivate.editableOptions.map(option=>({...option,price:option.price==null?null:Number(option.price),cost_price:option.cost_price==null?null:Number(option.cost_price)}));
  const withoutImages=imageOptions.map(option=>{const copy={...option};delete copy.image_url;return copy;});
  assert.equal((await request('/api/products',{method:'PATCH',body:{...colorSizeBody,productId:colorSizeId,options:withoutImages}})).status,200,'Old clients can edit variants without erasing photos');
  assert.equal((await request('/api/catalog',{auth:false})).data.products.find(p=>p.id===colorSizeId).options[0].image,variantPhotos.red);

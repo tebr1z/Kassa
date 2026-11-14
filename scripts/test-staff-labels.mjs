@@ -51,7 +51,16 @@ assert.ok(source.includes('.filter(([id])=>role==="admin"||id==="audit")'),'Only
 assert.ok(source.includes('<InventoryView canDelete={auth.user.role==="admin"}'),'Only administrator receives inventory deletion permission');
 assert.ok(source.includes('{canDelete&&<ProductDeleteDialog'),'Non-administrators never mount the deletion dialog');
 assert.ok(source.includes('{canDelete&&<Button type="button" variant="destructive"'),'Non-administrators do not see the delete action');
-assert.ok(source.includes('async function deactivate(){if(!canDelete||!editing)return;'),'Deactivation follows the same administrator restriction');
+const inventory=ast.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='InventoryView');
+const deactivate=inventory?.body?.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='deactivate');
+const deactivateGuard=deactivate?.body?.statements[0];
+assert.ok(deactivateGuard&&ts.isIfStatement(deactivateGuard)&&ts.isReturnStatement(deactivateGuard.thenStatement),'Deactivation starts with a permission/busy guard before any mutation');
+const blocksDeactivation=new Function('canDelete','editing','variantUploadPending','saving','return '+deactivateGuard.expression.getText(ast));
+assert.equal(blocksDeactivation(false,{id:'test'},{current:false},false),true,'Deactivation still refuses a non-administrator');
+assert.equal(blocksDeactivation(true,null,{current:false},false),true,'Deactivation requires a current product');
+assert.equal(blocksDeactivation(true,{id:'test'},{current:false},false),false,'Idle administrators retain the permitted action');
+assert.equal(blocksDeactivation(true,{id:'test'},{current:true},false),true,'Photo upload prevents deactivation of its product');
+assert.equal(blocksDeactivation(true,{id:'test'},{current:false},true),true,'A concurrent save prevents deactivation');
 assert.ok(source.includes('<FinanceOverview canEditSalary={auth.user.role==="admin"}'),'Only administrator receives salary-edit permission');
 const finance=await readFile('app/admin/finance-overview.tsx','utf8');
 assert.ok(finance.includes('e.preventDefault();if(!canEditSalary)return;'),'Salary handler refuses writes without administrator permission');
