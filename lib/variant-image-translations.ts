@@ -1,4 +1,6 @@
 export const variantImageTranslations:[string,string,string,string,string][]=[
+ ['Material və öz xüsusiyyətləriniz','Материал и дополнительные свойства','Material and custom attributes','Malzeme ve özel özellikleriniz','材质与自定义属性'],
+ ['Seçimlər aşağıdakı “Məhsulu saxla” düyməsi ilə birlikdə saxlanır. Vebdə stok və alış qiyməti dəyişdirilmir.','Варианты сохраняются кнопкой «Сохранить товар» ниже. Остатки и закупочные цены не изменяются в веб-панели.','Options are saved with the “Save product” button below. Stock and purchase costs are not changed on the web.','Seçenekler aşağıdaki “Ürünü kaydet” düğmesiyle kaydedilir. Web üzerinden stok ve alış fiyatı değiştirilmez.','请使用下方“保存商品”按钮保存规格。网页端不会修改库存和采购成本。'],
  ['Seçim şəkli','Фото варианта','Option photo','Seçenek fotoğrafı','规格图片'],
  ['Müştəri bu rəngi və ya ölçünü seçəndə həmin şəkil görünəcək. Şəkilsiz seçimlər əsas məhsul şəklini istifadə edir.','Это фото появится при выборе цвета или размера. Варианты без фото используют главное фото товара.','This photo appears when the customer selects this colour or size. Options without a photo use the main product photo.','Müşteri bu rengi veya ölçüyü seçince bu fotoğraf gösterilir. Fotoğrafsız seçenekler ana ürün fotoğrafını kullanır.','顾客选择此颜色或尺寸时将显示这张图片。未设置图片的规格使用商品主图。'],
  ['Şəkil əlavə et','Добавить фото','Add photo','Fotoğraf ekle','添加图片'],

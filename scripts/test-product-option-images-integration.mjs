@@ -19,12 +19,16 @@ const sql=postgres(database.url,{max:2,prepare:false}),require=createRequire(imp
 async function load(file,mocks={}){const compiled=ts.transpileModule(await readFile(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,loaded={exports:{}};new Function('require','module','exports',compiled)(name=>name==='server-only'?{}:Object.hasOwn(mocks,name)?mocks[name]:require(name),loaded,loaded.exports);return loaded.exports;}
 const db={storeDb:()=>postgres(database.url,{max:1,prepare:false})},images=await load('lib/product-option-image.ts'),input=await load('lib/product-option-input.ts',{'./product-option-image':images}),save=await load('lib/save-product-options.ts');
 try{
+ // Inventory/POS handlers deliberately run only in the genuine EXE mode. The
+ // separate dual-runtime HTTP regression covers web denial and cost privacy.
+ process.env.BIRKASSA_LOCAL='1';
+ const inventory=await load('lib/inventory-mode.ts');
  const [admin]=await sql.unsafe("select id,branch_id from users where role='admin' limit 1");
  await sql.unsafe("update users set password_hash='fixture-password-hash' where id=$1",[admin.id]);
  const token='option-images-'+randomUUID();await sql.unsafe("insert into auth_sessions(user_id,token_hash,expires_at,authentication_method) values($1,$2,now()+interval '1 hour','password')",[admin.id,createHash('sha256').update(token).digest('hex')]);
- const security=await load('lib/admin-security.ts'),roles=await load('lib/staff-access.ts'),guard=await load('lib/require-admin.ts',{'@/lib/store-db':db,'@/lib/admin-security':security,'@/lib/staff-access':roles});
+ const security=await load('lib/admin-security.ts'),roles=await load('lib/staff-access.ts'),guard=await load('lib/require-admin.ts',{'@/lib/store-db':db,'@/lib/admin-security':security,'@/lib/staff-access':roles,'@/lib/inventory-mode':inventory});
  const barcode=await load('lib/barcode.ts'),discount=await load('lib/product-discount.ts'),media=await load('lib/desktop-media.ts',{'@/lib/store-db':db});
- const commerce=await load('app/api/store-admin/commerce/route.ts',{'@/lib/require-admin':guard,'@/lib/store-db':db,'@/lib/barcode':barcode,'@/lib/desktop-media':media,'@/lib/product-option-input':input,'@/lib/save-product-options':save,'@/lib/product-discount':discount});
+ const commerce=await load('app/api/store-admin/commerce/route.ts',{'@/lib/require-admin':guard,'@/lib/store-db':db,'@/lib/barcode':barcode,'@/lib/desktop-media':media,'@/lib/product-option-input':input,'@/lib/save-product-options':save,'@/lib/product-discount':discount,'@/lib/inventory-mode':inventory});
  const request=(body,path='/api/store-admin/commerce',auth=true)=>new Request('https://fixture.example'+path,{method:body===undefined?'GET':'POST',headers:{host:'fixture.example',origin:'https://fixture.example',...(auth?{cookie:'birkassa_session='+token}:{}),...(body instanceof FormData?{}:{'content-type':'application/json'})},...(body===undefined?{}:{body:body instanceof FormData?body:JSON.stringify(body)})});
  const cloud='https://res.cloudinary.com/fixture/image/upload/red.png',hash='a'.repeat(64),catalog='/api/catalog-media/'+hash;
  const [product]=await sql.unsafe("insert into products(sku,name,sale_price,cost_price,image_url) values('IMAGE-TEST','Rəngli manqal',9,3,'https://res.cloudinary.com/fixture/main.png') returning id");

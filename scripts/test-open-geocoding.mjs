@@ -17,6 +17,7 @@ async function load(path,mocks={}){
 const country=await load('lib/azerbaijan-location.ts');
 const security=await load('lib/admin-security.ts');
 const roles=await load('lib/staff-access.ts');
+const inventory=await load('lib/inventory-mode.ts');
 let state,connectionId=0;
 const normalBody=()=>[{display_name:'Bakı, Azərbaycan',lat:'40.4093',lon:'49.8671',address:{country_code:'az'}}];
 function reset(changes={}){
@@ -82,7 +83,7 @@ function database(){
 }
 const db={storeDb:database};
 const geocoder=await load('lib/open-geocoding.ts',{'@/lib/store-db':db,'@/lib/azerbaijan-location':country});
-const guard=await load('lib/require-admin.ts',{'@/lib/store-db':db,'@/lib/admin-security':security,'@/lib/staff-access':roles});
+const guard=await load('lib/require-admin.ts',{'@/lib/store-db':db,'@/lib/admin-security':security,'@/lib/staff-access':roles,'@/lib/inventory-mode':inventory});
 const route=await load('app/api/places/route.ts',{'@/lib/customer-session':{customerAccount:async()=>{if(state.accountError)throw Error('Fixture account DB failure');return state.customer;}},'@/lib/require-admin':guard,'@/lib/open-geocoding':geocoder});
 const originalFetch=globalThis.fetch;
 const savedEnv=Object.fromEntries(['OPEN_GEOCODING_URL','OPEN_GEOCODING_ENABLED','BIRKASSA_LOCAL'].map(name=>[name,process.env[name]]));

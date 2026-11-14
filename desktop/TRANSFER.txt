@@ -5,7 +5,7 @@ RESTAMARKET — BAŞQA WINDOWS KOMPÜTERƏ KÖÇÜRMƏ
    Son əməliyyatlardan sonra RestaMarket → Ehtiyat nüsxə yarat ilə yeni .birkassa
    yaradıb bu qovluqdakı RestaMarket-data.birkassa faylını onunla əvəz edin.
 2. Bu qovluğun HAMISINI şəxsi USB-yə və ya yeni kompüterə köçürün.
-3. RestaMarket-Setup-0.5.0.exe proqramın QURAŞDIRICISIDIR. Onu açıb quraşdırın.
+3. RestaMarket-Setup-0.6.0.exe proqramın QURAŞDIRICISIDIR. Onu açıb quraşdırın.
    PostgreSQL paketə daxildir; ayrıca Node.js və PostgreSQL quraşdırmayın.
 4. Quraşdırıldıqdan sonra masaüstündəki RestaMarket qısayolunu açın.
    İlk boş kompüterdə yeni şifrə yaratmadan menyudan

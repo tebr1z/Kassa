@@ -46,16 +46,24 @@ const sql={async unsafe(query,args=[]){
  },async end(){}};
 const authDb={async unsafe(){return role?[{id:actor,role}]:[];},async end(){}};
 const access=await load('lib/staff-access.ts'),security=await load('lib/admin-security.ts');
-const auth=await load('lib/require-admin.ts',{'server-only':{},'@/lib/store-db':{storeDb:()=>authDb},'@/lib/admin-security':security,'@/lib/staff-access':access});
+const inventory=await load('lib/inventory-mode.ts',{'server-only':{}});
+const auth=await load('lib/require-admin.ts',{'server-only':{},'@/lib/store-db':{storeDb:()=>authDb},'@/lib/admin-security':security,'@/lib/staff-access':access,'@/lib/inventory-mode':inventory});
 const mail={async notifyCustomerEmail(message){assert(events.includes('commit'),'Email must only run after a committed transaction');assert.equal(row.status,'cancelled');emails.push(message);if(failEmail)throw Error('fixture SMTP failure');}};
 const common={'@/lib/require-admin':auth,'@/lib/order-cancellation':cancellation,'@/lib/smtp-mail':mail};
 const online=await load('app/api/online-orders/route.ts',{...common,'@/lib/store-db':{storeDb:()=>sql}});
-const oldDatabase=process.env.DATABASE_URL;process.env.DATABASE_URL='postgres://isolated.invalid/cancellation-fixture';
+const oldDatabase=process.env.DATABASE_URL,oldLocal=process.env.BIRKASSA_LOCAL;process.env.DATABASE_URL='postgres://isolated.invalid/cancellation-fixture';delete process.env.BIRKASSA_LOCAL;
 const pos=await load('app/api/orders/route.ts',{...common,'next/server':{NextResponse:Response},'@/lib/product-options':{optionSnapshot:()=>''},'@/lib/log-error':{logSystemError:async()=>{}},'@/lib/warehouse':{salesWarehouseSql:()=>''},'@/lib/commerce':{sellingPrice:()=>0},postgres:()=>sql});
 function request(path,body,{cookie=true,origin='https://fixture.example'}={}){return new Request('https://fixture.example'+path,{method:'POST',headers:{'Content-Type':'application/json',Origin:origin,...(cookie?{Cookie:'birkassa_session=fixture-token'}:{}),'x-birkassa-role':'admin','x-birkassa-user-id':actor},body:JSON.stringify(body)});}
 function cancel(body={},options){const req=request('/api/online-orders',{id,status:'cancelled',cancellationReason:reason,...body},options);return online.PATCH(new Request(req,{method:'PATCH'}));}
-function posCancel(body={},options){return pos.POST(request('/api/orders',{action:'status',orderId:id,status:'cancelled',...body},options));}
+async function posCancel(body={},options){
+ // Existing POS behavior belongs to the trusted local server. Only this
+ // invocation changes process mode; online cancellation stays a web fixture.
+ const previous=process.env.BIRKASSA_LOCAL;process.env.BIRKASSA_LOCAL='1';
+ try{return await pos.POST(request('/api/orders',{action:'status',orderId:id,status:'cancelled',...body},options));}
+ finally{if(previous===undefined)delete process.env.BIRKASSA_LOCAL;else process.env.BIRKASSA_LOCAL=previous;}
+}
 try{
+ reset();const webPos=await pos.POST(request('/api/orders',{action:'status',orderId:id,status:'cancelled',cancellationReason:reason}));assert.equal(webPos.status,403);assert.equal((await webPos.json()).code,'INVENTORY_LOCAL_ONLY');assert.equal(writes,0,'Web POS cannot invoke the cancellation business handler');
  reset();assert.equal((await cancel({}, {cookie:false})).status,401);assert.equal(writes,0,'Forged identity headers cannot authorize cancellation');
  assert.equal((await cancel({}, {origin:'https://attacker.example'})).status,403);assert.equal(writes,0);
  role='online_assistant';assert.equal((await cancel()).status,403);assert.equal(writes,0);
@@ -82,7 +90,7 @@ try{
  reset({source:'pos',account_id:null});assert.equal((await posCancel()).status,201);assert.equal(row.cancellation_reason,null);assert.equal(emails.length,0,'Noncatalog POS cancellation remains compatible');
  reset();failEmail=true;assert.equal((await posCancel({cancellationReason:reason})).status,201);assert.equal(row.status,'cancelled');
  reset();role='warehouse';assert.equal((await posCancel({cancellationReason:reason})).status,403);assert.equal(writes,0);
-}finally{if(oldDatabase===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=oldDatabase;}
+}finally{if(oldDatabase===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=oldDatabase;if(oldLocal===undefined)delete process.env.BIRKASSA_LOCAL;else process.env.BIRKASSA_LOCAL=oldLocal;}
 
 const myOrders=await load('app/api/my-orders/route.ts',{'@/lib/store-db':{storeDb:()=>sql},'@/lib/customer-session':{customerAccount:async()=>customer?{id:customer}:null}});
 reset({status:'cancelled',cancellation_reason:reason});
@@ -106,4 +114,4 @@ const dialog=await readFile('app/admin/online/order-cancel-dialog.tsx','utf8');a
 for(const path of ['app/admin/online/online-page.tsx','app/admin/staff-dashboard.tsx'])assert.ok((await readFile(path,'utf8')).includes('<OrderCancelDialog'),path);
 const translations=(await load('lib/order-cancellation-translations.ts')).orderCancellationTranslations;assert.ok(translations.length>=12);for(const row of translations){assert.equal(row.length,5);assert.ok(row.every(value=>typeof value==='string'&&value.trim()));}
 const migration=await readFile('drizzle/0033_order_cancellation.sql','utf8');assert.match(migration,/ADD COLUMN cancellation_reason text/);assert.match(migration,/ADD COLUMN cancelled_at timestamptz/);assert.ok(!/\b(?:UPDATE|DELETE|DROP|TRUNCATE)\b/i.test(migration),'Additive nullable columns preserve historical orders');
-console.log('PASS: authenticated cancellation reason, both store/POS paths, immutable idempotent retries, paid/race/rollback guards, post-commit stored-recipient SMTP hooks, private customer DTO, safe reason UI, legacy null compatibility and 5-language content. No live data or SMTP used.');
+console.log('PASS: authenticated web-store cancellation and trusted-local POS cancellation with web POS blocked, immutable idempotent retries, paid/race/rollback guards, post-commit stored-recipient SMTP hooks, private customer DTO, safe reason UI, legacy null compatibility and 5-language content. No live data or SMTP used.');

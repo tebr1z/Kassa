@@ -8,18 +8,18 @@ import {useTranslations} from '@/lib/language';
 import './variant-editor.css';
 export type {EditableVariant} from '@/lib/variant-draft';
 type Dimension='size'|'color'|'custom';
-type Props={options:EditableVariant[];onChange:(rows:EditableVariant[])=>void;busy?:boolean;canManageImages?:boolean;onUploadBusyChange?:(busy:boolean)=>void};
+type Props={options:EditableVariant[];onChange:(rows:EditableVariant[])=>void;busy?:boolean;canManageImages?:boolean;canManageCosts?:boolean;onUploadBusyChange?:(busy:boolean)=>void};
 type ImageUpload={target:EditableVariant;initialImage:string|undefined;controller:AbortController};
 const sameRow=(left:EditableVariant,right:EditableVariant)=>left.id&&right.id?left.id===right.id:left===right;
 const normalizedColor=(color:string)=>color.trim().replace(/\s+/g,' ').normalize('NFC').toLocaleLowerCase('az');
 const acceptedFile=(file:File)=>file.size>0&&file.size<=4000000&&(['image/jpeg','image/jpg','image/pjpeg','image/png','image/x-png','image/webp'].includes(file.type.toLowerCase())||!file.type&&/\.(?:jpe?g|png|webp)$/i.test(file.name));
-export default function VariantEditor({options,onChange,busy=false,canManageImages=false,onUploadBusyChange}:Props){
+export default function VariantEditor({options,onChange,busy=false,canManageImages=false,canManageCosts=true,onUploadBusyChange}:Props){
  const {t}=useTranslations();
  const [enabled,setEnabled]=useState<Record<Dimension,boolean>>(()=>({size:options.some(v=>!!v.size),color:options.some(v=>!!v.color),custom:options.some(v=>!!v.kind||Object.keys(v.attributes||{}).length>0||(!v.size&&!v.color))}));
  const [error,setError]=useState('');
  const [uploading,setUploading]=useState<EditableVariant|null>(null),[imageFeedback,setImageFeedback]=useState<{target:EditableVariant;text:string;error:boolean}|null>(null);
- const mounted=useRef(true),rowsRef=useRef(options),propsRef=useRef({onChange,busy,canManageImages,onUploadBusyChange}),request=useRef<ImageUpload|null>(null);
- useLayoutEffect(()=>{rowsRef.current=options;propsRef.current={onChange,busy,canManageImages,onUploadBusyChange};},[options,onChange,busy,canManageImages,onUploadBusyChange]);
+ const mounted=useRef(true),rowsRef=useRef(options),propsRef=useRef({onChange,busy,canManageImages,canManageCosts,onUploadBusyChange}),request=useRef<ImageUpload|null>(null);
+ useLayoutEffect(()=>{rowsRef.current=options;propsRef.current={onChange,busy,canManageImages,canManageCosts,onUploadBusyChange};},[options,onChange,busy,canManageImages,canManageCosts,onUploadBusyChange]);
  const locked=busy||Boolean(uploading);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;const pending=request.current;request.current=null;pending?.controller.abort();if(pending)propsRef.current.onUploadBusyChange?.(false);};},[]);
  useEffect(()=>{
@@ -28,10 +28,10 @@ export default function VariantEditor({options,onChange,busy=false,canManageImag
   if(!canManageImages||!current||current.image_url!==pending.initialImage){request.current=null;pending.controller.abort();setUploading(null);propsRef.current.onUploadBusyChange?.(false);}
  },[options,canManageImages]);
  const any=enabled.size||enabled.color||enabled.custom;
- const blank=():EditableVariant=>({id:'draft-'+crypto.randomUUID(),label:'',size:'',color:'',kind:'',price:null,cost_price:null,position:options.length,is_active:true,attributes:{}});
+ const blank=():EditableVariant=>({id:'draft-'+crypto.randomUUID(),label:'',size:'',color:'',kind:'',price:null,...(canManageCosts?{cost_price:null}:{}),position:options.length,is_active:true,attributes:{}});
  const isLocked=()=>propsRef.current.busy||Boolean(request.current);
  function emit(rows:EditableVariant[]){rowsRef.current=rows;propsRef.current.onChange(rows);}
- function update(index:number,patch:Partial<EditableVariant>){if(isLocked())return;emit(rowsRef.current.map((v,i)=>i===index?{...v,...patch}:v));setError('');}
+ function update(index:number,patch:Partial<EditableVariant>){if(isLocked()||Object.hasOwn(patch,'cost_price')&&!propsRef.current.canManageCosts)return;emit(rowsRef.current.map((v,i)=>i===index?{...v,...patch}:v));setError('');}
  function removeImage(target:EditableVariant){
   if(isLocked()||!propsRef.current.canManageImages)return;
   emit(rowsRef.current.map(row=>sameRow(row,target)?{...row,image_url:''}:row));
@@ -111,13 +111,13 @@ export default function VariantEditor({options,onChange,busy=false,canManageImag
        {feedback&&<p className={feedback.error?'variant-image-status is-error':'variant-image-status'} role={feedback.error?'alert':'status'}>{t(feedback.text)}</p>}
       </div>
      </div>}
-     <details className="variant-extra"><summary>Alış qiyməti{enabled.custom?', material və öz xüsusiyyətləriniz':''}</summary><div className="variant-row-fields"><label>Seçimin alış qiyməti ₼<input aria-label={'Seçimin alış qiyməti '+(index+1)} type="number" min="0" max="1000000" step="0.01" value={row.cost_price??''} placeholder="Boşdursa əsas alış qiyməti" disabled={locked} onChange={e=>update(index,{cost_price:e.target.value===''?null:e.target.value})}/><small>Yalnız administrator görür.</small></label>{enabled.custom&&<label>Növ / material<input maxLength={80} value={row.kind} placeholder="Dəmir, qalın, nazik…" disabled={locked} onChange={e=>update(index,{kind:e.target.value})}/></label>}</div>
+     {(canManageCosts||enabled.custom)&&<details className="variant-extra"><summary>{canManageCosts?<>Alış qiyməti{enabled.custom?', material və öz xüsusiyyətləriniz':''}</>:t('Material və öz xüsusiyyətləriniz')}</summary><div className="variant-row-fields">{canManageCosts&&<label>Seçimin alış qiyməti ₼<input aria-label={'Seçimin alış qiyməti '+(index+1)} type="number" min="0" max="1000000" step="0.01" value={row.cost_price??''} placeholder="Boşdursa əsas alış qiyməti" disabled={locked} onChange={e=>update(index,{cost_price:e.target.value===''?null:e.target.value})}/><small>Yalnız administrator görür.</small></label>}{enabled.custom&&<label>Növ / material<input maxLength={80} value={row.kind} placeholder="Dəmir, qalın, nazik…" disabled={locked} onChange={e=>update(index,{kind:e.target.value})}/></label>}</div>
       {enabled.custom&&<div className="variant-attributes">{pairs.map(([key,value],i)=><div key={i}><input aria-label="Xüsusiyyətin adı" required maxLength={60} placeholder="Məsələn: Qalınlıq" value={key} disabled={locked} onChange={e=>update(index,{attributePairs:pairs.map((p,j)=>j===i?[e.target.value,p[1]]:p)})}/><input aria-label="Xüsusiyyətin dəyəri" required maxLength={120} placeholder="Məsələn: 2 mm" value={value} disabled={locked} onChange={e=>update(index,{attributePairs:pairs.map((p,j)=>j===i?[p[0],e.target.value]:p)})}/><button type="button" aria-label="Xüsusiyyəti sil" disabled={locked} onClick={()=>update(index,{attributePairs:pairs.filter((_,j)=>j!==i)})}>×</button></div>)}<button type="button" disabled={locked||pairs.length>=12} onClick={()=>update(index,{attributePairs:[...pairs,['','']]})}>+ Öz xüsusiyyətini əlavə et</button></div>}
-     </details>
+     </details>}
     </div>;
    })}</div>
    {error&&<p role="alert">{error}</p>}<button className="variant-add" type="button" disabled={locked||options.length>=100} onClick={add}><Plus size={18}/> Başqa ölçü / rəng əlavə et</button>
-   <p className="variant-save-note">Seçimlər aşağıdakı “Məhsulu saxla” düyməsi ilə birlikdə saxlanır. Mövcud ayrı məhsullar avtomatik birləşdirilmir. Variantlar məhsulun ümumi stokunu paylaşır.</p>
+   <p className="variant-save-note">{canManageCosts?'Seçimlər aşağıdakı “Məhsulu saxla” düyməsi ilə birlikdə saxlanır. Mövcud ayrı məhsullar avtomatik birləşdirilmir. Variantlar məhsulun ümumi stokunu paylaşır.':t('Seçimlər aşağıdakı “Məhsulu saxla” düyməsi ilə birlikdə saxlanır. Vebdə stok və alış qiyməti dəyişdirilmir.')}</p>
   </>}
  </section>;
 }

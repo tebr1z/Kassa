@@ -3,6 +3,7 @@ import {storeDb} from '@/lib/store-db';
 import {staffRoles} from '@/lib/staff-access';
 import {strongPassword,staffPasswordHash} from '@/lib/staff-password';
 import {z} from 'zod';
+import {isLocalInventory,inventoryLocalOnlyResponse} from '@/lib/inventory-mode';
 export const dynamic='force-dynamic';
 const schema=z.discriminatedUnion('action',[
  z.object({action:z.literal('branch'),name:z.string().trim().min(2).max(150),address:z.string().trim().max(500).default('')}),
@@ -41,5 +42,16 @@ async function post(request:Request){const parsed=schema.safeParse(await request
   await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,after_json) values($1,$2,'locations',$3,$4)",[actor,'locations.'+b.action,id,JSON.stringify(safe)]);return {ok:true,id};
  });return Response.json(result);
  }catch(error){return Response.json({error:error instanceof Error&&!('code'in error)?error.message:'Ad və ya kod təkrarlanır; məlumatları yoxlayın.'},{status:409});}finally{await sql.end();}}
-export const GET=withAdminSession(get);
-export const POST=withAdminSession(post);
+async function webLocationsGET(){const sql=storeDb();try{
+ const branches=await sql.unsafe('select id,name,address from branches where is_active=true order by name');
+ const users=await sql.unsafe("select u.id,u.full_name,u.role,u.branch_id,u.is_active,u.password_hash is not null has_password,b.name branch_name from users u left join branches b on b.id=u.branch_id order by u.full_name");
+ return Response.json({local:false,inventoryLocalOnly:true,branches,warehouses:[],users});
+}finally{await sql.end();}}
+export const GET=withAdminSession(()=>isLocalInventory()?get():webLocationsGET());
+export const POST=withAdminSession(async request=>{
+ if(!isLocalInventory()){
+  const body=await request.clone().json().catch(()=>null);
+  if(!body||typeof body!=='object'||!['branch','password'].includes(String((body as Record<string,unknown>).action||'')))return inventoryLocalOnlyResponse();
+ }
+ return post(request);
+});

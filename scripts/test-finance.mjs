@@ -13,7 +13,12 @@ async function load(path,mocks={}){
  return loaded.exports;
 }
 
-const policy=await load('lib/staff-access.ts'),security=await load('lib/admin-security.ts');
+const previousLocal=process.env.BIRKASSA_LOCAL;
+try{
+// Finance retains its full contract in the EXE only; the web boundary regression
+// separately asserts this endpoint is denied before business SQL.
+process.env.BIRKASSA_LOCAL='1';
+const policy=await load('lib/staff-access.ts'),security=await load('lib/admin-security.ts'),inventory=await load('lib/inventory-mode.ts');
 const fixtureId='00000000-0000-4000-8000-000000000001';
 const rows=[
  [{revenue:'130.00',cogs:'46.00',receipts:'2'}],
@@ -42,7 +47,7 @@ const db={
  },
  async end(){closes++;},
 };
-const {withAdminSession}=await load('lib/require-admin.ts',{'@/lib/staff-access':policy,'@/lib/admin-security':security,'@/lib/store-db':{storeDb:()=>db}});
+const {withAdminSession}=await load('lib/require-admin.ts',{'@/lib/staff-access':policy,'@/lib/admin-security':security,'@/lib/store-db':{storeDb:()=>db},'@/lib/inventory-mode':inventory});
 const finance=await load('app/api/finance/route.ts',{'@/lib/require-admin':{withAdminSession},'@/lib/store-db':{storeDb:()=>db}});
 const request=(search='',authenticated=true)=>new Request('https://staff.example/api/finance'+search,{headers:{host:'staff.example',...(authenticated?{cookie:'birkassa_session=fixture'}:{}),'x-birkassa-role':'admin','x-birkassa-user-id':'forged'}});
 const reset=()=>{queryIndex=0;queries=[];failingQuery=-1;closes=0;};
@@ -114,3 +119,4 @@ try{
  const invalidHtml=render();assert.ok(invalidHtml.includes('Maliyyə məlumatları yüklənmədi.'));assert.ok(invalidHtml.includes('Yenidən cəhd et'));assert.ok(!invalidHtml.includes('Unexpected token'));assert.ok(!invalidHtml.includes('Yüklənir…'));
 }finally{globalThis.fetch=originalFetch;}
 console.log('PASS: PostgreSQL13-compatible quoted cost alias, historical financial DTO/metrics, date/branch validation, role privacy and honest database errors; actual finance UI exits failed loading and retries reads without repeating payments. No server or database used.');
+}finally{if(previousLocal===undefined)delete process.env.BIRKASSA_LOCAL;else process.env.BIRKASSA_LOCAL=previousLocal;}

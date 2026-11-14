@@ -13,7 +13,8 @@ import {openLocalDatabase} from '../desktop/local-database.mjs';
 const port=55449,probe=createServer();
 await new Promise((resolve,reject)=>{probe.once('error',reject);probe.listen(port,'127.0.0.1',()=>probe.close(error=>error?reject(error):resolve()));});
 const dataRoot=path.resolve('.local-desktop-data','support-'+randomUUID());
-const previousBin=process.env.BIRKASSA_BUNDLED_PG_BIN;
+const previousBin=process.env.BIRKASSA_BUNDLED_PG_BIN,previousLocal=process.env.BIRKASSA_LOCAL;
+process.env.BIRKASSA_LOCAL='0';
 process.env.BIRKASSA_BUNDLED_PG_BIN=path.resolve('desktop/vendor/postgres/bin');
 const database=await openLocalDatabase(dataRoot,process.cwd(),{port});
 assert.equal(new URL(database.url).hostname,'127.0.0.1');assert.equal(new URL(database.url).port,String(port));
@@ -25,7 +26,7 @@ async function load(file,mocks={}){
 }
 const db={storeDb:()=>postgres(database.url,{max:1,prepare:false,connect_timeout:5})};
 const security=await load('lib/admin-security.ts'),roles=await load('lib/staff-access.ts');
-const guard=await load('lib/require-admin.ts',{'@/lib/store-db':db,'@/lib/admin-security':security,'@/lib/staff-access':roles});
+const guard=await load('lib/require-admin.ts',{'@/lib/store-db':db,'@/lib/admin-security':security,'@/lib/staff-access':roles,'@/lib/inventory-mode':await load('lib/inventory-mode.ts')});
 const contact=await load('lib/customer-contact.ts');
 let account,mailFailure=false,urlFailure=false;
 const mail=[];
@@ -99,4 +100,5 @@ try{
 }finally{
  await sql.end({timeout:2});await database.close();
  if(previousBin===undefined)delete process.env.BIRKASSA_BUNDLED_PG_BIN;else process.env.BIRKASSA_BUNDLED_PG_BIN=previousBin;
+ if(previousLocal===undefined)delete process.env.BIRKASSA_LOCAL;else process.env.BIRKASSA_LOCAL=previousLocal;
 }

@@ -20,6 +20,7 @@ const openRouting=await load('lib/open-routing.ts',{'./azerbaijan-location':coun
 const deliveryServer=await load('lib/delivery-server.ts',{'./open-routing':openRouting});
 const adminSecurity=await load('lib/admin-security.ts');
 const staffAccess=await load('lib/staff-access.ts');
+const inventory=await load('lib/inventory-mode.ts');
 const accountId='10000000-0000-4000-8000-000000000001';
 const userId='20000000-0000-4000-8000-000000000001';
 const quoteId='30000000-0000-4000-8000-000000000001';
@@ -71,7 +72,7 @@ function database(){
 }
 const dbMock={storeDb:database};
 const customerMock={customerAccount:async()=>fixture.account};
-const adminGuard=await load('lib/require-admin.ts',{'@/lib/store-db':dbMock,'@/lib/admin-security':adminSecurity,'@/lib/staff-access':staffAccess});
+const adminGuard=await load('lib/require-admin.ts',{'@/lib/store-db':dbMock,'@/lib/admin-security':adminSecurity,'@/lib/staff-access':staffAccess,'@/lib/inventory-mode':inventory});
 const admin=await load('app/api/admin/delivery/route.ts',{'@/lib/require-admin':adminGuard,'@/lib/store-db':dbMock,'@/lib/delivery-server':deliveryServer,'@/lib/open-routing':openRouting,'@/lib/azerbaijan-location':country});
 const quote=await load('app/api/delivery-quote/route.ts',{'@/lib/store-db':dbMock,'@/lib/customer-session':customerMock,'@/lib/delivery-server':deliveryServer,'@/lib/delivery':delivery,'@/lib/open-routing':openRouting,'@/lib/azerbaijan-location':country,'@/lib/customer-contact':customerContact});
 const publicRoute=await load('app/api/delivery-settings/route.ts',{'@/lib/store-db':dbMock,'@/lib/delivery-server':deliveryServer});

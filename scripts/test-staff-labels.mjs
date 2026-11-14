@@ -38,7 +38,7 @@ assert.ok(initialLoad,'Initial data loading effect is present');
 const runEffect=new Function('auth','useEffect','loadProducts','loadDashboard','staffPortalPath','window',compile(initialLoad.getText(ast)));
 for(const [role,expected] of Object.entries({admin:['products','dashboard'],manager:['products','dashboard'],cashier:['products','dashboard'],warehouse:['products'],accountant:[],online_manager:['online'],online_assistant:['online']})){
   const calls=[];
-  runEffect({authenticated:true,user:{id:'test',role}},fn=>fn(),()=>calls.push('products'),()=>calls.push('dashboard'),section=>'portal'+section,{location:{replace:path=>{assert.equal(path,'portal/online');calls.push('online');}}});
+  runEffect({authenticated:true,local:true,user:{id:'test',role}},fn=>fn(),()=>calls.push('products'),()=>calls.push('dashboard'),section=>'portal'+section,{location:{replace:path=>{assert.equal(path,'portal/online');calls.push('online');}}});
   assert.deepEqual(calls,expected,role+' only requests authorized initial datasets');
 }
 assert.ok(source.includes('["İdarə paneli", LayoutDashboard]'),'Permission key remains unchanged');

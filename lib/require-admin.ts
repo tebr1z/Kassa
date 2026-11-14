@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {storeDb} from '@/lib/store-db';
 import {secureAdminRequest} from '@/lib/admin-security';
 import {canUseStaffApi,isStaffRole,staffRoleSqlList} from '@/lib/staff-access';
+import {inventoryPathRequiresLocal,inventoryLocalOnlyResponse,isLocalInventory} from '@/lib/inventory-mode';
 
 // Check again at the data boundary: protection does not depend on Proxy running,
 // and identity headers supplied by a caller are never trusted.
@@ -27,6 +28,7 @@ export function withAdminSession(handler:(request:Request)=>Promise<Response>|Re
   finally{await sql.end({timeout:2});}
   if(!admin||!isStaffRole(String(admin.role)))return deny('Sessiya bitib. Administrator şifrəsi ilə daxil olun.',401);
   if(!canUseStaffApi(String(admin.role),new URL(request.url).pathname,request.method))return deny('Bu əməliyyat üçün səlahiyyətiniz yoxdur.',403);
+  if(!isLocalInventory()&&inventoryPathRequiresLocal(new URL(request.url).pathname))return inventoryLocalOnlyResponse();
   // Keep Next's original request/body implementation (including multipart File
   // objects). Re-wrapping it in a native Request breaks File branding in Node.
   request.headers.set('x-birkassa-user-id',String(admin.id));

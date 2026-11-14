@@ -5,6 +5,7 @@ import postgres from "postgres";
 import {secureAdminRequest} from "./lib/admin-security";
 import {canUseStaffApi,staffRoles} from './lib/staff-access';
 import {STAFF_PORTAL_PATH,isStaffPortalPath,canOpenStaffPage} from './lib/staff-portal';
+import {inventoryPathRequiresLocal,inventoryLocalOnlyResponse,isLocalInventory} from './lib/inventory-mode';
 
 type Rule={prefix:string;read:string[];write:string[]};
 const rules:Rule[]=[
@@ -114,6 +115,7 @@ export async function proxy(request:NextRequest){
     if(!adminPage&&!canUseStaffApi(session.role,path,request.method))return NextResponse.json({error:'Bu bölmə üçün səlahiyyətiniz yoxdur.'},{status:403});
     const roles=rule?(["GET","HEAD"].includes(request.method)?rule.read:rule.write):['admin'];
     if(!roles.includes(session.role))return NextResponse.json({error:"Bu əməliyyat üçün səlahiyyətiniz yoxdur"},{status:403});
+    if(!isLocalInventory()&&inventoryPathRequiresLocal(path))return inventoryLocalOnlyResponse();
     return forward(request,{id:session.id,role:session.role});
   }catch(error){console.error("permission.proxy",error);void logSystemError("permission.proxy", error);return NextResponse.json({error:"İcazə yoxlanmadı"},{status:500})}finally{await sql.end({timeout:2})}
 }

@@ -34,7 +34,7 @@ export async function verifyStaffPortalPolicy(){
 
 // This is called only by test-web-admin's freshly-created isolated DB/server.
 // It creates no real accounts, performs no sales, and does not contact live hosts.
-export async function verifyStaffPortalHttp({origin,request,sql,admin,adminSession,password,setSession}){
+export async function verifyStaffPortalHttp({origin,request,sql,admin,adminSession,password,setSession,inventoryLocal=false}){
  const url=new URL(origin);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'5767');
  const legacy=['/admin','/admin/','/admin/store','/admin/store/','/admin/online','/admin/online/'];
  for(const auth of [false,true]){
@@ -77,7 +77,7 @@ export async function verifyStaffPortalHttp({origin,request,sql,admin,adminSessi
   assert.equal((await request('/api/settings')).data.users.find(user=>user.id===pinOnly.id).hasPassword,false,'Settings explicitly exposes the unready status, not a hash');
   assert.equal((await request('/api/locations',{method:'POST',body:{action:'password',userId:pinOnly.id,password}})).status,200,'Only the admin explicitly sets the existing staff password');
   assert.ok((await request('/api/auth',{auth:false})).data.users.some(user=>user.id===pinOnly.id&&user.hasPassword),'Explicitly configured staff now appear for password sign-in');
-  assert.equal((await request('/api/auth',{method:'POST',auth:false,body:{action:'login',userId:pinOnly.id,password}})).status,200);assert.equal((await request('/api/warehouses')).status,200);assert.equal((await request('/api/finance')).status,403,'Onboarding does not elevate warehouse permissions');assert.equal((await request('/api/auth',{method:'DELETE'})).status,200);
+  assert.equal((await request('/api/auth',{method:'POST',auth:false,body:{action:'login',userId:pinOnly.id,password}})).status,200);assert.equal((await request('/api/warehouses')).status,inventoryLocal?200:403);assert.equal((await request('/api/finance')).status,403,'Onboarding does not elevate warehouse permissions');assert.equal((await request('/api/auth',{method:'DELETE'})).status,200);
   for(const [role,policy] of Object.entries(matrix)){
    setSession(adminSession);
    const staff=provisioned.get(role);
@@ -90,9 +90,9 @@ export async function verifyStaffPortalHttp({origin,request,sql,admin,adminSessi
    const store=await request(staffPortalPath('/store'));assert.ok([307,404].includes(store.status),'Store settings denied to '+role);if(store.status===307)assert.equal(new URL(store.headers.get('location'),origin).pathname,STAFF_PORTAL_PATH);
    if(['manager','online_manager','online_assistant'].includes(role))assert.equal((await request(staffPortalPath('/online'))).status,200);
    for(const endpoint of policy.allowed){
-    const result=await request(endpoint);assert.equal(result.status,200,role+' allowed '+endpoint+': '+JSON.stringify(result.data));assert.match(result.headers.get('cache-control'),/no-store/);
+    const result=await request(endpoint),expected=inventoryLocal||endpoint==='/api/online-orders'?200:403;assert.equal(result.status,expected,role+' runtime capability '+endpoint+': '+JSON.stringify(result.data));assert.match(result.headers.get('cache-control'),/no-store/);
     if(endpoint==='/api/online-orders'){assert.equal(result.data.canManage,true);assert.equal(result.data.canCancel,role!=='online_assistant');}
-    if(endpoint==='/api/products'&&['warehouse','manager'].includes(role)){
+    if(result.status===200&&endpoint==='/api/products'&&['warehouse','manager'].includes(role)){
      const [fixtureProduct]=await sql.unsafe("select id from products where sku='VARIANT-NEW-01' and is_active=true and deleted_at is null");assert.ok(fixtureProduct,'Use only the variant fixture created by test-web-admin');
      const product=result.data.find(item=>item.id===fixtureProduct.id);assert.ok(product);assert.equal(product.options.length,2);
      assert.ok(Array.isArray(product.editableOptions),'Authorized inventory editor must receive existing choices: '+role);

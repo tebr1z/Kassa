@@ -1,6 +1,7 @@
 import {withAdminSession} from '@/lib/require-admin';
 import {storeDb} from "@/lib/store-db";
 import {z} from "zod";
+import {isLocalInventory} from '@/lib/inventory-mode';
 export const dynamic="force-dynamic";
 
 const schema=z.object({revision:z.number().int().nonnegative(),slides:z.array(z.object({
@@ -13,7 +14,7 @@ async function handleGET(){
  try{
   const [config]=await sql.unsafe("select slides_revision from storefront_config where id=1");
   const slides=await sql.unsafe('select id,product_id as "productId",heading,badge,description,is_active as active from storefront_slides order by position,id');
-  const products=await sql.unsafe("select p.id,p.name,p.image_url as image,p.is_active as active,coalesce((select sum(quantity) from stock_movements where product_id=p.id),0)>0 as available from products p order by p.name");
+  const products=await sql.unsafe(isLocalInventory()?"select p.id,p.name,p.image_url as image,p.is_active as active,coalesce((select sum(quantity) from stock_movements where product_id=p.id),0)>0 as available from products p order by p.name":"select p.id,p.name,p.image_url as image,p.is_active as active,p.is_active as available from products p order by p.name");
   return Response.json({revision:config.slides_revision,slides,products});
  }catch{return Response.json({error:"Slaydlar yüklənmədi."},{status:503});}finally{await sql.end();}
 }

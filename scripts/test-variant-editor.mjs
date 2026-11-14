@@ -17,5 +17,6 @@ assert.throws(()=>serializeVariants([{...row,attributePairs:[['Qalınlıq','2'],
 assert.equal(serializeVariants([{...row,attributePairs:[['Qalınlıq','2 mm']]}])[0].attributes['Qalınlıq'],'2 mm');
 const editor=await readFile('app/admin/store/variant-editor.tsx','utf8'),root=await readFile('app/admin/staff-dashboard.tsx','utf8'),cms=await readFile('app/admin/store/commerce-manager.tsx','utf8');
 for(const label of ['Ölçü seçimi var','Rəng seçimi var','Başqa seçim var'])assert.ok(editor.includes(label));
-assert.ok(root.includes('options={newVariants}'));assert.ok(root.includes('options={editVariants}'));assert.ok(root.includes('Məhsulu sil'));assert.ok(cms.includes('options:serializeVariants(draftOptions)'));
+assert.ok(root.includes('options={newVariants}'));assert.ok(root.includes('options={editVariants}'));assert.ok(root.includes('Məhsulu sil'));assert.ok(cms.includes('options:draftOptions'));
+assert.ok((await readFile('lib/catalog-editor-payload.ts','utf8')).includes('options:serializeVariants(options,{includeCosts:local})'),'CMS routes its options through the shared serializer without forwarding web costs');
 console.log('PASS: explicit size/colour/custom switches, both product forms, per-choice prices, inherited prices, existing IDs, invalid/duplicate fields and delete control.');

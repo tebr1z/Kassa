@@ -1,13 +1,19 @@
-# RestaMarket Windows tətbiqi — 0.5.0
+# RestaMarket Windows tətbiqi — 0.6.0
 
-Hazır quraşdırıcı: `desktop-release/v0.5.0/RestaMarket-Setup-0.5.0.exe`.
+Yeni quraşdırıcının çıxış yolu: `desktop-release/v0.6.0/RestaMarket-Setup-0.6.0.exe`.
 Proqram + cari lokal məlumatlar üçün `npm run desktop:transfer` işlədin. Nəticə
-`desktop-release/RestaMarket-Kocurme-0.5.0-TARIX` qovluğunda quraşdırıcı,
+`desktop-release/RestaMarket-Kocurme-0.6.0-TARIX` qovluğunda quraşdırıcı,
 `RestaMarket-data.birkassa`, yoxlama heşləri və `OXU-KOCURME.txt` olacaq.
 `.exe` özü mağaza məlumatlarını daşımır. Qovluğun hamısını köçürün.
 Ətraflı istifadəçi təlimatı: `desktop/TRANSFER.txt`.
 
 Satış, stok, istifadəçi, maliyyə və çek məlumatları kompüterdə ayrıca PostgreSQL bazasında saxlanır. Kassa və endirilmiş şəkillər internet olmadan işləyir. Yeni veb sifarişləri və mesaj xidmətləri internet tələb edir.
+
+## Yalnız kompüterdə stok
+
+Veb mağazada kataloq, məhsul redaktəsi, seçim şəkilləri, endirimlər və onlayn sifarişlər işləməyə davam edir. Stok qalığı, qəbul, transfer, sayım və stok dəyişən kassa əməliyyatları yalnız masaüstü rejimdə açılır. Məhsul redaktəsinin veb cavablarında stok və alış qiyməti yoxdur; vebdən göndərilən maya dəyəri saxlanmır. Mövcud tarixi server məlumatları bu yenilənmə ilə silinmir və kompüterə avtomatik köçürülmür.
+
+Veb serverdə `BIRKASSA_LOCAL=1` təyin etməyin. Lokal rejim EXE tərəfindən ayrıca kompüter bazası ilə işə salınır; sorğu başlığı və ya URL parametri bunu aktivləşdirə bilməz. EXE məlumatları öz icra faylının daxilində deyil, ayrıca lokal baza qovluğunda saxlayır. Lokal baza və ehtiyat arxivləri şifrələnmiş sayılmır.
 
 ## Quraşdırma
 

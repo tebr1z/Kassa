@@ -117,6 +117,7 @@ const db={
  async end(){},
 };
 const mocks={
+ '@/lib/inventory-mode':await load('lib/inventory-mode.ts'),
  '@/lib/staff-access':policy,
  '@/lib/store-db':{storeDb:()=>db},
  '@/lib/admin-security':security,
@@ -159,8 +160,10 @@ try{
   assert.equal((await auth.desktopActivity(request('/api/auth','PATCH'))).status,200);
   assert.equal(state.activityWrites,1);
   const data=await guarded(sessionRequest());
-  assert.equal(data.status,200,role+' data-boundary access');
-  assert.deepEqual(await data.json(),{id:fixtureId,role});
+  const localOnly=mocks['@/lib/inventory-mode'].inventoryPathRequiresLocal(allowedPath[role]);
+  assert.equal(data.status,localOnly?403:200,role+' web data-boundary access');
+  if(localOnly){assert.equal((await data.json()).code,'INVENTORY_LOCAL_ONLY');process.env.BIRKASSA_LOCAL='1';const localData=await guarded(sessionRequest());assert.equal(localData.status,200,role+' retains local EXE access');assert.deepEqual(await localData.json(),{id:fixtureId,role});process.env.BIRKASSA_LOCAL='0';}
+  else assert.deepEqual(await data.json(),{id:fixtureId,role});
   assert.match(data.headers.get('cache-control'),/no-store/);
   if(role!=='admin')assert.equal((await guarded(sessionRequest(deniedPath[role]))).status,403,role+' cannot gain another role');
   assert.equal((await guarded(sessionRequest(allowedPath[role],'POST',{origin:'https://attacker.example'}))).status,403);

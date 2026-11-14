@@ -9,6 +9,12 @@ async function load(file,mocks={}){
  const source=await readFile(file,'utf8'),code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,compiledModule={exports:{}};
  new Function('require','module','exports',code)(name=>name==='server-only'?{}:Object.hasOwn(mocks,name)?mocks[name]:require(name),compiledModule,compiledModule.exports);return compiledModule.exports;
 }
+const originalLocal=process.env.BIRKASSA_LOCAL;
+try{
+// This legacy regression exercises EXE inventory/POS editors. Web-only safety is
+// covered separately by test-web-inventory-boundary and the real HTTP test.
+process.env.BIRKASSA_LOCAL='1';
+const inventory=await load('lib/inventory-mode.ts');
 const images=await load('lib/product-option-image.ts'),input=await load('lib/product-option-input.ts',{'./product-option-image':images});
 const hash='a'.repeat(64),cloud='https://res.cloudinary.com/fixture/image/upload/red.png',local='/api/desktop-media/'+hash,catalog='/api/catalog-media/'+hash;
 for(const value of ['',cloud,local,catalog])assert.equal(images.isProductOptionImage(value),true,String(value));
@@ -44,7 +50,7 @@ const sql={async unsafe(query,values=[]){queries.push([query,values]);
  if(query.startsWith('insert into product_options'))return [{id:optionId}];
  return [];
  },async begin(callback){return callback(this);},async end(){}};
-const admin=await load('app/api/store-admin/commerce/route.ts',{'@/lib/require-admin':guard,'@/lib/store-db':{storeDb:()=>sql},'@/lib/barcode':barcode,'@/lib/desktop-media':media,'@/lib/product-option-input':input,'@/lib/save-product-options':{saveProductOptions},'@/lib/product-discount':discount});
+const admin=await load('app/api/store-admin/commerce/route.ts',{'@/lib/require-admin':guard,'@/lib/store-db':{storeDb:()=>sql},'@/lib/barcode':barcode,'@/lib/desktop-media':media,'@/lib/product-option-input':input,'@/lib/save-product-options':{saveProductOptions},'@/lib/product-discount':discount,'@/lib/inventory-mode':inventory});
 let response=await admin.GET(request());assert.equal(response.status,200);assert.equal((await response.json()).products[0].options[0].image_url,local);
 for(const image of [undefined,'',cloud]){
  queries=[];response=await admin.POST(request({...base,action:'option',product_id:productId,...(image===undefined?{}:{image_url:image})}));assert.equal(response.status,200);
@@ -90,3 +96,4 @@ try{
 }finally{if(previousPool===undefined)delete globalThis.catalogPool;else globalThis.catalogPool=previousPool;if(previousDb===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=previousDb;}
 const migration=await readFile('drizzle/0036_product_option_images.sql','utf8');assert.match(migration,/ADD COLUMN IF NOT EXISTS image_url text NOT NULL DEFAULT ''/);
 console.log('PASS: variant image safe URL validation, optional-vs-clear compatibility, locked bulk and standalone option edits, admin/POS DTO media mapping, authenticated unattached 4 MB raster upload with no row/logo mutation, desktop public-protocol backward compatibility and additive migration.');
+}finally{if(originalLocal===undefined)delete process.env.BIRKASSA_LOCAL;else process.env.BIRKASSA_LOCAL=originalLocal;}

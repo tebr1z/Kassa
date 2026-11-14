@@ -60,8 +60,9 @@ const sql={end:async()=>{},begin:async fn=>fn(sql),unsafe:async(query,args=[])=>
 }};
 const optionImage=await load('lib/product-option-image.ts');
 const optionInput=await load('lib/product-option-input.ts',{'./product-option-image':optionImage});
-const common={'@/lib/require-admin':{withAdminSession:fn=>fn},'@/lib/barcode':{ensurePrimaryBarcodes:async()=>{},savePrimaryBarcode:async()=>{}},'@/lib/product-option-input':optionInput,'@/lib/save-product-options':{saveProductOptions:async()=>{}},'@/lib/commerce':commerce,'@/lib/product-discount':discounts,'@/lib/desktop-media':{mediaUrl:async value=>value}};
-const oldDatabase=process.env.DATABASE_URL;process.env.DATABASE_URL='postgres://isolated.invalid/test';
+const inventory=await load('lib/inventory-mode.ts',{'server-only':{}});
+const common={'@/lib/inventory-mode':inventory,'@/lib/require-admin':{withAdminSession:fn=>fn},'@/lib/barcode':{ensurePrimaryBarcodes:async()=>{},savePrimaryBarcode:async()=>{}},'@/lib/product-option-input':optionInput,'@/lib/save-product-options':{saveProductOptions:async()=>{}},'@/lib/commerce':commerce,'@/lib/product-discount':discounts,'@/lib/desktop-media':{mediaUrl:async value=>value}};
+const oldDatabase=process.env.DATABASE_URL,oldLocal=process.env.BIRKASSA_LOCAL;process.env.DATABASE_URL='postgres://isolated.invalid/test';process.env.BIRKASSA_LOCAL='1';
 try{
   const api=await load('app/api/products/route.ts',{...common,'next/server':{NextResponse:Response},'@/lib/log-error':{logSystemError:async()=>{}},'@/lib/warehouse':{salesWarehouseSql:()=>''},postgres:()=>sql});
   const request=(method,body)=>new Request('http://fixture.invalid/api/products',{method,headers:{'Content-Type':'application/json','x-birkassa-user-id':user,'x-birkassa-role':'admin'},...(body?{body:JSON.stringify(body)}:{})});
@@ -78,7 +79,7 @@ try{
   response=await cms.POST(request('POST',{...cmsBase,discount_percent:12.5}));assert.equal(response.status,200);assert.equal(row.discount_price,87.5,'CMS percentage is server calculated');
   response=await cms.POST(request('POST',{...cmsBase}));assert.equal(response.status,200);assert.equal(row.discount_price,87.5,'Omitted CMS discount fields preserve existing price');
   for(const invalid of [{discount_percent:100},{discount_percent:-1},{discount_price:100},{discount_price:75,discount_percent:10}]){const before=mutations;response=await cms.POST(request('POST',{...cmsBase,...invalid}));assert.equal(response.status,400);assert.equal(mutations,before);}
-}finally{if(oldDatabase===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=oldDatabase;}
+}finally{if(oldDatabase===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=oldDatabase;if(oldLocal===undefined)delete process.env.BIRKASSA_LOCAL;else process.env.BIRKASSA_LOCAL=oldLocal;}
 
 for(const [path,marker] of [['app/api/sales/route.ts','const price = orderLine?'],['app/api/orders/route.ts','const price=option?.price!=null?']]){
   const source=await readFile(path,'utf8'),start=source.indexOf(marker);assert.ok(start>=0,path);const expression=source.slice(start,source.indexOf(';',start)+1);

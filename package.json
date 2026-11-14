@@ -1,6 +1,6 @@
 {
   "name": "birkassa-system",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "main": "desktop/main.cjs",
   "productName": "RestaMarket",
@@ -24,6 +24,8 @@
     "test:seo": "node scripts/test-seo.mjs",
     "test:seo-http": "node scripts/test-seo-http.mjs",
     "test:web-admin": "node scripts/test-admin-guard.mjs && node scripts/test-web-admin.mjs",
+    "test:local-stock": "node scripts/test-web-inventory-boundary.mjs && node scripts/test-web-local-stock.mjs",
+    "test:local-staff": "node scripts/test-local-staff-workflow.mjs",
     "admin:setup-key": "node scripts/prepare-web-admin-key.mjs",
     "test:account-translations": "node scripts/test-account-translations.mjs",
     "test:desktop-package": "node scripts/test-desktop-package.mjs && node scripts/test-packaged-server.mjs && node scripts/smoke-desktop.mjs",
@@ -100,7 +102,7 @@
       "executableName": "RestaMarket"
     },
     "directories": {
-      "output": "desktop-release/v0.5.0",
+      "output": "desktop-release/v0.6.0",
       "app": "desktop"
     },
     "files": [

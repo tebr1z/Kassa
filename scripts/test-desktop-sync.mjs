@@ -33,8 +33,8 @@ try{
   assert.equal((await app.request('/api/auth',{method:'POST',body:{action:'setup-password',userId:app.admin.id,setupToken,pin:'000000',password,confirmPassword:password}})).status,401);
   const enrolled=await app.request('/api/auth',{method:'POST',body:{action:'setup-password',userId:app.admin.id,setupToken,pin:'246810',password,confirmPassword:password}});assert.equal(enrolled.status,200,JSON.stringify(enrolled.data));assert.match(enrolled.headers.get('set-cookie'),/HttpOnly/);assert.match(enrolled.headers.get('set-cookie'),/SameSite=Strict/i);
  }
- assert.equal((await web.request('/api/products')).status,200,'Strong web admin can read its own inventory');
- assert.equal((await web.request('/api/finance')).status,200);
+ assert.equal((await web.request('/api/products')).status,403,'Even a strong web admin cannot access local-only inventory');
+ assert.equal((await web.request('/api/finance')).status,403,'Stock-derived aggregate financial records stay local');
  assert.equal((await local.request('/api/products',{auth:false,headers:{'x-birkassa-role':'admin','x-birkassa-user-id':local.admin.id}})).status,401);
  const [manager]=await local.sql.unsafe("insert into users(branch_id,full_name,role) values($1,'Test manager','manager') returning id",[local.admin.branch_id]);
  const fake=randomBytes(32).toString('hex');await local.sql.unsafe("insert into auth_sessions(user_id,token_hash,expires_at,authentication_method) values($1,$2,now()+interval '1 hour','password')",[manager.id,createHash('sha256').update(fake).digest('hex')]);
@@ -60,7 +60,7 @@ try{
  assert.equal(Number((await web.sql.unsafe('select count(*) n from stock_movements'))[0].n),0,'No stock is stored on the web');
  const catalogue=await web.request('/api/catalog',{auth:false});assert.equal(catalogue.data.products.length,1,'A product can be ordered without any web stock');noPrivateFields(catalogue.data.products);
  const imageUrl=catalogue.data.products[0].image;assert.match(imageUrl,/^\/api\/catalog-media\//);assert.deepEqual(Buffer.from(await (await fetch(web.origin+imageUrl)).arrayBuffer()),bytes);
- const webEditor=await web.request('/api/store-admin/commerce');assert.ok('cost_price' in webEditor.data.products[0]);assert.ok('stock' in webEditor.data.products[0]);
+ const webEditor=await web.request('/api/store-admin/commerce');assert.ok(!('cost_price' in webEditor.data.products[0]));assert.ok(!('stock' in webEditor.data.products[0]));assert.ok(!('min_stock' in webEditor.data.products[0]));assert.ok(webEditor.data.products[0].options.every(option=>!('cost_price' in option)));
  const customer=await web.request('/api/customer-account',{method:'POST',body:{action:'register',email:'fixture-'+randomUUID()+'@example.test',password:'Fixture-Customer-123!',name:'Hesab sahibi',phone:'+994500000001'}});assert.equal(customer.status,200);
  const customerInfo=(await web.request('/api/customer-account')).data.user;
  const webOption=catalogue.data.products[0].options[0].id;

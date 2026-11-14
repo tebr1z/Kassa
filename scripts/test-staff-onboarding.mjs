@@ -6,10 +6,12 @@ import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import ts from 'typescript';
 const require=createRequire(import.meta.url);
-async function load(file,mocks={}){const code=ts.transpileModule(await readFile(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,module={exports:{}};new Function('require','module','exports',code)(name=>name==='server-only'?{}:Object.hasOwn(mocks,name)?mocks[name]:require(name),module,module.exports);return module.exports;}
-const policy=await load('lib/staff-access.ts'),security=await load('lib/admin-security.ts'),passwords=await load('lib/staff-password.ts'),forms=await load('lib/staff-onboarding.ts'),labels=await load('lib/staff-labels.ts');
+async function load(file,mocks={}){const code=ts.transpileModule(await readFile(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,loaded={exports:{}};new Function('require','module','exports',code)(name=>name==='server-only'?{}:Object.hasOwn(mocks,name)?mocks[name]:require(name),loaded,loaded.exports);return loaded.exports;}
+const policy=await load('lib/staff-access.ts'),security=await load('lib/admin-security.ts'),passwords=await load('lib/staff-password.ts'),forms=await load('lib/staff-onboarding.ts'),labels=await load('lib/staff-labels.ts'),inventory=await load('lib/inventory-mode.ts');
 // The connection factory below is mocked; never use an ambient real DB URL.
-const originalDatabaseUrl=process.env.DATABASE_URL;process.env.DATABASE_URL='mock://staff-onboarding-no-network';
+const originalDatabaseUrl=process.env.DATABASE_URL,originalLocal=process.env.BIRKASSA_LOCAL;
+try{
+process.env.DATABASE_URL='mock://staff-onboarding-no-network';process.env.BIRKASSA_LOCAL='0';
 const actorId='10000000-0000-4000-8000-000000000001',branchId='20000000-0000-4000-8000-000000000001',password='Isolated-Staff-123!';
 const users=[],audit=[],revoked=[];let actorRole='admin',mutations=0;
 const sql={async unsafe(query,params=[]){
@@ -25,10 +27,10 @@ const sql={async unsafe(query,params=[]){
  if(query.startsWith('select id,name,address from branches')||query.startsWith('select w.id,w.name')||query.startsWith('select id,name,code,is_active from cash_registers')||query.startsWith('select l.id,l.code')||query.startsWith('select key,value from system_settings'))return [];
  throw Error('Unexpected mock SQL: '+query);
 },async begin(callback){return callback(this);},async end(){}};
-const guard=await load('lib/require-admin.ts',{'@/lib/store-db':{storeDb:()=>sql},'@/lib/admin-security':security,'@/lib/staff-access':policy});
+const guard=await load('lib/require-admin.ts',{'@/lib/store-db':{storeDb:()=>sql},'@/lib/admin-security':security,'@/lib/staff-access':policy,'@/lib/inventory-mode':inventory});
 const next={NextResponse:{json:Response.json.bind(Response)}};
-const settings=await load('app/api/settings/route.ts',{'@/lib/require-admin':guard,'@/lib/staff-password':passwords,'@/lib/log-error':{logSystemError(){}},'next/server':next,postgres:()=>sql});
-const locations=await load('app/api/locations/route.ts',{'@/lib/require-admin':guard,'@/lib/store-db':{storeDb:()=>sql},'@/lib/staff-access':policy,'@/lib/staff-password':passwords});
+const settings=await load('app/api/settings/route.ts',{'@/lib/require-admin':guard,'@/lib/staff-password':passwords,'@/lib/log-error':{logSystemError(){}},'next/server':next,postgres:()=>sql,'@/lib/inventory-mode':inventory});
+const locations=await load('app/api/locations/route.ts',{'@/lib/require-admin':guard,'@/lib/store-db':{storeDb:()=>sql},'@/lib/staff-access':policy,'@/lib/staff-password':passwords,'@/lib/inventory-mode':inventory});
 const request=(path,body)=>new Request('https://fixture.example'+path,{method:'POST',headers:{host:'fixture.example',origin:'https://fixture.example',cookie:'birkassa_session=isolated-fixture','content-type':'application/json'},body:JSON.stringify(body)});
 const invoke=async(handler,path,body)=>{const response=await handler(request(path,body));return {status:response.status,data:await response.json()};};
 const create=(role,overrides={})=>({action:'create_user',fullName:'Isolated '+role,role,branchId,password,...overrides});
@@ -52,5 +54,5 @@ const dialog={Dialog:({children})=>children,DialogContent:()=>null,DialogTrigger
 const setup=await load('app/admin/staff-password-setup.tsx',{...language,'@/lib/staff-onboarding':forms,'@/components/ui/dialog':dialog,'@/components/ui/button':button,'./staff-access-settings.css':{}});
 const {default:StaffAccessSettings}=await load('app/admin/staff-access-settings.tsx',{...language,'@/lib/staff-labels':labels,'@/lib/staff-onboarding':forms,'@/components/ui/button':button,'./staff-password-setup':setup,'./staff-access-settings.css':{}});
 const html=renderToStaticMarkup(createElement(StaffAccessSettings,{users:[{id:'pin-only',fullName:'Warehouse fixture',role:'warehouse',isActive:true,hasPin:true,hasPassword:false},{id:'ready',fullName:'Cashier fixture',role:'cashier',isActive:true,hasPin:false,hasPassword:true}],branches:[{id:branchId,name:'Fixture shop'}],onChanged:async()=>{}}));assert.ok(html.includes('Veb girişi hazır deyil'));assert.ok(html.includes('Veb girişi hazırdır'));assert.ok(html.includes('Şifrə qur'));assert.ok(html.includes('Şifrəni dəyiş'));assert.match(html,/<input(?=[^>]*name="password")(?=[^>]*type="password")(?=[^>]*required)[^>]*>/);assert.ok(!html.includes(password));
-if(originalDatabaseUrl===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=originalDatabaseUrl;
 console.log('PASS: all7 roles provision with explicit strong hashed passwords, PIN-only reset admin-only/revokes sessions, safe ready DTO/audit, five-language copy and actionable readiness/password UI. Mock database only; no server/live data.');
+}finally{if(originalDatabaseUrl===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=originalDatabaseUrl;if(originalLocal===undefined)delete process.env.BIRKASSA_LOCAL;else process.env.BIRKASSA_LOCAL=originalLocal;}
