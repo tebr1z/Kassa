@@ -10,10 +10,10 @@ export const dynamic="force-dynamic";
 async function handleGET(){
  const sql=storeDb();try{
  await ensurePrimaryBarcodes(sql);
- const products=await sql.unsafe("select p.*,coalesce((select sum(quantity) from stock_movements sm where sm.product_id=p.id),0) stock,coalesce((select b.barcode from product_barcodes b where b.product_id=p.id and b.is_primary limit 1),'') barcode,coalesce((select json_agg(json_build_object('id',o.id,'label',o.label,'size',o.size,'color',o.color,'kind',o.kind,'cost_price',o.cost_price,'attributes',o.attributes,'price',o.price,'position',o.position,'is_active',o.is_active) order by o.position,o.created_at) from product_options o where o.product_id=p.id),'[]'::json) as \"options\" from products p where p.deleted_at is null order by p.name");
+ const products=await sql.unsafe("select p.*,coalesce((select sum(quantity) from stock_movements sm where sm.product_id=p.id),0) stock,coalesce((select b.barcode from product_barcodes b where b.product_id=p.id and b.is_primary limit 1),'') barcode,coalesce((select json_agg(json_build_object('id',o.id,'label',o.label,'size',o.size,'color',o.color,'kind',o.kind,'image_url',o.image_url,'cost_price',o.cost_price,'attributes',o.attributes,'price',o.price,'position',o.position,'is_active',o.is_active) order by o.position,o.created_at) from product_options o where o.product_id=p.id),'[]'::json) as \"options\" from products p where p.deleted_at is null order by p.name");
  const coupons=await sql.unsafe("select * from commerce_coupons order by expires_at desc");
  const messages=await sql.unsafe("select m.*,a.email,c.phone from contact_messages m join customer_accounts a on a.id=m.account_id join customers c on c.id=a.customer_id order by m.created_at desc limit 200");
- for(const product of products)product.image_url=await mediaUrl(product.image_url);
+ for(const product of products){product.image_url=await mediaUrl(product.image_url);for(const option of product.options)option.image_url=await mediaUrl(option.image_url);}
  const local=process.env.BIRKASSA_LOCAL==="1";
  return Response.json({local,canManageProducts:true,products,coupons,messages});
  }catch{return Response.json({error:"Məlumatlar yüklənmədi."},{status:503});}finally{await sql.end();}
@@ -41,7 +41,7 @@ async function handlePOST(request:Request){
  }else if(b.action==="option"){
  const [parent]=await tx.unsafe('select id from products where id=$1 and deleted_at is null for update',[b.product_id]);if(!parent)throw new Error('Məhsul tapılmadı.');
  const values=[b.product_id,b.label,b.size,b.color,b.kind,b.price,b.position,b.is_active,JSON.stringify(b.attributes),b.cost_price];
- const rows=b.id?await tx.unsafe("update product_options set label=$2,size=$3,color=$4,kind=$5,price=$6,position=$7,is_active=$8,attributes=$9::text::jsonb,cost_price=$10 where id=$11 and product_id=$1 returning id",[...values,b.id]):await tx.unsafe("insert into product_options(product_id,label,size,color,kind,price,position,is_active,attributes,cost_price) values($1,$2,$3,$4,$5,$6,$7,$8,$9::text::jsonb,$10) returning id",values);
+ const rows=b.id?await tx.unsafe("update product_options set label=$2,size=$3,color=$4,kind=$5,price=$6,position=$7,is_active=$8,attributes=$9::text::jsonb,cost_price=$10,image_url=coalesce($11,image_url) where id=$12 and product_id=$1 returning id",[...values,b.image_url??null,b.id]):await tx.unsafe("insert into product_options(product_id,label,size,color,kind,price,position,is_active,attributes,cost_price,image_url) values($1,$2,$3,$4,$5,$6,$7,$8,$9::text::jsonb,$10,$11) returning id",[...values,b.image_url??'']);
  if(!rows[0])throw new Error("Seçim tapılmadı.");entityId=rows[0].id;
  }else if(b.action==='delete-product'){
  const [parent]=await tx.unsafe('select id,name from products where id=$1 and deleted_at is null for update',[b.id]);if(!parent)throw new Error('Məhsul tapılmadı.');

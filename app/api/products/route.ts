@@ -9,10 +9,11 @@ import {productOptionList} from '@/lib/product-option-input';
 import {saveProductOptions} from '@/lib/save-product-options';
 import {sellingPrice} from '@/lib/commerce';
 import {resolveProductDiscount} from '@/lib/product-discount';
+import {mediaUrl} from '@/lib/desktop-media';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-type PublicOption={id:string;label:string;size:string;color:string;kind:string;attributes:Record<string,string>;price:number|string|null};
+type PublicOption={id:string;label:string;size:string;color:string;kind:string;image:string;attributes:Record<string,string>;price:number|string|null};
 type PriceHistory={oldSalePrice:string|number;newSalePrice:string|number;oldCostPrice:string|number;newCostPrice:string|number;changedAt:string};
 
 function connection() {
@@ -33,7 +34,7 @@ async function handleGET(request: Request) {
       left join product_barcodes b on b.product_id = p.id and b.is_primary = true
       left join lateral (select jsonb_agg(jsonb_build_object('id',pb.id,'barcode',pb.barcode,'isPrimary',pb.is_primary) order by pb.is_primary desc,pb.barcode) barcodes from product_barcodes pb where pb.product_id=p.id) bc on true
       left join lateral (select jsonb_agg(jsonb_build_object('oldSalePrice',h.old_sale_price,'newSalePrice',h.new_sale_price,'oldCostPrice',h.old_cost_price,'newCostPrice',h.new_cost_price,'changedAt',h.changed_at) order by h.changed_at desc) history from (select * from product_price_history where product_id=p.id order by changed_at desc limit 8) h) ph on true
-      left join lateral (select jsonb_agg(jsonb_build_object('id',o.id,'label',o.label,'size',o.size,'color',o.color,'kind',o.kind,'attributes',o.attributes,'price',o.price) order by o.position,o.created_at) as "options" from product_options o where o.product_id=p.id and o.is_active=true) po on true
+      left join lateral (select jsonb_agg(jsonb_build_object('id',o.id,'label',o.label,'size',o.size,'color',o.color,'kind',o.kind,'image',o.image_url,'attributes',o.attributes,'price',o.price) order by o.position,o.created_at) as "options" from product_options o where o.product_id=p.id and o.is_active=true) po on true
       left join stock_movements sm on sm.product_id = p.id and sm.warehouse_id = (select id from (${salesWarehouseSql(request.headers.get("x-birkassa-user-id") || "")}) sales_warehouse)
       left join warehouse_locations wl on wl.id = sm.location_id
       where p.is_active = true
@@ -41,7 +42,9 @@ async function handleGET(request: Request) {
       order by p.name
     `);
     const canEditInventory=['admin','manager','warehouse'].includes(request.headers.get('x-birkassa-role')||'');
-    const editable=canEditInventory?await sql.unsafe('select product_id,id,label,size,color,kind,price,cost_price,position,is_active,attributes from product_options order by position,created_at'):[];
+    const editable=canEditInventory?await sql.unsafe('select product_id,id,label,size,color,kind,image_url,price,cost_price,position,is_active,attributes from product_options order by position,created_at'):[];
+    for(const row of rows)for(const option of (row.options||[]) as PublicOption[])option.image=await mediaUrl(option.image);
+    for(const option of editable)option.image_url=await mediaUrl(option.image_url);
     return NextResponse.json(rows.map((row) => ({
       id: row.id,
       name: row.name,
@@ -57,7 +60,7 @@ async function handleGET(request: Request) {
       cost: request.headers.get("x-birkassa-role")==="cashier"?0:Number(row.cost_price),
       barcodes: row.barcodes,
       options:((row.options||[]) as PublicOption[]).map(option=>({...option,price:option.price==null?null:Number(option.price)})),
-      ...(canEditInventory?{editableOptions:editable.filter(o=>o.product_id===row.id).map(o=>({id:o.id,label:o.label,size:o.size,color:o.color,kind:o.kind,price:o.price,cost_price:o.cost_price,position:o.position,is_active:o.is_active,attributes:o.attributes}))}:{}),
+      ...(canEditInventory?{editableOptions:editable.filter(o=>o.product_id===row.id).map(o=>({id:o.id,label:o.label,size:o.size,color:o.color,kind:o.kind,image_url:o.image_url,price:o.price,cost_price:o.cost_price,position:o.position,is_active:o.is_active,attributes:o.attributes}))}:{}),
       priceHistory: ((request.headers.get("x-birkassa-role")==="cashier"?[]:row.price_history) as PriceHistory[]).map(item=>({...item,oldSalePrice:Number(item.oldSalePrice),newSalePrice:Number(item.newSalePrice),oldCostPrice:Number(item.oldCostPrice),newCostPrice:Number(item.newCostPrice)})),
     })));
   } catch (error) {

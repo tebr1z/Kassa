@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 const productColumns = ['id', 'sku', 'name', 'category', 'unit', 'sale_price', 'cost_price', 'min_stock', 'is_active', 'created_at', 'image_url', 'description', 'specifications', 'discount_price', 'public_code','deleted_at'];
 const barcodeColumns = ['id', 'product_id', 'barcode', 'is_primary'];
 const imageColumns = ['id', 'product_id', 'image_url', 'position'];
-const optionColumns = ['id', 'product_id', 'label', 'size', 'color', 'kind', 'price', 'position', 'is_active', 'created_at','attributes','cost_price'];
+const optionColumns = ['id', 'product_id', 'label', 'size', 'color', 'kind', 'price', 'position', 'is_active', 'created_at','attributes','cost_price','image_url'];
 const categoryColumns = ['id', 'name', 'is_active', 'image_url', 'show_on_home'];
 const locationColumns = ['id', 'warehouse_id', 'code', 'zone', 'aisle', 'shelf', 'bin'];
 
@@ -82,7 +82,15 @@ export async function importCatalog(target, catalog, identity) {
     for (const product of catalog.products) await tx`insert into products ${tx({...product,deleted_at:product.deleted_at||null}, productColumns)}`;
     for (const barcode of catalog.barcodes) await tx`insert into product_barcodes ${tx(barcode, barcodeColumns)}`;
     for (const image of catalog.images) await tx`insert into product_images ${tx(image, imageColumns)}`;
-    for (const option of catalog.options) await tx`insert into product_options ${tx({...option,attributes:option.attributes||{},cost_price:option.cost_price??null}, optionColumns)}`;
+    for (const option of catalog.options) {
+      const image=option.image_url??'';
+      let safe=image===''||/^\/api\/(?:catalog|desktop)-media\/[a-f0-9]{64}$/.test(image);
+      if(typeof image==='string'&&image.length<=2048&&!/[\s\\\u0000-\u001f\u007f]/.test(image)&&image.startsWith('https://res.cloudinary.com/')){
+        try{const url=new URL(image);safe=url.protocol==='https:'&&url.hostname==='res.cloudinary.com'&&!url.username&&!url.password&&!url.port;}catch{}
+      }
+      if(typeof image!=='string'||!safe)throw new Error('Seçim şəkli düzgün deyil.');
+      await tx`insert into product_options ${tx({...option,image_url:image,attributes:option.attributes||{},cost_price:option.cost_price??null}, optionColumns)}`;
+    }
     const costs = new Map(catalog.products.map(row => [row.id, row.cost_price]));
     for (const balance of catalog.balances) {
       await tx`insert into stock_movements ${tx({

@@ -3,6 +3,8 @@ import {createHash} from "node:crypto";
 import {cloudCredentials} from "@/lib/cloudinary-config";
 import {storeDb} from "@/lib/store-db";
 import {saveImage} from "@/lib/catalog-media";
+import {imageType} from '@/lib/desktop-media';
+import {isProductOptionImage} from '@/lib/product-option-image';
 export const runtime="nodejs";
 async function acceptedImage(file:File,maxBytes:number){
  if(file.size<=0||file.size>maxBytes)return false;
@@ -16,9 +18,12 @@ async function acceptedImage(file:File,maxBytes:number){
 }
 async function handlePOST(request:Request){
  if(Number(request.headers.get("content-length")||0)>6000000)return Response.json({error:"Şəkil maksimum 5 MB ola bilər"},{status:413});
- const form=await request.formData();const file=form.get("file"),productId=String(form.get("productId")||""),categoryId=String(form.get("categoryId")||"");
- const maxBytes=productId?4000000:5000000;
- if(!(file instanceof File)||!(await acceptedImage(file,maxBytes)))return Response.json({error:productId?"Hər şəkil ən çoxu 4 MB ola bilər. JPG, PNG və ya WebP seçin.":"JPG, PNG və ya WebP seçin (maksimum 5 MB)"},{status:400});
+ const form=await request.formData();const file=form.get("file"),productId=String(form.get("productId")||""),categoryId=String(form.get("categoryId")||""),purpose=String(form.get('purpose')||''),variant=purpose==='variant';
+ if((purpose&&!variant)||(variant&&(productId||categoryId)))return Response.json({error:'Şəkil bir hədəfə yüklənməlidir.'},{status:400});
+ const maxBytes=productId||variant?4000000:5000000;
+ if(!(file instanceof File)||!(await acceptedImage(file,maxBytes)))return Response.json({error:productId||variant?"Hər şəkil ən çoxu 4 MB ola bilər. JPG, PNG və ya WebP seçin.":"JPG, PNG və ya WebP seçin (maksimum 5 MB)"},{status:400});
+ // Browser MIME claims are not trusted for new unattached variant uploads.
+ if(variant){try{if(!['image/jpeg','image/png','image/webp'].includes(imageType(Buffer.from(await file.slice(0,12).arrayBuffer()))))throw Error();}catch{return Response.json({error:'JPG, PNG və ya WebP seçin.'},{status:400});}}
  if(productId&&categoryId)return Response.json({error:"Şəkil bir hədəfə yüklənməlidir"},{status:400});
  if((productId||categoryId)&&!/^[0-9a-f-]{36}$/i.test(productId||categoryId))return Response.json({error:"Məlumat düzgün deyil"},{status:400});
  const local=process.env.BIRKASSA_LOCAL==="1";
@@ -35,6 +40,9 @@ async function handlePOST(request:Request){
  result=await r.json() as {secure_url?:string};if(!r.ok||!result.secure_url?.startsWith("https://res.cloudinary.com/"))return Response.json({error:"Cloudinary yükləməsi alınmadı. Açarları yoxlayın."},{status:502});
  }
  if(!result.secure_url)return Response.json({error:"Şəkil saxlanmadı."},{status:502});
+ // An option may belong to a product that is not saved yet. Uploading its photo
+ // must never repurpose the no-target/logo branch or mutate a product/gallery.
+ if(variant)return isProductOptionImage(result.secure_url)?Response.json({url:result.secure_url}):Response.json({error:'Şəkil saxlanmadı.'},{status:502});
  if(categoryId)await sql.unsafe("update product_categories set image_url=$1 where id=$2",[result.secure_url,categoryId]);
  else if(productId){
   const [pos]=await sql.unsafe("select coalesce(max(position),-1)+1 as position from product_images where product_id=$1",[productId]);

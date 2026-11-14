@@ -7,6 +7,7 @@ import { useId, useRef, useState, type PointerEvent } from "react";
 import { ArrowLeft, ArrowRight, Check, ChevronRight, ImageIcon, Move, Package, ShoppingBag, Store, Truck } from "lucide-react";
 import { productPath,productVariantKeys, relatedProducts, type CatalogProduct } from "@/lib/commerce";
 import {variantSelection} from '@/lib/variant-selection';
+import {productGalleryImages,variantPreviewImage} from '@/lib/variant-images';
 import {hasProductDiscount,productDiscountLabel} from '@/lib/product-discount';
 import "./product-view.css";
 import ProductPrice from './product-price';
@@ -21,7 +22,7 @@ type Props = {
   initialOptionId?:string;
 };
 
-function ProductImage({ product }: { product: CatalogProduct }) {const {t,languageAmount}=useTranslations();
+function ProductImage({ product,preferredImage='' }: { product: CatalogProduct;preferredImage?:string }) {const {t,languageAmount}=useTranslations();
   const hintId = useId();
   const frame = useRef<HTMLButtonElement>(null);
   const position = useRef({ x: 50, y: 50 });
@@ -30,7 +31,7 @@ function ProductImage({ product }: { product: CatalogProduct }) {const {t,langua
   const [pinned, setPinned] = useState(false);
   const [failed, setFailed] = useState(false);
   const [index, setIndex] = useState(0);
-  const photos = [...new Set((product.images?.length ? product.images : [product.image]).filter(Boolean))];
+  const photos = productGalleryImages(product,preferredImage);
   const current = photos[index] || "";
   const zoomed = hover || pinned;
   const hasImage = Boolean(current) && !failed;
@@ -96,6 +97,10 @@ export default function ProductView({ product, products, inCart, onAdd, onOpenCa
   const searchParams=useSearchParams();
   const selection=variantSelection(product,searchParams??new URLSearchParams(initialOptionId?{variant:initialOptionId}:{}));
   const selectedOption=selection.selectedOption;
+  const preferredImage=variantPreviewImage(selection);
+  // A URL/selection change resets the gallery immediately, including SSR and
+  // Back/Forward. Stable catalog refreshes preserve the customer's manual photo.
+  const galleryKey=JSON.stringify([product.id,selection.path,...productGalleryImages(product,preferredImage)]);
   const optionId=selectedOption?.id||'';
   const pricedOption=selectedOption??selection.candidates.reduce<(typeof product.options)[number]|undefined>((lowest,option)=>!lowest||(option.price??product.basePrice??product.price)<(lowest.price??product.basePrice??product.price)?option:lowest,undefined);
   const unitPrice=pricedOption?(pricedOption.price??product.basePrice??product.price):product.price;
@@ -120,7 +125,7 @@ export default function ProductView({ product, products, inCart, onAdd, onOpenCa
     </nav>
 
     <section className="pd-layout" aria-labelledby="pd-product-title">
-      <ProductImage key={product.id} product={{...product,price:unitPrice,originalPrice}} />
+      <ProductImage key={galleryKey} product={{...product,price:unitPrice,originalPrice}} preferredImage={preferredImage} />
       <div className="pd-summary">
         <Link href="/#catalog" className="pd-back"><ArrowLeft size={15} aria-hidden="true" />{t("Kataloqa qayıt")}</Link>
         <p className="pd-eyebrow">{product.category || "Kolleksiyamızdan"}</p>

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import {useEffect,useRef,useState} from 'react';
 import {ArrowLeft,ArrowRight,Check,Minus,Package,Plus,ShieldCheck,ShoppingBag,Store,Trash2,Truck,X} from 'lucide-react';
 import {productPath,productVariantPath,type CatalogProduct} from '@/lib/commerce';
+import {productOptionImage} from '@/lib/variant-images';
 import {cartKey,parseCartKey,type CustomerCart} from '@/lib/storefront-cart';
 import {deliveryCharge,matchingDeliveryQuote,type DeliveryQuote,type DeliverySettings} from '@/lib/delivery';
 import type {Customer} from './storefront';
@@ -21,7 +22,7 @@ export default function CartSheet({products,cart,account,storeAddress='',storeWh
  const [pin,setPin]=useState<DeliveryPin|null>(null),[settings,setSettings]=useState<DeliverySettings|null>(null),[settingsError,setSettingsError]=useState(''),[settingsLoading,setSettingsLoading]=useState(false),[quote,setQuote]=useState<DeliveryQuote|null>(null),[quoteBusy,setQuoteBusy]=useState(false);
  const [pending,setPending]=useState<CheckoutAttempt|null>(null),[storageBlocked,setStorageBlocked]=useState(false),[busy,setBusy]=useState(false),[couponBusy,setCouponBusy]=useState(false),[error,setError]=useState(''),[receipt,setReceipt]=useState('');
  const [coupon,setCoupon]=useState(''),[discount,setDiscount]=useState(0),[couponRevision,setCouponRevision]=useState(0);
- const lines=Object.entries(cart).map(([key,quantity])=>{const parsed=parseCartKey(key),product=products.find(p=>p.id===parsed.productId),option=product?.options.find(o=>o.id===parsed.optionId);return product?{...product,cartKey:key,quantity,option,linePrice:option?.price??product.basePrice??product.price}:null;}).filter((line):line is NonNullable<typeof line>=>Boolean(line));
+ const lines=Object.entries(cart).map(([key,quantity])=>{const parsed=parseCartKey(key),product=products.find(p=>p.id===parsed.productId),option=product?.options.find(o=>o.id===parsed.optionId);return product?{...product,image:productOptionImage(product,option),cartKey:key,quantity,option,linePrice:option?.price??product.basePrice??product.price}:null;}).filter((line):line is NonNullable<typeof line>=>Boolean(line));
  const subtotal=Number(lines.reduce((sum,line)=>sum+line.linePrice*line.quantity,0).toFixed(2)),goodsTotal=Number(Math.max(0,subtotal-discount).toFixed(2));
  const validQuote=matchingDeliveryQuote(quote,address,pin),distanceMode=fulfillment==='delivery'&&settings?.mode==='distance';
  const freeDelivery=Boolean(distanceMode&&settings?.freeOrderFrom!=null&&Math.round(goodsTotal*100)>=Math.round(settings.freeOrderFrom*100));

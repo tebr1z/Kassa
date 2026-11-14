@@ -36,7 +36,7 @@ async function cacheAll() {
   if(process.env.BIRKASSA_LOCAL!=="1")throw new Error("Yalnız masaüstündə mümkündür.");
   const sql=storeDb();
   try {
-    const rows=await sql.unsafe("select image_url url from products union select image_url from product_images union select image_url from product_categories union select logo from storefront_config");
+    const rows=await sql.unsafe("select image_url url from products union select image_url from product_images union select image_url from product_options union select image_url from product_categories union select logo from storefront_config");
     const urls=rows.map(row=>String(row.url||"")).filter(value=>{try{const u=new URL(value);return u.protocol==="https:"&&u.hostname==="res.cloudinary.com"&&!u.username&&!u.password&&!u.port;}catch{return false;}});
     await mkdir(root(),{recursive:true});let cached=0,failed=0,index=0;
     await Promise.all(Array.from({length:3},async()=>{

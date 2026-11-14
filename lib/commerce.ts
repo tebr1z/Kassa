@@ -12,7 +12,7 @@ export function couponDiscount(subtotal:number,percent:number,maxDiscount?:numbe
  if(maxDiscount==null||!(maxDiscount>0))return amount;
  return Math.min(amount,Number(maxDiscount.toFixed(2)));
 }
-export type ProductOption={id:string;label:string;size:string;color:string;kind:string;price:number|null;attributes?:Record<string,string>};
+export type ProductOption={id:string;label:string;size:string;color:string;kind:string;price:number|null;image?:string;attributes?:Record<string,string>};
 export type CatalogProduct={id:string;code?:string;name:string;category:string;unit:string;price:number;originalPrice:number;basePrice?:number;baseOriginalPrice?:number;image:string;images?:string[];available:boolean;description:string;specifications:string;options:ProductOption[]};
 export const catalogTextLower=(value:string)=>value.replace(/I/g,'ı').replace(/İ/g,'i').toLowerCase();
 const catalogAlphabet='abcçdeəfgğhxıijkqlmnoöprsştuüvyz';

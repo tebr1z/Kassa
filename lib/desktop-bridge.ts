@@ -5,6 +5,7 @@ import type postgres from 'postgres';
 import {feedKeyName,isDesktop,matchesKey,readSyncConfig} from '@/lib/desktop-sync';
 import {cachedMedia} from '@/lib/desktop-media';
 import {storeDb} from '@/lib/store-db';
+import {isProductOptionImage} from '@/lib/product-option-image';
 
 export const syncKeyName='desktop_catalog_key_hash';
 type Sql=ReturnType<typeof postgres>;
@@ -16,11 +17,8 @@ export async function desktopAuthorization(sql:Sql,key:string,write=false){
  return {userId:saved.user_id as string};
 }
 const price=z.coerce.number().finite().min(0).max(99999999999.99);
-const picture=z.string().max(2048).refine(value=>{
- if(value===''||/^\/api\/catalog-media\/[a-f0-9]{64}$/.test(value))return true;
- try{const url=new URL(value);return url.protocol==='https:'&&url.hostname==='res.cloudinary.com'&&!url.username&&!url.password&&!url.port;}catch{return false;}
-});
-const option=z.object({label:z.string().min(1).max(120),size:z.string().max(80),color:z.string().max(80),kind:z.string().max(80),price:price.nullable(),position:z.number().int(),isActive:z.boolean(),attributes:z.record(z.string().max(60),z.string().max(120)).default({})}).strict();
+const picture=z.string().max(2048).refine(value=>isProductOptionImage(value)&&!value.startsWith('/api/desktop-media/'));
+const option=z.object({label:z.string().min(1).max(120),size:z.string().max(80),color:z.string().max(80),kind:z.string().max(80),image:picture.optional(),price:price.nullable(),position:z.number().int(),isActive:z.boolean(),attributes:z.record(z.string().max(60),z.string().max(120)).default({})}).strict();
 export const publicProduct=z.object({
  id:z.string().uuid(),sku:z.string().min(1).max(100),name:z.string().min(1).max(200),code:z.string().regex(/^\d{6}$/),category:z.string().max(100),unit:z.string().max(30),
  price,discountPrice:price.nullable(),image:picture,images:z.array(picture).max(8),options:z.array(option).max(100),isActive:z.boolean()
@@ -56,8 +54,8 @@ export async function applyDesktopBatch(sql:Sql,batch:SyncBatch,actor:{userId:st
    const labels=new Set<string>();
    for(const item of product.options){
     if(labels.has(item.label))throw new Error('Təkrar məhsul seçimi.');labels.add(item.label);
-    await tx.unsafe(`insert into product_options(product_id,label,size,color,kind,price,position,is_active,attributes) values($1,$2,$3,$4,$5,$6,$7,$8,$9::text::jsonb)
-      on conflict(product_id,label) do update set size=excluded.size,color=excluded.color,kind=excluded.kind,price=excluded.price,position=excluded.position,is_active=excluded.is_active,attributes=excluded.attributes`,[row.id,item.label,item.size,item.color,item.kind,item.price,item.position,item.isActive,JSON.stringify(item.attributes)]);
+    await tx.unsafe(`insert into product_options(product_id,label,size,color,kind,price,position,is_active,attributes,image_url) values($1,$2,$3,$4,$5,$6,$7,$8,$9::text::jsonb,$10)
+      on conflict(product_id,label) do update set size=excluded.size,color=excluded.color,kind=excluded.kind,price=excluded.price,position=excluded.position,is_active=excluded.is_active,attributes=excluded.attributes,image_url=case when $11 then excluded.image_url else product_options.image_url end`,[row.id,item.label,item.size,item.color,item.kind,item.price,item.position,item.isActive,JSON.stringify(item.attributes),item.image??'',item.image!==undefined]);
    }
   }
   const conflicts:{id:string;status:string;reason:string}[]=[];
@@ -96,12 +94,12 @@ export async function pushDesktopChanges(){
     await tx.unsafe('set transaction isolation level repeatable read read only');
     const rows=await tx.unsafe(`select p.id,p.sku,p.name,p.public_code code,coalesce(p.category,'') category,p.unit,p.sale_price price,p.discount_price as "discountPrice",coalesce(p.image_url,'') image,p.is_active as "isActive",
       coalesce((select json_agg(pi.image_url order by position,id) from product_images pi where pi.product_id=p.id),'[]'::json) images,
-      coalesce((select json_agg(json_build_object('label',label,'size',size,'color',color,'kind',kind,'attributes',attributes,'price',price,'position',position,'isActive',is_active) order by position,label) from product_options po where po.product_id=p.id),'[]'::json) options from products p order by p.sku`);
+      coalesce((select json_agg(json_build_object('label',label,'size',size,'color',color,'kind',kind,'image',image_url,'attributes',attributes,'price',price,'position',position,'isActive',is_active) order by position,label) from product_options po where po.product_id=p.id),'[]'::json) options from products p order by p.sku`);
     const statuses=await tx.unsafe(`select i.remote_id id,o.status,o.delivery_stage as "deliveryStage",i.payload->>'updated_at' as "updatedAt" from desktop_order_inbox i join sales_orders o on o.id=i.local_order_id where i.store_url=$1 and (o.status<>i.payload->>'status' or o.delivery_stage<>i.payload->>'delivery_stage') and i.payload->>'status'<>'cancelled' order by i.id limit 500`,[config.url]);
     return {rows,statuses};
    });
    const catalog=[];
-   for(const row of snapshot.rows){const images=[];for(const url of row.images)images.push(await publishImage(url,config));catalog.push(publicProduct.parse({...row,image:await publishImage(row.image,config),images}));}
+   for(const row of snapshot.rows){const images=[];for(const url of row.images)images.push(await publishImage(url,config));const options=[];for(const option of row.options)options.push({...option,image:await publishImage(option.image||'',config)});catalog.push(publicProduct.parse({...row,image:await publishImage(row.image,config),images,options}));}
    const payload={protocol:2,catalog,statuses:snapshot.statuses};
    const digest=createHash('sha256').update(JSON.stringify(payload)).digest('hex');
    const [last]=await sql.unsafe("select value from system_settings where key='desktop_catalog_digest'");if(last?.value===digest)return;

@@ -29,6 +29,9 @@ jobs:
       - run: node scripts/test-variant-editor.mjs
       - run: node scripts/test-product-variants.mjs
       - run: node scripts/test-variant-selection.mjs
+      - run: node scripts/test-variant-images.mjs
+      - run: node scripts/test-product-option-images.mjs
+      - run: node scripts/test-variant-image-editor.mjs
       - run: node scripts/test-product-discounts.mjs
       - run: node scripts/test-finance.mjs
       - run: node scripts/test-staff-onboarding.mjs

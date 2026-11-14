@@ -47,7 +47,7 @@ export function productStructuredData(product:CatalogProduct){
   hasVariant:product.options.map(option=>{
    const target=absoluteUrl(productVariantPath(product,option));
    const label=productOptionLabel(option);
-   return {'@type':'Product','@id':target+'#product',name:product.name+' — '+label,description:description+' '+label,image,url:target,sku:(product.code||product.id)+'-'+option.id,size:option.size||undefined,color:option.color||undefined,additionalProperty:properties({...option.attributes,...(option.kind?{'Növ':option.kind}:{})}),offers:offer(option.price??product.basePrice??product.price,target)};
+   return {'@type':'Product','@id':target+'#product',name:product.name+' — '+label,description:description+' '+label,image:option.image?[absoluteUrl(option.image)]:image,url:target,sku:(product.code||product.id)+'-'+option.id,size:option.size||undefined,color:option.color||undefined,additionalProperty:properties({...option.attributes,...(option.kind?{'Növ':option.kind}:{})}),offers:offer(option.price??product.basePrice??product.price,target)};
   }),
  }:{'@type':'Product','@id':url+'#product',...common,url,sku:product.code||product.id,offers:offer(product.price,url)};
  return {'@context':'https://schema.org','@graph':[productNode,{'@type':'BreadcrumbList',itemListElement:[{'@type':'ListItem',position:1,name:'Ana səhifə',item:absoluteUrl('/')},{'@type':'ListItem',position:2,name:'Məhsullar',item:absoluteUrl('/mehsullar')},{'@type':'ListItem',position:3,name:product.name,item:url}]}]};

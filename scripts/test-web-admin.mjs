@@ -9,6 +9,7 @@ import http from 'node:http';
 import {openLocalDatabase} from '../desktop/local-database.mjs';
 import {verifySeoHttp} from './test-seo-http.mjs';
 import {STAFF_PORTAL_PATH,staffPortalPath,verifyStaffPortalPolicy,verifyStaffPortalHttp} from './test-staff-portal.mjs';
+import {writeVariantImageFixtures} from './variant-image-fixture.mjs';
 
 const policy=ts.transpile(await readFile('lib/admin-security.ts','utf8'),{module:ts.ModuleKind.ESNext});
 const {secureAdminRequest}=await import('data:text/javascript;base64,'+Buffer.from(policy).toString('base64'));
@@ -19,9 +20,10 @@ assert.equal(secureAdminRequest(new Request('http://localhost.evil.example/admin
 assert.equal(secureAdminRequest(new Request('http://localhost/admin',{headers:{Host:'shop.example'}})),false,'Internal loopback URLs cannot bypass remote HTTPS');
 
 const database=await openLocalDatabase(path.resolve('.local-desktop-data','web-admin-'+randomUUID()),process.cwd(),{port:55448});
+const variantMediaRoot=path.join(database.dataRoot,'variant-image-fixtures'),variantPhotos=await writeVariantImageFixtures(variantMediaRoot);
 const sql=postgres(database.url,{max:1,prepare:false});
 const origin='http://127.0.0.1:5767',password='Fixture-Web-Password-04!',setupToken=randomBytes(48).toString('base64url');
-const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','5767'],{windowsHide:true,stdio:'ignore',env:{...process.env,DATABASE_URL:database.url,BIRKASSA_LOCAL:'0',BIRKASSA_ADMIN_SETUP_TOKEN:setupToken,BIRKASSA_DATA_DIR:database.dataRoot,NODE_ENV:'production'}});
+const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','5767'],{windowsHide:true,stdio:'ignore',env:{...process.env,DATABASE_URL:database.url,BIRKASSA_LOCAL:'0',BIRKASSA_ADMIN_SETUP_TOKEN:setupToken,BIRKASSA_DATA_DIR:database.dataRoot,BIRKASSA_PUBLIC_MEDIA_DIR:variantMediaRoot,NODE_ENV:'production'}});
 let session='';
 async function request(url,{method='GET',body,auth=true,headers={}}={}){
  const response=await fetch(origin+url,{method,redirect:'manual',headers:{Origin:origin,'Content-Type':'application/json',...(auth&&session?{Cookie:'birkassa_session='+session}:{}),...headers},body:body?JSON.stringify(body):undefined});
@@ -35,6 +37,7 @@ try{
  const [admin]=await sql.unsafe("select id,branch_id from users where role='admin' limit 1");
  const privatePaths=['/api/products','/api/dashboard','/api/finance','/api/orders','/api/warehouses','/api/reports','/api/employees','/api/settings','/api/audit','/api/system?view=backups','/api/store-admin/commerce','/api/locations','/api/admin/smtp','/api/store-admin/chat?view=summary'];
  for(const url of privatePaths)assert.equal((await request(url,{auth:false})).status,401,'No anonymous access: '+url);
+ assert.equal((await request('/api/store-admin/upload',{method:'POST',auth:false,body:{}})).status,401,'Anonymous callers cannot upload variant photos');
  assert.equal((await request('/api/products',{auth:false,headers:{'x-birkassa-user-id':admin.id,'x-birkassa-role':'admin'}})).status,401,'Cannot forge identity headers');
  await verifyStaffPortalPolicy();
  for(const url of [staffPortalPath('/store'),staffPortalPath('/online')]){const denied=await request(url,{auth:false});assert.equal(denied.status,307);assert.equal(new URL(denied.headers.get('location'),origin).pathname,STAFF_PORTAL_PATH);}
@@ -88,6 +91,7 @@ try{
  await sql.unsafe("insert into stock_movements(product_id,warehouse_id,type,quantity,unit_cost,performed_by) values($1,$2,'receipt',7,21,$3)",[product.id,warehouseId,admin.id]);
  const cashierLogin=await request('/api/auth',{method:'POST',body:{action:'login',userId:cashierId,password}});assert.equal(cashierLogin.status,200,JSON.stringify(cashierLogin.data));assert.deepEqual(cashierLogin.data.user.permissions,['Satış / POS']);
  for(const endpoint of ['/api/finance','/api/locations','/api/store-admin/commerce','/api/employees','/api/admin/smtp','/api/store-admin/chat?summary=1'])assert.equal((await request(endpoint)).status,403,'Cashier is not an administrator: '+endpoint);
+ assert.equal((await request('/api/store-admin/upload',{method:'POST',body:{}})).status,403,'A cashier cannot upload variant photos');
  const cashierProducts=(await request('/api/products')).data;assert.equal(cashierProducts.find(p=>p.id===product.id).stock,7);assert.equal(cashierProducts.find(p=>p.id===product.id).cost,0);assert.deepEqual(cashierProducts.find(p=>p.id===product.id).priceHistory,[]);assert.ok(!('editableOptions' in cashierProducts.find(p=>p.id===product.id)),'Cashier never receives private editable option costs');
  const cashierDashboard=(await request('/api/dashboard')).data;assert.equal(cashierDashboard.branchName,'İkinci mağaza');assert.deepEqual(cashierDashboard.recent,[]);
  assert.equal((await request('/api/store-admin/commerce',{method:'POST',body:{action:'delete-product',id:product.id,confirm:'SİL'}})).status,403);
@@ -131,12 +135,29 @@ try{
  // Only this freshly-created isolated database receives the browser-proof item.
  // Create it after financial assertions, so no expected revenue/COGS changes.
  assert.equal((await login()).status,200);
- const colorSizeOptions=[['30 sm','Qırmızı',7],['40 sm','Qırmızı',9],['40 sm','Qara',11]].map(([size,color,price],position)=>({label:size+' · '+color,size,color,kind:'',price,cost_price:2,position,is_active:true,attributes:{}}));
- const colorSizeCreated=await request('/api/products',{method:'POST',body:{name:'Rəng və ölçü sınağı',sku:'COLOR-SIZE-UI-QA',category:'Manqallar',salePrice:7,costPrice:2,minStock:0,barcode:'',options:colorSizeOptions}});assert.equal(colorSizeCreated.status,201,JSON.stringify(colorSizeCreated.data));
+ const colorSizeOptions=[['30 sm','Qırmızı',7],['40 sm','Qırmızı',9],['40 sm','Qara',11]].map(([size,color,price],position)=>({label:size+' · '+color,size,color,kind:'',price,cost_price:2,position,is_active:true,attributes:{},image_url:color==='Qırmızı'?variantPhotos.red:variantPhotos.black}));
+ const colorSizeBody={name:'Rəng və ölçü sınağı',sku:'COLOR-SIZE-UI-QA',category:'Manqallar',salePrice:7,costPrice:2,minStock:0,barcode:'',options:colorSizeOptions};
+ const colorSizeCreated=await request('/api/products',{method:'POST',body:colorSizeBody});assert.equal(colorSizeCreated.status,201,JSON.stringify(colorSizeCreated.data));
  const colorSizeId=colorSizeCreated.data.id;
+ await sql.unsafe('update products set image_url=$1 where id=$2',[variantPhotos.main,colorSizeId]);
  assert.equal((await request('/api/stock/receipts',{method:'POST',body:{productId:colorSizeId,quantity:5,unitCost:2}})).status,201);
  assert.ok((await request('/api/products')).data.find(product=>product.id===colorSizeId).stock>=5,'Browser fixture is available for adding to the cart');
  const colorSizeProduct=(await request('/api/catalog',{auth:false})).data.products.find(product=>product.id===colorSizeId);assert.ok(colorSizeProduct);
+ assert.deepEqual(colorSizeProduct.options.map(o=>o.image),[variantPhotos.red,variantPhotos.red,variantPhotos.black],'Public images follow actual variant assignments');
+ const colorPrivate=(await request('/api/products')).data.find(p=>p.id===colorSizeId);
+ const imageOptions=colorPrivate.editableOptions;
+ const withoutImages=imageOptions.map(option=>{const copy={...option};delete copy.image_url;return copy;});
+ assert.equal((await request('/api/products',{method:'PATCH',body:{...colorSizeBody,productId:colorSizeId,options:withoutImages}})).status,200,'Old clients can edit variants without erasing photos');
+ assert.equal((await request('/api/catalog',{auth:false})).data.products.find(p=>p.id===colorSizeId).options[0].image,variantPhotos.red);
+ assert.equal((await request('/api/products',{method:'PATCH',body:{...colorSizeBody,productId:colorSizeId,options:imageOptions.map((o,i)=>i===0?{...o,image_url:''}:o)}})).status,200,'Explicit blank clears an assigned photo');
+ assert.equal((await request('/api/catalog',{auth:false})).data.products.find(p=>p.id===colorSizeId).options[0].image,'');
+ assert.equal((await request('/api/products',{method:'PATCH',body:{...colorSizeBody,productId:colorSizeId,options:imageOptions}})).status,200,'Restore only the isolated fixture photos');
+ assert.equal((await request('/api/products',{method:'PATCH',body:{...colorSizeBody,productId:colorSizeId,name:'Must roll back image input',options:[{...imageOptions[0],image_url:'https://127.0.0.1/private'}]}})).status,400);
+ assert.equal((await sql.unsafe('select name from products where id=$1',[colorSizeId]))[0].name,colorSizeBody.name,'Unsafe image rejection does not modify the product');
+ const photoResponse=await fetch(origin+variantPhotos.red);assert.equal(photoResponse.status,200);assert.match(photoResponse.headers.get('content-type'),/^image\/png/);
+ const redPage=await request('/mehsullar/'+colorSizeProduct.code+'-reng-ve-olcu-sinagi/?reng=qirmizi',{auth:false});
+ assert.equal(redPage.status,200);assert.ok(redPage.data.includes('class="pd-main-image" src="'+variantPhotos.red+'"'),'Color-only URL selects the color photo in server-rendered HTML');
+ console.log('PASS: isolated variant-photo API validation, clear/restore, omitted-photo compatibility, public PNG serving and color-only server image.');
  assert.deepEqual(colorSizeProduct.options.map(({size,color,price,kind,attributes})=>({size,color,price,kind,attributes})),colorSizeOptions.map(({size,color,price,kind,attributes})=>({size,color,price,kind,attributes})),'Only the three real sparse color/size combinations exist');
  await verifySeoHttp(origin,colorSizeId);
  // Discount integration intentionally runs after every finance/role-metric

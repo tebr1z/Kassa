@@ -1,0 +1,18 @@
+export const variantImageTranslations:[string,string,string,string,string][]=[
+ ['Seçim şəkli','Фото варианта','Option photo','Seçenek fotoğrafı','规格图片'],
+ ['Müştəri bu rəngi və ya ölçünü seçəndə həmin şəkil görünəcək. Şəkilsiz seçimlər əsas məhsul şəklini istifadə edir.','Это фото появится при выборе цвета или размера. Варианты без фото используют главное фото товара.','This photo appears when the customer selects this colour or size. Options without a photo use the main product photo.','Müşteri bu rengi veya ölçüyü seçince bu fotoğraf gösterilir. Fotoğrafsız seçenekler ana ürün fotoğrafını kullanır.','顾客选择此颜色或尺寸时将显示这张图片。未设置图片的规格使用商品主图。'],
+ ['Şəkil əlavə et','Добавить фото','Add photo','Fotoğraf ekle','添加图片'],
+ ['Şəkli dəyiş','Заменить фото','Change photo','Fotoğrafı değiştir','更换图片'],
+ ['Seçim şəklini sil','Удалить фото варианта','Remove option photo','Seçenek fotoğrafını kaldır','移除规格图片'],
+ ['Eyni rəngə tətbiq et','Применить к этому цвету','Apply to this colour','Aynı renge uygula','应用至同色规格'],
+ ['Eyni rəngin digər ölçülərinə də bu şəkli tətbiq edir.','Использовать это фото для других размеров того же цвета.','Use this photo for other sizes of the same colour.','Bu fotoğrafı aynı rengin diğer ölçülerine de uygular.','将此图片也用于同颜色的其他尺寸。'],
+ ['PNG, JPG və ya WebP · maksimum 4 MB','PNG, JPG или WebP · до 4 МБ','PNG, JPG or WebP · up to 4 MB','PNG, JPG veya WebP · en fazla 4 MB','PNG、JPG 或 WebP · 最大 4 MB'],
+ ['Şəkil yüklənir…','Загрузка фото…','Uploading photo…','Fotoğraf yükleniyor…','正在上传图片…'],
+ ['Şəkil yükləndi. Dəyişikliyi tətbiq etmək üçün məhsulu saxlayın.','Фото загружено. Сохраните товар, чтобы применить изменение.','Photo uploaded. Save the product to apply the change.','Fotoğraf yüklendi. Değişikliği uygulamak için ürünü kaydedin.','图片已上传。请保存商品以应用更改。'],
+ ['Seçim şəklinin yüklənməsi alınmadı. Yenidən cəhd edin.','Не удалось загрузить фото варианта. Повторите попытку.','Could not upload the option photo. Please try again.','Seçenek fotoğrafı yüklenemedi. Tekrar deneyin.','规格图片上传失败，请重试。'],
+ ['Seçim şəkli üçün JPG, PNG və ya WebP faylı seçin (maksimum 4 MB).','Выберите для варианта JPG, PNG или WebP размером до 4 МБ.','Choose a JPG, PNG or WebP option photo up to 4 MB.','Seçenek için en fazla 4 MB boyutunda JPG, PNG veya WebP seçin.','请选择最大 4 MB 的 JPG、PNG 或 WebP 规格图片。'],
+ ['Şəkil yükləmək üçün səlahiyyətli hesabla yenidən daxil olun.','Для загрузки фото войдите снова в аккаунт с нужными правами.','Sign in again with an authorised account to upload photos.','Fotoğraf yüklemek için yetkili bir hesapla yeniden giriş yapın.','请重新登录有权限的账户以上传图片。'],
+ ['Seçim şəkli silindi. Məhsulu saxlayanda əsas məhsul şəkli görünəcək.','Фото варианта удалено. После сохранения будет показано главное фото товара.','Option photo removed. The main product photo will be used after you save.','Seçenek fotoğrafı kaldırıldı. Ürünü kaydedince ana ürün fotoğrafı gösterilir.','规格图片已移除。保存商品后将使用商品主图。'],
+ ['Şəkil eyni rəngin bütün seçimlərinə tətbiq edildi. Məhsulu saxlayın.','Фото применено ко всем вариантам этого цвета. Сохраните товар.','Photo applied to all options of this colour. Save the product.','Fotoğraf aynı rengin tüm seçeneklerine uygulandı. Ürünü kaydedin.','图片已应用至此颜色的所有规格。请保存商品。'],
+ ['Seçim şəklini yükləyənədək gözləyin.','Дождитесь загрузки фото варианта.','Wait for the option photo to finish uploading.','Seçenek fotoğrafının yüklenmesini bekleyin.','请等待规格图片上传完成。'],
+];

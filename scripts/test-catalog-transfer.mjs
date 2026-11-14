@@ -22,7 +22,7 @@ try {
   await source.unsafe("insert into product_categories(name,image_url,show_on_home) values('Kateqoriya','https://example.test/category.jpg',true)");
   await source.unsafe("insert into product_barcodes(product_id,barcode,is_primary) values($1,'123456789',true)", [product.id]);
   await source.unsafe("insert into product_images(product_id,image_url,position) values($1,'https://example.test/photo.jpg',2)", [product.id]);
-  await source.unsafe("insert into product_options(product_id,label,size,color,price) values($1,'Böyük','XL','Qara',30.75)", [product.id]);
+  await source.unsafe("insert into product_options(product_id,label,size,color,price,image_url) values($1,'Böyük','XL','Qara',30.75,'https://res.cloudinary.com/fixture/image/upload/black.png')", [product.id]);
   await source.unsafe("insert into stock_movements(product_id,warehouse_id,location_id,type,quantity,performed_by) values($1,$2,$3,'receipt',3.125,$4),($1,$5,null,'receipt',8.875,$4)", [product.id, first.id, location.id, admin.id, second.id]);
   await source.unsafe("update system_settings set value=$1 where key='sales_warehouse_id'", [second.id]);
   const catalog = await readCatalog(source);
@@ -32,6 +32,8 @@ try {
   await assert.rejects(importCatalog(target, invalid, identity), error => error.code === '23505');
   const [rolledBack] = await target.unsafe('select (select count(*) from products) products,(select count(*) from warehouses) warehouses,(select count(*) from stock_movements) movements');
   assert.deepEqual({ ...rolledBack }, { products: '0', warehouses: '1', movements: '0' }, 'A barcode conflict must roll back products, warehouses and balances together');
+  const unsafeImage=structuredClone(catalog);unsafeImage.options[0].image_url='javascript:alert(1)';
+  await assert.rejects(importCatalog(target,unsafeImage,identity),/Seçim şəkli/,'Unsafe option photo must abort initial transfer atomically');
   const imported = await importCatalog(target, catalog, identity);
   assert.equal(imported.alreadyImported, false);
   assert.equal(imported.salesWarehouse, 'İkinci anbar');
