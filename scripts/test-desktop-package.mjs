@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {access,readFile,readdir,stat} from 'node:fs/promises';
 import path from 'node:path';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url),asar=require('@electron/asar');
 const pkg=JSON.parse(await readFile('package.json','utf8'));
 const root=path.resolve('desktop-release','v'+pkg.version,'win-unpacked');
 const application=path.join(root,'resources','application');
@@ -8,6 +10,11 @@ const forbidden=['desktop-release','dist','outputs','work','.private','.local-da
 const entries=await readdir(application);
 assert.deepEqual(entries.filter(name=>forbidden.includes(name)),[],'Release must not contain old release trees, local data or environment secrets');
 await access(path.join(root,'RestaMarket.exe'));
+const archive=path.join(root,'resources','app.asar');
+for(const name of ['main.cjs','local-database.mjs','protect-data.mjs','updates.cjs','update-client.cjs','update-lifecycle.cjs','update-preload.cjs','update-labels.cjs','update-trust.json','update-window.html','update-window.css','update-window.js'])assert.deepEqual(asar.extractFile(archive,name),await readFile(path.join('desktop',name)),'Missing or stale native updater: '+name);
+assert.deepEqual(JSON.parse(asar.extractFile(archive,'update-trust.json').toString()),JSON.parse(await readFile('desktop/update-trust.json','utf8')),'Packaged trust must match the local release key');
+assert.ok(!asar.listPackage(archive).some(name=>/\.key$|PRIVATE KEY|ReleaseKeys/i.test(name)),'Private signing keys must never be packaged');
+assert.equal(JSON.parse(asar.extractFile(archive,'package.json').toString()).version,pkg.version);
 await access(path.join(root,'resources','postgres','bin','pg_dump.exe'));
 await access(path.join(root,'resources','postgres','bin','pg_restore.exe'));
 await access(path.join(application,'server.js'));

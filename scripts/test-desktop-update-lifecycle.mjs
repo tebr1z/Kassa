@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {EventEmitter} from 'node:events';
+import {createRequire} from 'node:module';
+const {stopServer}=createRequire(import.meta.url)('../desktop/update-lifecycle.cjs');
+const fake=kill=>Object.assign(new EventEmitter(),{exitCode:null,signalCode:null,kill});
+let killed=false;
+const child=fake(()=>{killed=true;setTimeout(()=>{child.signalCode='SIGTERM';child.emit('exit',null,'SIGTERM');},15);return true;});
+let stopped=false;const pending=stopServer(child).then(()=>{stopped=true;});
+await new Promise(resolve=>setTimeout(resolve,2));assert.equal(stopped,false,'Must await actual child exit, not just kill request');
+await pending;assert.equal(killed,true);await stopServer(child);
+assert.equal(child.listenerCount('exit'),0);assert.equal(child.listenerCount('error'),0);
+await assert.rejects(stopServer(fake(()=>false)),/could not stop/);
+const hung=fake(()=>true);await assert.rejects(stopServer(hung,15),/did not stop in time/);assert.equal(hung.listenerCount('exit'),0);
+await assert.rejects(stopServer(fake(()=>{throw Error('denied');})),/could not stop/);
+await stopServer(null);
+console.log('PASS: update shutdown awaits actual local child exit, rejects timeout/kill failures and releases listeners; no process or database was stopped.');

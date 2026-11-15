@@ -1,0 +1,61 @@
+'use strict';
+
+const labels = {
+  az: {
+    menu: 'Yeniləmələr', check: 'Yeniləmələri yoxla', windowTitle: 'RestaMarket · Yeniləmələr',
+    adminRequired: 'Yeniləməni quraşdırmaq üçün Baş rəhbər hesabına daxil olun.',
+    confirmTitle: 'Yeniləməni quraşdıraq?',
+    confirmMessage: 'Tamamlanmamış satışı tamamlayın və dəyişiklikləri saxlayın. Yerli məlumatların ehtiyat nüsxəsi yaradılacaq, sonra proqram bağlanıb yenilənəcək. Davam edək?',
+    install: 'Quraşdır və yenidən aç', cancel: 'Ləğv et', errorTitle: 'Yeniləmə tamamlanmadı',
+    backupFailed: 'Ehtiyat nüsxə yaradıla bilmədi. Yeniləmə quraşdırılmadı; proqramdan istifadəni davam edə bilərsiniz.',
+    shutdownFailed: 'Yerli xidmətlər təhlükəsiz dayandırılmadı. Yeniləmə quraşdırılmadı.',
+    installerFailed: 'Yeniləmə quraşdırıcısı açıla bilmədi. Proqramı yenidən açıb təkrar cəhd edin.',
+    recoveryMessage: 'Yeniləmə yarımçıq qaldı. Məlumat qovluğunu silməyin. Proqramı yenidən açın və Yeniləmələr bölməsindən təkrar cəhd edin.',
+  },
+  en: {
+    menu: 'Updates', check: 'Check for updates', windowTitle: 'RestaMarket · Updates',
+    adminRequired: 'Sign in as the head administrator to install an update.',
+    confirmTitle: 'Install this update?',
+    confirmMessage: 'Complete any unfinished sale and save your changes. Local data will be backed up, then the app will close and update. Continue?',
+    install: 'Install and restart', cancel: 'Cancel', errorTitle: 'Update not completed',
+    backupFailed: 'The backup could not be created. The update was not installed; you can continue using the app.',
+    shutdownFailed: 'Local services could not be stopped safely. The update was not installed.',
+    installerFailed: 'The update installer could not be opened. Reopen the app and try again.',
+    recoveryMessage: 'The update was interrupted. Do not delete the data folder. Reopen the app and try again from Updates.',
+  },
+  ru: {
+    menu: 'Обновления', check: 'Проверить обновления', windowTitle: 'RestaMarket · Обновления',
+    adminRequired: 'Для установки обновления войдите как главный администратор.',
+    confirmTitle: 'Установить обновление?',
+    confirmMessage: 'Завершите незаконченные продажи и сохраните изменения. Будет создана резервная копия локальных данных, затем программа закроется и обновится. Продолжить?',
+    install: 'Установить и перезапустить', cancel: 'Отмена', errorTitle: 'Обновление не завершено',
+    backupFailed: 'Не удалось создать резервную копию. Обновление не установлено; вы можете продолжить работу.',
+    shutdownFailed: 'Не удалось безопасно остановить локальные службы. Обновление не установлено.',
+    installerFailed: 'Не удалось открыть установщик обновления. Откройте программу снова и повторите попытку.',
+    recoveryMessage: 'Обновление было прервано. Не удаляйте папку данных. Откройте программу и повторите попытку в разделе «Обновления».',
+  },
+  tr: {
+    menu: 'Güncellemeler', check: 'Güncellemeleri denetle', windowTitle: 'RestaMarket · Güncellemeler',
+    adminRequired: 'Güncellemeyi yüklemek için baş yönetici hesabına giriş yapın.',
+    confirmTitle: 'Güncelleme yüklensin mi?',
+    confirmMessage: 'Tamamlanmamış satışı bitirin ve değişiklikleri kaydedin. Yerel veriler yedeklenecek, ardından uygulama kapanıp güncellenecek. Devam edilsin mi?',
+    install: 'Yükle ve yeniden başlat', cancel: 'İptal', errorTitle: 'Güncelleme tamamlanamadı',
+    backupFailed: 'Yedek oluşturulamadı. Güncelleme yüklenmedi; uygulamayı kullanmaya devam edebilirsiniz.',
+    shutdownFailed: 'Yerel hizmetler güvenle durdurulamadı. Güncelleme yüklenmedi.',
+    installerFailed: 'Güncelleme yükleyicisi açılamadı. Uygulamayı yeniden açıp tekrar deneyin.',
+    recoveryMessage: 'Güncelleme yarıda kaldı. Veri klasörünü silmeyin. Uygulamayı yeniden açıp Güncellemeler bölümünden tekrar deneyin.',
+  },
+  zh: {
+    menu: '更新', check: '检查更新', windowTitle: 'RestaMarket · 更新',
+    adminRequired: '请以主管理员身份登录后安装更新。',
+    confirmTitle: '安装此更新？',
+    confirmMessage: '请先完成未结束的销售并保存更改。系统将备份本地数据，然后关闭并更新应用。是否继续？',
+    install: '安装并重启', cancel: '取消', errorTitle: '更新未完成',
+    backupFailed: '无法创建备份。未安装更新，您可以继续使用应用。',
+    shutdownFailed: '无法安全停止本地服务。未安装更新。',
+    installerFailed: '无法打开更新安装程序。请重新打开应用后再试。',
+    recoveryMessage: '更新已中断。请勿删除数据文件夹。重新打开应用，然后从“更新”中重试。',
+  },
+};
+
+module.exports = language => labels[language] || labels.az;

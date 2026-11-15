@@ -1,0 +1,7 @@
+{
+  "az": "Proqram daxilindən onlayn yeniləmə. Baş rəhbərin təsdiqi, imzalı fayl və bütövlük yoxlaması, quraşdırmadan əvvəl baza və şəkillərin ehtiyatı. Beş dildə yeniləmə pəncərəsi və uzun Windows fayl yolları üçün düzəliş.",
+  "en": "Online updates from inside the app. Head-administrator approval, signed release and file-integrity verification, and a database/media backup before installation. Update window in five languages and a Windows long-path fix.",
+  "ru": "Онлайн-обновления из программы. Подтверждение главного администратора, проверка подписи и целостности файлов, резервная копия базы и изображений перед установкой. Пять языков и исправление длинных путей Windows.",
+  "tr": "Uygulama içinden çevrimiçi güncelleme. Baş yönetici onayı, imza ve dosya bütünlüğü doğrulaması, yüklemeden önce veri tabanı ve görsel yedeği. Beş dilde güncelleme penceresi ve Windows uzun dosya yolu düzeltmesi.",
+  "zh": "应用内在线更新。安装需要主管理员确认，并验证发布签名和文件完整性；安装前备份本地数据库和图片。支持五种语言，并修复 Windows 长文件路径问题。"
+}

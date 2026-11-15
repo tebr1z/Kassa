@@ -1,6 +1,6 @@
 {
   "name": "birkassa-system",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "main": "desktop/main.cjs",
   "productName": "RestaMarket",
@@ -18,7 +18,7 @@
     "db:migrate": "node scripts/migrate-postgres.mjs",
     "db:studio": "drizzle-kit studio",
     "desktop": "electron desktop/main.cjs",
-    "desktop:package": "npm run brand:icons && npm run desktop:runtime && npm run build:desktop && electron-builder --win nsis && node scripts/test-desktop-package.mjs && node scripts/test-packaged-server.mjs && node scripts/smoke-desktop.mjs",
+    "desktop:package": "npm run brand:icons && npm run desktop:runtime && npm run test:desktop-updates && electron scripts/smoke-desktop-update-window.cjs && npm run build:desktop && electron-builder --win nsis && node scripts/test-desktop-package.mjs && node scripts/test-packaged-server.mjs && node scripts/smoke-desktop.mjs",
     "brand:icons": "node scripts/build-brand-icons.mjs",
     "test:customer": "node scripts/test-customer-account.mjs",
     "test:seo": "node scripts/test-seo.mjs",
@@ -35,6 +35,10 @@
     "test:desktop-sync": "node scripts/test-desktop-sync.mjs",
     "build:desktop": "next build --webpack && node scripts/test-web-build.mjs",
     "desktop:runtime": "node scripts/prepare-postgres-runtime.mjs",
+    "desktop:update:key": "node scripts/init-desktop-update-key.mjs",
+    "desktop:update:release": "node scripts/sign-desktop-release.mjs",
+    "test:desktop-update-data": "node scripts/test-desktop-update-database.mjs",
+    "test:desktop-updates": "node scripts/test-desktop-update-client.mjs && node scripts/test-desktop-update-ui.mjs && node scripts/test-desktop-update-release.mjs && node scripts/test-desktop-update-controller.mjs && node scripts/test-desktop-update-lifecycle.mjs && node scripts/test-desktop-update-host.mjs",
     "test:catalog-transfer": "node scripts/test-catalog-transfer.mjs"
   },
   "dependencies": {
@@ -102,7 +106,7 @@
       "executableName": "RestaMarket"
     },
     "directories": {
-      "output": "desktop-release/v0.6.1",
+      "output": "desktop-release/v0.6.2",
       "app": "desktop"
     },
     "files": [
@@ -111,6 +115,16 @@
       "package.json",
       "preload.cjs",
       "menu-language.cjs",
+      "updates.cjs",
+      "update-client.cjs",
+      "update-lifecycle.cjs",
+      "update-preload.cjs",
+      "update-labels.cjs",
+      "update-trust.json",
+      "update-window.html",
+      "update-window.css",
+      "update-window.js",
+      "UPDATES.txt",
       "backup-archive.mjs",
       "protect-data.mjs",
       "assets/**/*"

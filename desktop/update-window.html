@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="az">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+    <title>RestaMarket · Yeniləmələr</title>
+    <link rel="stylesheet" href="./update-window.css">
+    <script src="./update-window.js" defer></script>
+  </head>
+  <body>
+    <main class="updater" aria-labelledby="heading">
+      <header class="brand">
+        <img src="./assets/restamarket.png" width="48" height="48" alt="">
+        <div><span class="brand-name">RestaMarket</span><p id="eyebrow">Masaüstü proqram</p></div>
+        <span class="version-pill" id="current-version" aria-label=""></span>
+      </header>
+
+      <section class="update-card" aria-labelledby="heading" aria-busy="true">
+        <span class="status-icon" id="status-icon" aria-hidden="true">↓</span>
+        <p class="section-label" id="section-label">PROQRAM YENİLƏMƏLƏRİ</p>
+        <h1 id="heading">Yeniləmələr</h1>
+        <p class="description" id="description" role="status" aria-live="polite">Yeniləmə məlumatı yüklənir…</p>
+        <div class="new-version" id="new-version" hidden></div>
+
+        <div class="progress-block" id="progress-block" hidden>
+          <div class="progress-caption"><span id="progress-label"></span><span id="progress-value"></span></div>
+          <progress id="progress" max="100" value="0" aria-label="Yüklənmə"></progress>
+        </div>
+
+        <div class="error" id="error" role="alert" hidden></div>
+        <section class="release-notes" id="release-notes" aria-labelledby="notes-heading" hidden>
+          <h2 id="notes-heading">Bu versiyada</h2>
+          <p id="notes-content"></p>
+        </section>
+
+        <div class="actions">
+          <button class="button button-primary" id="check" type="button" disabled>Yeniləmələri yoxla</button>
+          <button class="button button-primary" id="download" type="button" hidden>Yüklə</button>
+          <button class="button button-primary" id="install" type="button" hidden>Quraşdır və yenidən aç</button>
+          <button class="button button-secondary" id="cancel" type="button" hidden>Ləğv et</button>
+        </div>
+      </section>
+
+      <footer class="safety-note"><span aria-hidden="true">◈</span><p id="safety-note">Quraşdırmadan əvvəl satışı tamamlayın. Yerli məlumatların ehtiyat nüsxəsi yaradılacaq.</p></footer>
+    </main>
+  </body>
+</html>

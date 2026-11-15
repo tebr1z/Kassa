@@ -1,0 +1,114 @@
+RestaMarket — təhlükəsiz onlayn yenilənmə
+
+İSTİFADƏÇİ ÜÇÜN
+
+İlk dəfə yenilənmə funksiyası olan quraşdırıcını mövcud proqramın üzərinə
+quraşdırmaq lazımdır. Sonrakı versiyalar proqramın daxilindən yoxlanır və
+endirilir; hər dəfə ayrıca EXE axtarmaq lazım deyil. Quraşdırılmadan əvvəl
+istifadəçinin təsdiqi tələb edilir. Satışı tamamlayın və yenilənmə zamanı
+proqramı bağlamağa icazə verin. İnternet olmadıqda yerli kassa işləyir.
+
+Yenilənmə proqram fayllarını dəyişir, yerli stok bazasını serverə göndərmir.
+Baza və şəkillər EXE-dən ayrıca məlumat qovluğunda qalır. Tətbiqin yaratdığı
+ehtiyat nüsxələrini ayrıca diskdə saxlayın. Yenilənmə ehtiyatın əvəzi deyil.
+
+BURAXILIŞI HAZIRLAYAN ŞƏXS ÜÇÜN
+
+1. Açarı yalnız etibarlı Windows buraxılış kompüterində yaradın:
+   node scripts/init-desktop-update-key.mjs
+
+   Şəxsi açar:
+   %LOCALAPPDATA%\RestaMarketReleaseKeys\desktop-update-ed25519-v1.key
+
+   ACL yalnız cari Windows istifadəçisi və SYSTEM üçündür; alət üçün
+   PowerShell 7 (pwsh.exe) tələb olunur. Açar mövcuddursa
+   üzərinə yazılmır; yalnız açıq açar göstərilir. Şəxsi açarı söhbətə,
+   GitHub-a, veb serverə və ya buraxılış paketinə əlavə etməyin. Ayrıca
+   şifrələnmiş, oflayn ehtiyat saxlayın. Kompüter dəyişdikdə eyni açarı
+   təhlükəsiz üsulla köçürün və ACL-ni yenidən məhdudlaşdırın. Açar itərsə,
+   köhnə proqramlar yeni açara avtomatik etibar etməyəcək: planlaşdırılmış
+   açar dəyişikliyi və ya yeni etibarlı bootstrap quraşdırıcısı lazımdır.
+
+2. Göstərilən AÇIQ açarı desktop/update-trust.json faylında sabitləyin.
+   feedUrl dəyişməzdir:
+   https://kassa.nex.autos/desktop-updates/win-x64/stable/latest.json
+
+3. Root və desktop package.json versiyalarını eyni yeni X.Y.Z versiyasına
+   qaldırın. Quraşdırıcını hazırlayın, test edin, həqiqi EXE fayl versiyasını
+   və paketdəki açıq açarı yoxlayın. PostgreSQL əsas versiyası 17 qalır;
+   əsas versiya keçidi ayrıca məlumat miqrasiyası planı tələb edir.
+
+4. az, en, ru, tr, zh açarları olan JSON buraxılış qeydləri hazırlayın.
+   Hər dil düz mətn olmalı və 2000 simvoldan çox olmamalıdır.
+
+   node scripts/sign-desktop-release.mjs --key PRIVATE_KEY_PATH --notes NOTES_JSON
+
+   Alət yalnız cari workspace versiyasının quraşdırıcısını imzalayır:
+   desktop-release/vVERSION/RestaMarket-Setup-VERSION.exe
+   Nəticə: desktop-release/vVERSION/update/manifest.json
+
+   İmza Ed25519-dir; bu Windows Authenticode sertifikatı DEYİL. Windows
+   SmartScreen xəbərdarlığının olmayacağı vəd edilmir. İmza proqramın
+   sabitlənmiş açara uyğunluğunu, heş isə fayl bütövlüyünü yoxlayır.
+
+5. Serverdə yalnız iki açıq faylı köçürün:
+   /var/lib/restamarket-update-staging/VERSION/manifest.json
+   /var/lib/restamarket-update-staging/VERSION/RestaMarket-Setup-VERSION.exe
+
+   Staging ana və versiya qovluqları root-a məxsus 0700 olmalıdır. Şəxsi
+   imza açarı, baza, stok, .env, ehtiyat və istifadəçi məlumatları YOXDUR.
+   Serverə yalnız açıq update-trust.json və yoxlayıcı skriptlər lazımdır.
+
+   node scripts/publish-desktop-update.mjs --source /var/lib/restamarket-update-staging/VERSION --trust PUBLIC_TRUST_JSON
+
+   Yayımlayıcı imza, vaxt, versiya, fayl ölçüsü və SHA-256-nı yoxlayır.
+   /opt/restamarket/desktop-updates/win-x64/stable/VERSION/ dəyişməzdir.
+   Əvvəl versiya faylları, ən sonda latest.json atomik rename ilə dərc
+   edilir. Əvvəlki latest şəxsi staging/history qovluğunda saxlanır.
+   Köhnə versiya yayımlamaq və mövcud versiyanı yenidən imzalamaq rədd
+   edilir. Geri qayıtmaq lazım gələrsə, düzəlişi daha yüksək versiya kimi
+   hazırlayın; latest-i köhnə versiyaya əl ilə qaytarmayın.
+   Proses sərt dayandırılıb publish.lock qalarsa, əvvəl başqa yayımlayıcı
+   prosesin işləmədiyini və latest-in bütövlüyünü yoxlayın. Kilidi yalnız
+   bundan sonra səlahiyyətli operator ayrıca aradan qaldırmalıdır.
+
+6. Apache-də /desktop-updates/ statik Alias və əsas ProxyPass-dan əvvəl
+   istisna qurulmalıdır. Statik qovluqlar root-a məxsus olmalıdır; veb
+   tətbiqi onlara yaza bilməməlidir. Qovluq siyahısı və skript icrası bağlı,
+   HTTPS məcburi, latest.json üçün no-cache, dəyişməz versiya faylları üçün
+   uzun cache tətbiq edin. Baza, tətbiq .env-i, işçi girişləri və işləyən
+   veb servisi yenilənmə yayımlayıcısı tərəfindən dəyişdirilmir.
+
+   Hostda root olaraq əvvəl baxış, sonra təsdiqlənmiş quraşdırma:
+   node scripts/setup-desktop-update-host.mjs --dry-run
+   node scripts/setup-desktop-update-host.mjs --apply
+
+   Yalnız kassa.nex.autos-un vhost.conf və vhost_ssl.conf faylları dəyişir;
+   mövcud əsas ProxyPass hədəfi saxlanır. Orijinallar şəxsi
+   /var/backups/restamarket/desktop-updates-TARIX qovluğuna yazılır.
+   Apache configtest uğurlu olmasa reload edilmir; xəta zamanı orijinal
+   konfiqurasiyalar bərpa və yoxlama edilir. HTTP üçün fayl girişi verilmir;
+   yenilənmə ünvanı HTTPS-dir. Başqa Location/ProxyPassMatch qaydası varsa
+   alət avtomatik davam etmir və ayrıca yoxlama tələb edir.
+
+   AlmaLinux-da modul siyahısı /usr/sbin/httpd -M ilə yoxlanır; syntax
+   yoxlaması /usr/sbin/apachectl configtest ilə qalır. SELinux Enforcing
+   olduqda statik fayllar üçün yalnız aşağıdakı dar yolun davamlı konteksti
+   tələb olunur: /opt/restamarket/desktop-updates(/.*)?
+   Mövcud fcontext qaydalarını əvvəl yoxlayın. Bu yol üçün qayda yoxdursa:
+   semanage fcontext -a -t httpd_sys_content_t '/opt/restamarket/desktop-updates(/.*)?'
+   restorecon -R -v /opt/restamarket/desktop-updates
+
+   Qayda artıq varsa onu kor-koranə təkrarlamayın; operator dəqiq qaydanı
+   yoxlamalıdır. Yeni buraxılışdan sonra konteksti də yoxlayın. semanage
+   mövcud deyilsə uyğun host idarəetməsi tələb olunur. SELinux-u söndürmək,
+   setenforce 0 işlətmək, bütün /opt və ya shared qovluğunun kontekstini və
+   icazələrini genişləndirmək olmaz. Staging və imza açarına HTTP konteksti
+   və ya ictimai oxuma icazəsi verilməməlidir.
+
+7. node scripts/test-desktop-update-release.mjs yalnız müvəqqəti sınaq
+   açar/faylları ilə işləyir. Hər buraxılışdan sonra ictimai HTTPS ünvanından
+   manifesti endirib sabitlənmiş açarla və EXE-ni manifest heşi ilə ayrıca
+   yoxlayın. İmza uyğunsuzluğu varsa yoxlamanı keçməyin.
+   node scripts/test-desktop-update-host.mjs yalnız sınaq vhost faylları və
+   saxta Apache əmrləri ilə planı, backup və rollback-i yoxlayır.

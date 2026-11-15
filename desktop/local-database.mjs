@@ -46,7 +46,30 @@ export async function openLocalDatabase(dataRoot,projectRoot,{port=55432}={}){
   const temporary=path.join(dataRoot,'backups','archive-'+randomUUID()+'.dump');
   try{await backup(temporary);await writeArchive(destination,temporary,path.join(dataRoot,'media'));}finally{await unlink(temporary).catch(()=>{});}
  };
- return {url,dataRoot,backup,backupData,async restoreData(source){
+ const backupForUpdate=async destination=>{
+  const parent=path.resolve(dataRoot,'backups'),work=path.resolve(parent,'verify-update-'+randomUUID());
+  if(path.dirname(path.resolve(destination))!==parent||!destination.endsWith('.birkassa')||path.dirname(work)!==parent)throw new Error('Yanlış yeniləmə ehtiyat yolu.');
+  try{
+   await backupData(destination);
+   const archive=await readArchive(destination,work);
+   await pg('pg_restore',['--list',archive.dump]);
+  }finally{if(path.dirname(work)!==parent)throw new Error('Yanlış yoxlama qovluğu.');await rm(work,{recursive:true,force:true});}
+ };
+ const closeForUpdate=async()=>{
+  // The UI and local HTTP server must already be stopped. A cluster left by a
+  // previous crash may not be "owned" by this launch, but is still our exact
+  // configured data directory. Refuse if another client is using it.
+  const checked=postgres(url,{max:1,prepare:false,connect_timeout:5});
+  try{
+   const [identity]=await checked.unsafe("select current_setting('data_directory') directory,host(inet_server_addr()) host");
+   const normalized=value=>path.resolve(value).toLowerCase();
+   if(normalized(identity.directory)!==normalized(cluster)||identity.host!=='127.0.0.1')throw new Error('Yerli baza uyğun gəlmədi.');
+   const [clients]=await checked.unsafe("select count(*)::int n from pg_stat_activity where backend_type='client backend' and pid<>pg_backend_pid()");
+   if(clients.n!==0)throw new Error('Baza başqa bağlantıda istifadə olunur. Yeniləməni sonra sınayın.');
+  }finally{await checked.end({timeout:2});}
+  await pg('pg_ctl',['-D',cluster,'-m','fast','-w','stop']);owned=false;
+ };
+ return {url,dataRoot,backup,backupData,backupForUpdate,closeForUpdate,async restoreData(source){
   await backupData(path.join(dataRoot,'backups','before-restore-'+new Date().toISOString().replace(/[:.]/g,'-')+'.birkassa'));
   const current=postgres(url,{max:1,prepare:false});let clock='1',identity;
   try{const [seq]=await current.unsafe("select last_value::text value from desktop_sync_outbox_revision_seq");clock=seq.value;[identity]=await current.unsafe("select value from system_settings where key='desktop_sync_client_id'");}finally{await current.end();}
@@ -63,6 +86,6 @@ export async function openLocalDatabase(dataRoot,projectRoot,{port=55432}={}){
    const temporary=configFile+'.'+randomUUID()+'.tmp';await writeFile(temporary,JSON.stringify({...config,database:restored}),{mode:0o600});await rename(temporary,configFile);
    return {database:restored};
   }finally{const parent=path.resolve(dataRoot,'restore-work');if(path.dirname(work)!==parent)throw new Error('Yanlış bərpa qovluğu.');await rm(work,{recursive:true,force:true});}
- },async close(){if(owned)await pg('pg_ctl',['-D',cluster,'-m','fast','-w','stop']);}};
+ },async close(){if(owned){await pg('pg_ctl',['-D',cluster,'-m','fast','-w','stop']);owned=false;}}};
  }catch(error){if(owned)await pg('pg_ctl',['-D',cluster,'-m','fast','-w','stop']).catch(()=>{});throw error;}
 }
