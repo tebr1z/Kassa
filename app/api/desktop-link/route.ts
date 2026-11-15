@@ -5,6 +5,8 @@ import {storeDb} from "@/lib/store-db";
 import {feedKeyName,fetchOrderPage,hashKey,isDesktop,normalizeStoreUrl,readSyncConfig,writeSyncConfig} from "@/lib/desktop-sync";
 import {syncKeyName} from "@/lib/desktop-bridge";
 import {cacheProductMedia} from "@/lib/desktop-media";
+import {readDesktopPublicProducts} from '@/lib/desktop-catalog-source';
+import {desktopCatalogBaselineKey,seedDesktopCatalogBaseline} from '@/lib/desktop-catalog-delta';
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 async function handleGET() {
@@ -34,6 +36,15 @@ async function handlePOST(request:Request) {
     try {
       const config={url:normalizeStoreUrl(parsed.data.url),key:parsed.data.key};
       await fetchOrderPage(config);
+      // Capture the existing local state synchronously, before the scheduler
+      // can see the new connection. Pairing never overwrites the live catalogue.
+      if(config.key.startsWith('bk_catalog_')){
+        const sql=storeDb();try{await sql.begin(async tx=>{
+          await tx.unsafe('lock table products,product_images,product_options in share row exclusive mode');
+          const baseline=seedDesktopCatalogBaseline(await readDesktopPublicProducts(tx));
+          await tx.unsafe('insert into system_settings(key,value) values($1,$2) on conflict(key) do nothing',[desktopCatalogBaselineKey(config.url),JSON.stringify(baseline)]);
+        });}finally{await sql.end();}
+      }
       await writeSyncConfig(config);
       const sql=storeDb();try{await sql.unsafe("delete from system_settings where key='desktop_catalog_digest'");}finally{await sql.end();}
       return Response.json({ok:true});

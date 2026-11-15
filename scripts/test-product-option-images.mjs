@@ -79,11 +79,21 @@ const productApi=await load('app/api/products/route.ts',{'@/lib/require-admin':g
  },async end(){}}),'@/lib/warehouse':{salesWarehouseSql:()=>"select 'fixture'"},'@/lib/barcode':barcode,'@/lib/product-option-input':input,'@/lib/save-product-options':{saveProductOptions},'@/lib/commerce':commerce,'@/lib/product-discount':discount,'@/lib/desktop-media':media});
 const previousDb=process.env.DATABASE_URL;process.env.DATABASE_URL='postgres://fixture.invalid/test';
 try{const data=await (await productApi.GET(request())).json();assert.equal(data[0].options[0].image,local);assert.equal(data[0].editableOptions[0].image_url,local);}finally{if(previousDb===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=previousDb;}
-const bridge=await load('lib/desktop-bridge.ts',{'@/lib/desktop-sync':{},'@/lib/desktop-media':{},'@/lib/store-db':{},'@/lib/product-option-image':images});
+const delta=await load('lib/desktop-catalog-delta.ts');
+const bridge=await load('lib/desktop-bridge.ts',{'@/lib/desktop-sync':{},'@/lib/desktop-media':{},'@/lib/store-db':{},'@/lib/product-option-image':images,'@/lib/desktop-catalog-delta':delta,'@/lib/desktop-catalog-source':{readDesktopPublicProducts:async()=>{throw Error('Schema-only unit must not read a database');}},'@/lib/desktop-catalog-apply':{applyPublicProduct:async()=>{throw Error('Schema-only unit must not write a database');}}});
 const publicProduct={id:productId,sku:'TEST',name:'Manqal',code:'123456',category:'',unit:'ədəd',price:9,discountPrice:null,image:'',images:[],options:[{label:base.label,size:'40',color:'Qırmızı',kind:'',price:7,position:0,isActive:true}],isActive:true};
 assert.equal(bridge.publicProduct.safeParse(publicProduct).success,true,'Old desktop payload without image still accepted');
 assert.equal(bridge.publicProduct.safeParse({...publicProduct,options:[{...publicProduct.options[0],image:catalog}]}).success,true);
 for(const image of [local,'https://evil.test/a','javascript:x'])assert.equal(bridge.publicProduct.safeParse({...publicProduct,options:[{...publicProduct.options[0],image}]}).success,false,'Local media must be published before bridge transfer');
+assert.equal(bridge.publicProduct.safeParse({...publicProduct,changedFields:['options'],previous:publicProduct}).success,true,'Incremental variants carry a validated public-only previous state');
+for(const field of ['id','stock','cost_price','barcode','password_hash'])assert.equal(bridge.publicProduct.safeParse({...publicProduct,changedFields:[field],previous:publicProduct}).success,false,'A private or identity field cannot enter the changed-fields mask');
+for(const field of ['stock','cost_price','barcode','password_hash']){
+ assert.equal(bridge.publicProduct.safeParse({...publicProduct,[field]:'PRIVATE'}).success,false,'Private top-level product fields are refused');
+ assert.equal(bridge.publicProduct.safeParse({...publicProduct,changedFields:['options'],previous:{...publicProduct,[field]:'PRIVATE'}}).success,false,'Previous state is just as strict as the public product');
+ assert.equal(bridge.publicProduct.safeParse({...publicProduct,options:[{...publicProduct.options[0],[field]:'PRIVATE'}]}).success,false,'Private option fields are refused');
+}
+assert.equal(bridge.publicProduct.safeParse({...publicProduct,changedFields:['image']}).success,false,'Incremental writes without a baseline are refused');
+assert.equal(bridge.publicProduct.safeParse({...publicProduct,changedFields:['image'],previous:{...publicProduct,id:randomUUID()}}).success,false,'Previous state belongs to the same local product');
 const previousPool=globalThis.catalogPool;delete globalThis.catalogPool;
 try{
  const catalogLoader=await load('lib/public-catalog.ts',{react:{cache:fn=>fn},postgres:()=>({async unsafe(query){

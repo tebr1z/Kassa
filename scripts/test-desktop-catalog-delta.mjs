@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {createRequire} from 'node:module';
+import {randomUUID} from 'node:crypto';
+import ts from 'typescript';
+
+const require=createRequire(import.meta.url),source=await readFile('lib/desktop-catalog-delta.ts','utf8');
+const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,module={exports:{}};
+new Function('require','module','exports',compiled)(require,module,module.exports);
+const {publicProductFields,desktopCatalogBaselineKey,normalizeDesktopPublicProduct,seedDesktopCatalogBaseline,buildDesktopCatalogChanges,mergeDesktopCatalogBaseline,validateDesktopChangedFields}=module.exports;
+const clone=value=>structuredClone(value),hash='a'.repeat(64),desktop='/api/desktop-media/'+hash;
+const product={id:randomUUID(),sku:'QA-PUBLIC',name:'Məhsul',public_code:'123456',category:'Saclar',unit:'ədəd',sale_price:'12.50',discount_price:'10.00',image_url:'',images:[],is_active:true,description:'Təsvir',specifications:'Ölçü',cost_price:9,min_stock:3,stock:44,barcode:'SECRET',password_hash:'SECRET',options:[{id:randomUUID(),label:'40 · Qırmızı',size:'40',color:'Qırmızı',kind:'',image_url:'',attributes:{material:'dəmir'},price:'10.50',cost_price:8,position:0,is_active:true}]};
+const projected=normalizeDesktopPublicProduct(product);
+assert.equal(projected.price,12.5);assert.equal(projected.discountPrice,10);assert.equal(projected.code,'123456');assert.equal(projected.options[0].price,10.5);assert.equal(projected.options[0].isActive,true);
+function publicOnly(value){if(Array.isArray(value)){value.forEach(publicOnly);return;}if(value&&typeof value==='object')for(const [key,item]of Object.entries(value)){assert.ok(!['stock','quantity','warehouse','cost_price','min_stock','barcode','password_hash','pin_hash','salary'].includes(key),'Private field: '+key);publicOnly(item);}}
+publicOnly(projected);
+const baseline=seedDesktopCatalogBaseline([product]);publicOnly(baseline);
+assert.deepEqual(buildDesktopCatalogChanges([product],baseline).catalog,[],'Pairing does not publish old desktop photos/options/categories');
+const disabled={...product,id:randomUUID(),sku:'OLD-DISABLED',sale_price:0,is_active:false,options:[]};
+assert.deepEqual(buildDesktopCatalogChanges([disabled],seedDesktopCatalogBaseline([disabled])).catalog,[],'Disabled, zero-price seed rows do not block or publish');
+assert.equal(desktopCatalogBaselineKey('https://example.test/'),desktopCatalogBaselineKey('https://example.test'));
+assert.notEqual(desktopCatalogBaselineKey('https://one.test'),desktopCatalogBaselineKey('https://two.test'));
+assert.ok(!publicProductFields.includes('id'));for(const invalid of ['cost_price','stock','barcode','salary','id'])assert.throws(()=>validateDesktopChangedFields([invalid]));
+for(const invalid of [undefined,[],['image','image'],['image',9]])assert.throws(()=>validateDesktopChangedFields(invalid));
+
+const edited={...clone(product),image_url:desktop};
+const first=buildDesktopCatalogChanges([edited],baseline).catalog;
+assert.deepEqual(first[0].changedFields,['image']);assert.equal(first[0].previous.image,'');assert.equal(first[0].previous.options.length,1);publicOnly(first);
+const afterSend={...clone(edited),name:'Edited while request was running'};
+const acknowledged=mergeDesktopCatalogBaseline(baseline,first);
+const second=buildDesktopCatalogChanges([afterSend],acknowledged).catalog;
+assert.deepEqual(second[0].changedFields,['name'],'A later local edit stays dirty after earlier request is acknowledged');
+assert.equal(second[0].previous.image,desktop,'Raw local image URL remains the baseline, not transformed web URL');
+assert.equal(baseline.products[product.id].image,'','Seed baseline is not mutated');
+assert.equal(acknowledged.products[product.id].name,product.name);
+assert.deepEqual(buildDesktopCatalogChanges([edited],acknowledged).catalog,[],'An acknowledged raw image is not republished forever');
+assert.deepEqual(mergeDesktopCatalogBaseline(acknowledged,first),acknowledged,'Replayed acknowledgements are idempotent');
+
+const optionsEdit=clone(product);optionsEdit.options[0].size='50';optionsEdit.options[0].price='15.25';
+const optionChange=buildDesktopCatalogChanges([optionsEdit],baseline).catalog[0];
+assert.deepEqual(optionChange.changedFields,['options']);assert.equal(optionChange.previous.options[0].size,'40');assert.equal(optionChange.options[0].size,'50');
+assert.equal(optionChange.previous.options[0].image,'','Previous public option lets receiver distinguish unchanged blank photo from explicit removal');
+const attrReorder=clone(product);attrReorder.options[0].attributes={z:'son',a:'ilk'};
+const otherOrder=clone(attrReorder);otherOrder.options[0].attributes={a:'ilk',z:'son'};
+assert.deepEqual(buildDesktopCatalogChanges([otherOrder],seedDesktopCatalogBaseline([attrReorder])).catalog,[],'Attribute property order is not an edit');
+const numbers=clone(product);numbers.sale_price=12.5;numbers.discount_price=10;numbers.options[0].price=10.5;
+assert.deepEqual(buildDesktopCatalogChanges([numbers],baseline).catalog,[],'PostgreSQL numeric strings and numbers have one representation');
+
+const added={...clone(product),id:randomUUID(),sku:'NEW-AFTER-PAIR'};
+const newChange=buildDesktopCatalogChanges([product,added],baseline).catalog;
+assert.equal(newChange.length,1);assert.equal(newChange[0].previous,null);assert.deepEqual(newChange[0].changedFields,publicProductFields);
+const addedAck=mergeDesktopCatalogBaseline(baseline,newChange);assert.deepEqual(buildDesktopCatalogChanges([product,added],addedAck).catalog,[]);
+const absent=buildDesktopCatalogChanges([],baseline).catalog;
+assert.equal(absent.length,1);assert.equal(absent[0].isActive,false);assert.deepEqual(absent[0].changedFields,['isActive']);assert.equal(absent[0].previous.isActive,true);
+const tombstoneAck=mergeDesktopCatalogBaseline(baseline,absent);
+assert.deepEqual(buildDesktopCatalogChanges([],tombstoneAck).catalog,[],'Missing products are archived only once');
+assert.deepEqual(buildDesktopCatalogChanges([product],tombstoneAck).catalog[0].changedFields,['isActive'],'Reappearing local product is reactivated deliberately');
+const softDeleted={...clone(product),deleted_at:'2026-11-15'};
+assert.deepEqual(buildDesktopCatalogChanges([softDeleted],baseline).catalog[0].changedFields,['isActive']);
+const renamed={...clone(product),sku:'NEW-SKU'};
+const rename=buildDesktopCatalogChanges([renamed],baseline).catalog[0];assert.deepEqual(rename.changedFields,['sku']);assert.equal(rename.previous.sku,product.sku,'Receiver can locate existing web row by previous SKU');
+const description=buildDesktopCatalogChanges([{...product,description:'Yeni təsvir',specifications:'Yeni xüsusiyyət'}],baseline).catalog[0];assert.deepEqual(description.changedFields,['description','specifications']);
+assert.throws(()=>seedDesktopCatalogBaseline([product,product]),/identifikatoru/);
+assert.throws(()=>seedDesktopCatalogBaseline([product,{...product,id:randomUUID()}]),/məhsul kodu/);
+assert.throws(()=>mergeDesktopCatalogBaseline(baseline,[{...first[0],changedFields:['stock']}]),/sahələri/);
+publicOnly(mergeDesktopCatalogBaseline(baseline,[{...first[0],cost_price:777,stock:900}]));
+console.log('PASS: private-field-free canonical public DTOs, safe no-publication pairing, store-specific baseline, product/field deltas, previous-state gallery/option merging, raw-image and in-flight acknowledgement safety, new rows, SKU rename and archive tombstones. No database or network accessed.');

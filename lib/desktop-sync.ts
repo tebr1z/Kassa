@@ -66,7 +66,9 @@ let inFlight:Promise<{received:number}>|null = null;
 export function syncOrders() {
   if(inFlight)return inFlight;
   void cacheProductMedia().catch(()=>{});
-  inFlight = (async()=>{const result=await pullOrders();await pushDesktopChanges();return result;})().finally(()=>{inFlight=null;});
+  // Catalogue publication must still run when the independent order feed is
+  // temporarily unavailable (or contains an order requiring a newer client).
+  inFlight = (async()=>{try{return await pullOrders();}finally{await pushDesktopChanges();}})().finally(()=>{inFlight=null;});
   return inFlight;
 }
 async function pullOrders() {

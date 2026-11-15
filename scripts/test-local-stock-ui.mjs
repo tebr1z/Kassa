@@ -91,9 +91,11 @@ for(const canManageCosts of [false,true]){
  assert.ok(all.some(node=>node.type==='input'&&node.props.type==='file'),'Per-colour photo upload is still present');assert.equal(text(tree).includes('Variantlar məhsulun ümumi stokunu paylaşır.'),canManageCosts);
 }
 const settingsData={branch:{id:'branch',name:'Store',address:'Bakı',phone:'',currency:'AZN',timezone:'Asia/Baku'},branches:[{id:'branch',name:'Store',address:'Bakı'}],users:[],rules:null,warehouses:[],registers:[]};
-for(const tab of ['branch','users']){
- const {default:Settings}=await load('app/admin/web-settings.tsx',{react:fakeReact({0:settingsData,1:tab}),'@/lib/language':language,'./staff-access-settings':Dummy}),tree=Settings();
+const DesktopConnectionFixture=()=>null;
+for(const tab of ['branch','users','desktop']){
+ const {default:Settings}=await load('app/admin/web-settings.tsx',{react:fakeReact({0:settingsData,1:tab}),'@/lib/language':language,'./staff-access-settings':Dummy,'./desktop-panel':{DesktopConnection:DesktopConnectionFixture}}),tree=Settings();
  assert.doesNotMatch(text(tree),/Satış qaydaları|Kassa və anbarlar|Kassa və anbar$/);assert.ok(nodes(tree).some(node=>node.type==='button'&&text(node)==='İstifadəçilər və rollar'));assert.equal(nodes(tree).some(node=>node.type===Dummy),tab==='users');
+ const desktopTab=nodes(tree).find(node=>node.type==='button'&&text(node)==='Masaüstü bağlantısı');assert.ok(desktopTab,'Web administrators can reach desktop linking without local inventory access');assert.equal(desktopTab.props.className==='selected',tab==='desktop');assert.equal(nodes(tree).some(node=>node.type===DesktopConnectionFixture),tab==='desktop','The desktop connection panel mounts only on its selected web settings tab');
 }
 const {localStockUiTranslations}=await load('lib/local-stock-ui-translations.ts');
 const keys=new Set();for(const row of localStockUiTranslations){assert.equal(row.length,5);assert.ok(row.every(value=>typeof value==='string'&&value.trim()));assert.equal(keys.has(row[0]),false);keys.add(row[0]);}

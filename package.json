@@ -1,6 +1,6 @@
 {
   "name": "birkassa-system",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "main": "desktop/main.cjs",
   "productName": "RestaMarket",
@@ -102,7 +102,7 @@
       "executableName": "RestaMarket"
     },
     "directories": {
-      "output": "desktop-release/v0.6.0",
+      "output": "desktop-release/v0.6.1",
       "app": "desktop"
     },
     "files": [
