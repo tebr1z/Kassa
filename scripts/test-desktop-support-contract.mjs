@@ -22,6 +22,8 @@ assert.equal(supportTicketPage.safeParse({tickets:Array(51).fill(ticket),next:nu
 assert.equal(supportMessagePage.safeParse({messages:Array(101).fill(message),next:null,messageVersion:'a'.repeat(32)}).success,false);
 const api=await readFile('app/api/desktop-support-feed/route.ts','utf8'),mirror=await readFile('lib/desktop-web-support.ts','utf8'),local=await readFile('app/api/desktop-web-support/route.ts','utf8');
 assert.match(api,/desktopAuthorization\(sql,key,true\)/);assert.ok(!/select\s+\*/i.test(api),'Feed only projects explicit correspondence fields');
+for(const alias of ['name','email','phone','unread','unanswered','n','version'])assert.match(api,new RegExp('\\bas "'+alias+'"'),'PostgreSQL 13-safe explicit quoted alias: '+alias);
+assert.equal((api.match(/as "version"/g)||[]).length,2,'Both message version projections quote the PostgreSQL 13 keyword');
 assert.ok(!/notifyCustomerEmail|fetch\([^)]*smtp|set-cookie/i.test(api+mirror+local),'Reading correspondence never emails or clones sessions');
 assert.ok(!/export const POST|export async function POST/.test(local),'The desktop support mirror is read-only');
 assert.match(mirror,/messageVersion===ticket\.messageVersion/,'Version changes restart partial conversation scans');
