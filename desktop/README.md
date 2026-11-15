@@ -1,11 +1,11 @@
-# RestaMarket Windows tətbiqi — 0.6.3
+# RestaMarket Windows tətbiqi — 0.6.4
 
-Yeni quraşdırıcının çıxış yolu: `desktop-release/v0.6.3/RestaMarket-Setup-0.6.3.exe`.
+Yeni quraşdırıcının çıxış yolu: `desktop-release/v0.6.4/RestaMarket-Setup-0.6.4.exe`.
 0.6.2 və sonrakı versiyalarda baş rəhbər hesabı ilə **RestaMarket → Yeniləmələr**
 menyusundan imzalanmış onlayn yeniləməni yoxlayın. Quraşdırmadan əvvəl təsdiq və
 yerli baza/şəkillərin yoxlanmış ehtiyat nüsxəsi tələb olunur.
 Proqram + cari lokal məlumatlar üçün `npm run desktop:transfer` işlədin. Nəticə
-`desktop-release/RestaMarket-Kocurme-0.6.3-TARIX` qovluğunda quraşdırıcı,
+`desktop-release/RestaMarket-Kocurme-0.6.4-TARIX` qovluğunda quraşdırıcı,
 `RestaMarket-data.birkassa`, yoxlama heşləri və `OXU-KOCURME.txt` olacaq.
 `.exe` özü mağaza məlumatlarını daşımır. Qovluğun hamısını köçürün.
 Ətraflı istifadəçi təlimatı: `desktop/TRANSFER.txt`.

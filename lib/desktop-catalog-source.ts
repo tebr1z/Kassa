@@ -9,7 +9,7 @@ export async function readDesktopPublicProducts(sql:Pick<ReturnType<typeof postg
   p.sale_price price,p.discount_price as "discountPrice",coalesce(p.description,'') description,coalesce(p.specifications,'') specifications,
   coalesce(p.image_url,'') image,(p.is_active and p.deleted_at is null) as "isActive",
   coalesce((select json_agg(pi.image_url order by position,id) from product_images pi where pi.product_id=p.id),'[]'::json) images,
-  coalesce((select json_agg(json_build_object('label',label,'size',size,'color',color,'kind',kind,'image',image_url,'attributes',attributes,'price',price,'position',position,'isActive',is_active) order by position,label) from product_options po where po.product_id=p.id),'[]'::json) options
+  coalesce((select json_agg(json_build_object('label',label,'size',size,'color',color,'kind',kind,'image',image_url,'attributes',attributes,'price',price,'position',position,'isActive',is_active) order by position,label) from product_options po where po.product_id=p.id),'[]'::json) as "options"
   from products p order by p.sku`);
  return rows.map(normalizeDesktopPublicProduct);
 }

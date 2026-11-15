@@ -50,4 +50,8 @@ const stable=[local('a'),local('b')];assert.deepEqual(mergeDesktopWebGallery(sta
 assert.ok(source.includes('acknowledged_at is null'),'Pending immutable publication is checked');
 assert.ok(source.includes('await tx.savepoint('),'Each product applies inside a savepoint');
 assert.ok(source.includes('cost_price,min_stock')&&source.includes('0,0,$9,false'),'Unknown web products are inactive with no guessed costs/stock');
+const projection=await readFile('lib/desktop-catalog-source.ts','utf8');
+assert.match(projection,/\) as "options"\s+from products p/,'PostgreSQL 13 reserves OPTIONS: quote the public JSON alias instead of relying on PostgreSQL 17 grammar');
+assert.ok(!/\) options\s+from products p/.test(projection),'The PostgreSQL 13-incompatible unquoted alias must not return');
+for(const column of ['cost_price','min_stock','stock_movements','product_barcodes','auth_sessions','password_hash'])assert.ok(!projection.includes(column),'Public projection must not read private data: '+column);
 console.log('PASS: pure public catalog protocol/body caps/private-key rejection, cached image equivalence, dirty gallery add/remove/order conflicts and limits, replay idempotence; storage and network disabled.');
