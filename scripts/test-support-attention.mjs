@@ -40,7 +40,38 @@ assert.match(api,/staff_read_revision=greatest\(staff_read_revision,\$1::bigint\
 assert.match(api,/notification\.email/);assert.match(api,/eventKey:'support-reply:'\+notification\.id/);assert.ok(api.indexOf('if(notification?.email)')>api.indexOf('return {id:String(message.id)'),'Notification is outside the reply transaction');assert.doesNotMatch(api,/console\.|logSystemError/,'Private ticket content/contacts are not logged');
 const ui=source['app/admin/store/ticket-desk.tsx'];assert.match(ui,/void loadDetail\(id,true\)/,'An explicit open acknowledges the viewed revision');assert.match(ui,/customerRevision:data\.ticket\.customerRevision/);assert.match(ui,/const run=\+\+detailRun\.current/);assert.match(ui,/run!==detailRun\.current/);assert.match(ui,/if\(pending\.current\|\|!detail\)return/,'Double replies are guarded');assert.match(ui,/month:'2-digit'/,'Dates do not depend on missing month names in limited ICU');assert.match(ui,/Bağlı bileti yenidən aç/,'Reopening is not mislabeled as creating a customer ticket');
 const dashboard=await readFile('app/admin/staff-dashboard.tsx','utf8'),commerce=await readFile('app/admin/store/commerce-manager.tsx','utf8');
-assert.match(dashboard,/\["Dəstək biletləri", MessageSquare\]/);assert.match(dashboard,/useSupportAttention\(auth\?\.authenticated===true&&auth\.user\?\.role==='admin'\)/);assert.match(dashboard,/active==='Dəstək biletləri'&&auth\.user\.role==='admin'&&<TicketDesk/);assert.match(dashboard,/get\('section'\)!=='support'/);assert.doesNotMatch(commerce,/<TicketDesk|setTab\('messages'\)|\["messages","Dəstək biletləri"\]/);assert.match(commerce,/staffPortalPath\(\)\+'\?section=support'/);
+assert.match(dashboard,/\["Dəstək biletləri", MessageSquare\]/);assert.match(dashboard,/\["Veb dəstək", MessageSquare\]/);
+// Evaluate the actual gates, rather than requiring the old exact expression:
+// interactive web support is still admin-only, while the separate local mirror
+// is intentionally read-only and available only to local admin/manager roles.
+const dashboardTree=ts.createSourceFile('staff-dashboard.tsx',dashboard,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),hookGates=new Map(),viewGates=new Map();
+function supportGates(node){
+ if(ts.isCallExpression(node)&&['useSupportAttention','useDesktopSupportAttention'].includes(node.expression.getText(dashboardTree))){assert.equal(node.arguments.length,1);hookGates.set(node.expression.getText(dashboardTree),node.arguments[0].getText(dashboardTree));}
+ if(ts.isJsxExpression(node)&&node.expression&&ts.isBinaryExpression(node.expression)&&ts.isJsxSelfClosingElement(node.expression.right)){
+  const name=node.expression.right.tagName.getText(dashboardTree);if(['TicketDesk','DesktopSupportPanel'].includes(name))viewGates.set(name,node.expression.left.getText(dashboardTree));
+ }
+ ts.forEachChild(node,supportGates);
+}supportGates(dashboardTree);
+assert.equal(hookGates.size,2);assert.equal(viewGates.size,2);
+const evaluate=(expression,auth,active='')=>new Function('auth','active','return Boolean('+expression+');')(auth,active);
+for(const role of ['admin','manager','cashier','warehouse','accountant','online_manager','online_assistant','unknown'])for(const local of [false,undefined,true])for(const authenticated of [false,true]){
+ const auth={authenticated,local,user:{role}},web=authenticated&&local!==true&&role==='admin',mirror=authenticated&&local===true&&['admin','manager'].includes(role);
+ assert.equal(evaluate(hookGates.get('useSupportAttention'),auth),web,role+' '+local+' interactive support polling');
+ assert.equal(evaluate(hookGates.get('useDesktopSupportAttention'),auth),mirror,role+' '+local+' local mirror polling');
+ // Views are below Home's existing unauthenticated early return. Check their
+ // independent local/role/selected-section boundaries after authentication.
+ if(authenticated){
+  assert.equal(evaluate(viewGates.get('TicketDesk'),auth,'Dəstək biletləri'),web);
+  assert.equal(evaluate(viewGates.get('DesktopSupportPanel'),auth,'Veb dəstək'),mirror);
+  assert.equal(evaluate(viewGates.get('TicketDesk'),auth,'Veb dəstək'),false);
+  assert.equal(evaluate(viewGates.get('DesktopSupportPanel'),auth,'Dəstək biletləri'),false);
+ }
+}
+assert.match(dashboard,/if\(!auth\.authenticated\|\|!auth\.user\)return <LoginScreen/,'Support views remain below the authentication boundary');
+assert.match(dashboard,/get\('section'\)!=='support'/);assert.doesNotMatch(commerce,/<TicketDesk|setTab\('messages'\)|\["messages","Dəstək biletləri"\]/);assert.match(commerce,/staffPortalPath\(\)\+'\?section=support'/);
+const mirrorUi=await readFile('app/admin/desktop-support-panel.tsx','utf8'),mirrorApi=await readFile('app/api/desktop-web-support/route.ts','utf8');
+assert.doesNotMatch(mirrorUi,/method\s*:\s*['"](?:POST|PATCH|DELETE|PUT)['"]|\/api\/store-admin\/chat/,'Local viewing never sends replies or acknowledges web reads');
+assert.match(mirrorApi,/GET=withAdminSession\(handleGET\)/);assert.doesNotMatch(mirrorApi,/export const (?:POST|PATCH|DELETE|PUT)\b/,'The mirror endpoint does not acquire write methods');
 const policy=await readFile('lib/staff-access.ts','utf8');assert.doesNotMatch(policy,/['"]\/api\/store-admin\/chat['"]\s*:/,'Existing admin-only API permission is not broadened to online/other staff');
 const migration=await readFile('drizzle/0034_support_attention.sql','utf8');assert.match(migration,/AFTER INSERT OR UPDATE OF body/);assert.match(migration,/NEW\.sender='customer'/);assert.match(migration,/NEW\.body IS DISTINCT FROM OLD\.body/);assert.match(migration,/customer_revision=customer_revision\+1/);assert.match(migration,/SET DEFAULT clock_timestamp\(\)/);assert.doesNotMatch(migration,/DROP TABLE|DELETE FROM|TRUNCATE|CREATE USER|password_hash/i);
 const css=await readFile('app/admin/support-desk.css','utf8');postcss.parse(css);assert.match(css,/focus-visible/);assert.match(css,/prefers-reduced-motion/);assert.match(css,/minmax\(0,1fr\)/);

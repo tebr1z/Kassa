@@ -42,7 +42,21 @@ for(const [role,expected] of Object.entries({admin:['products','dashboard'],mana
   assert.deepEqual(calls,expected,role+' only requests authorized initial datasets');
 }
 assert.ok(source.includes('["İdarə paneli", LayoutDashboard]'),'Permission key remains unchanged');
-assert.ok(source.includes('t(staffSectionLabel(active))'));
+const sectionLabel=home.body.statements.filter(ts.isVariableStatement).flatMap(node=>[...node.declarationList.declarations]).find(node=>node.name.getText(ast)==='sectionLabel');
+assert.ok(sectionLabel?.initializer&&ts.isArrowFunction(sectionLabel.initializer),'The active section has one shared display-label helper');
+const {desktopWebLabel}=await importSource(await readFile('lib/desktop-web-labels.ts','utf8'));
+const runSectionLabel=new Function('language','desktopWebLabel','t','staffSectionLabel','label',compile('const sectionLabel='+sectionLabel.initializer.getText(ast)+'; return sectionLabel(label);'));
+for(const language of ['az','ru','en','tr','zh']){
+ for(const section of ['İdarə paneli','Maliyyə','Anbar','Satış / POS','Dəstək biletləri']){
+  const calls=[],translate=key=>{calls.push(key);return language+':'+key;};
+  assert.equal(runSectionLabel(language,desktopWebLabel,translate,labels.staffSectionLabel,section),language+':'+labels.staffSectionLabel(section));
+  assert.deepEqual(calls,[labels.staffSectionLabel(section)],'Existing permission keys retain their mapped, translated display names');
+ }
+ for(const [section,key]of [['Veb sifarişləri','webOrders'],['Veb dəstək','webSupport']])assert.equal(runSectionLabel(language,desktopWebLabel,()=>{throw Error('New local labels have their own five-language dictionary');},labels.staffSectionLabel,section),desktopWebLabel(language,key));
+}
+let activeTitleUsesHelper=false;
+function titleUsesHelper(node){if(ts.isJsxElement(node)&&node.openingElement.tagName.getText(ast)==='h1'&&node.children.some(child=>ts.isJsxExpression(child)&&child.expression&&ts.isCallExpression(child.expression)&&child.expression.expression.getText(ast)==='sectionLabel'&&child.expression.arguments.length===1&&child.expression.arguments[0].getText(ast)==='active'))activeTitleUsesHelper=true;ts.forEachChild(node,titleUsesHelper);}titleUsesHelper(home);
+assert.equal(activeTitleUsesHelper,true,'The visible active title uses the shared mapped display label, not raw permission keys');
 assert.ok(source.includes('if(auth.user.role.startsWith("online_"))return <div className="auth-loading">'),'Online roles never mount the operational dashboard or POS before redirect');
 assert.ok(source.includes('{canReadProductData&&<div className={"db-state "+dataStatus}>'),'Database badge only appears for roles that actually load product data');
 assert.ok(!source.includes("?dataStatus:'live'"),'Roles without product queries are not labelled as live');
