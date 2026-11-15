@@ -13,7 +13,8 @@ const rules:Rule[]=[
   {prefix:'/api/admin/delivery',read:['admin'],write:['admin']},
   {prefix:'/api/locations',read:['admin'],write:['admin']},
   {prefix:"/api/desktop-media",read:["admin","manager","cashier","warehouse","accountant"],write:[]},
-  {prefix:"/api/desktop-link",read:["admin"],write:["admin"]},
+  {prefix:"/api/desktop-link",read:["admin","manager","cashier"],write:["admin"]},
+  {prefix:"/api/desktop-web-support",read:["admin","manager"],write:[]},
   {prefix:"/api/desktop-inbox",read:["admin","manager","cashier"],write:["admin","manager","cashier"]},
   {prefix:"/api/online-orders",read:["admin","manager","online_manager","online_assistant"],write:["admin","manager","online_manager","online_assistant"]},
   {prefix:"/api/store-admin",read:["admin"],write:["admin"]},
@@ -86,7 +87,7 @@ export async function proxy(request:NextRequest){
  if(adminPage&&![STAFF_PORTAL_PATH,STAFF_PORTAL_PATH+'/store',STAFF_PORTAL_PATH+'/online'].includes(path))return new NextResponse('Səhifə tapılmadı.',{status:404,headers:{'Cache-Control':'private, no-store','X-Robots-Tag':'noindex, nofollow, noarchive'}});
  if(adminPage&&!secureAdminRequest(request))return new NextResponse('İdarəetmə üçün HTTPS bağlantısı tələb olunur.',{status:426});
  if(path===STAFF_PORTAL_PATH)return forward(request);
- if(["/api/desktop-feed","/api/desktop-poll","/api/desktop-bridge","/api/desktop-image","/api/desktop-lock"].includes(request.nextUrl.pathname))return forward(request);
+ if(["/api/desktop-feed","/api/desktop-catalog-feed","/api/desktop-support-feed","/api/desktop-poll","/api/desktop-bridge","/api/desktop-image","/api/desktop-lock"].includes(request.nextUrl.pathname))return forward(request);
  if(request.nextUrl.pathname.startsWith('/api/desktop-media/'))return forward(request);
  if(request.nextUrl.pathname.startsWith('/api/catalog-media/'))return forward(request);
  if(!["GET","HEAD","OPTIONS"].includes(request.method)){

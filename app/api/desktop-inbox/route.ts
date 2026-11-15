@@ -1,16 +1,40 @@
 import {withAdminSession} from '@/lib/require-admin';
 import {z} from "zod";
 import {storeDb} from "@/lib/store-db";
-import {isDesktop,remoteOrderSchema,syncOrders,isDeliveryUpgradeError,desktopDeliveryUpgradeMessage} from "@/lib/desktop-sync";
+import {isDesktop,readSyncConfig,remoteOrderSchema,syncOrders,isDeliveryUpgradeError,desktopDeliveryUpgradeMessage} from "@/lib/desktop-sync";
+import {desktopImportError,importDesktopOrder} from '@/lib/desktop-order-import';
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 async function handleGET() {
   if(!isDesktop())return Response.json({local:false,rows:[]});
+  const config=await readSyncConfig();
   const sql=storeDb();
   try {
-    const rows=await sql.unsafe(`select i.id,i.store_url,i.payload,i.received_at,i.local_order_id,o.status local_status,o.delivery_stage local_stage
-      from desktop_order_inbox i left join sales_orders o on o.id=i.local_order_id order by i.received_at desc limit 500`);
-    return Response.json({local:true,rows});
+    const rows=await sql.unsafe(`select i.id,i.remote_id,i.store_url,i.payload,i.received_at,i.local_order_id,i.import_error,i.sync_conflict,i.imported_at,
+      o.status local_status,o.delivery_stage local_stage,o.cancellation_reason local_cancellation_reason,
+      exists(select 1 from sales s where s.sales_order_id=o.id and s.status='completed') local_paid,
+      case when o.id is null then null else json_build_object('id',o.id,'order_no',o.order_no,'status',o.status,'source',o.source,
+       'customerId',o.customer_id,'customer_name',coalesce(o.customer_name_snapshot,c.full_name),'phone',coalesce(o.customer_phone_snapshot,c.phone),
+       'total',o.total,'deliveryFee',o.delivery_fee,'couponDiscount',o.coupon_discount,'created_at',o.created_at,
+       'items',(select coalesce(json_agg(json_build_object('productId',li.product_id,'optionId',li.option_id,'optionLabel',li.option_snapshot,
+        'name',coalesce(li.product_name_snapshot,p.name),'quantity',li.quantity,'unitPrice',li.unit_price,'lineTotal',li.line_total) order by li.id),'[]'::json)
+        from sales_order_items li join products p on p.id=li.product_id where li.sales_order_id=o.id)) end local_order
+      from desktop_order_inbox i left join sales_orders o on o.id=i.local_order_id left join customers c on c.id=o.customer_id
+      where i.store_url=$1 order by (i.import_error<>'' or i.sync_conflict<>'' or coalesce(o.status,i.payload->>'status') in ('pending','ready')) desc,i.received_at desc limit 500`,[config?.url||'']);
+    // A malformed feed row stays available for diagnosis without crashing the
+    // whole inbox renderer or pretending it is safe to accept/payment-enable.
+    return Response.json({local:true,rows:rows.map(row=>{
+      const parsed=remoteOrderSchema.safeParse(row.payload);
+      if(parsed.success)return {...row,payload:parsed.data};
+      const raw=row.payload&&typeof row.payload==='object'?row.payload:{};
+      const text=(value:unknown,fallback:string,max=150)=>typeof value==='string'?value.slice(0,max):fallback;
+      return {...row,invalid_payload:true,payload:{id:row.remote_id,order_no:text(raw.order_no,'Yoxlanmalı veb sifarişi'),
+        status:['pending','ready','completed','cancelled'].includes(raw.status)?raw.status:'pending',
+        fulfillment:raw.fulfillment==='delivery'?'delivery':'pickup',delivery_address:text(raw.delivery_address,''),delivery_stage:'received',
+        total:0,coupon_discount:0,delivery_fee:0,distance_meters:null,delivery_lat:null,delivery_lng:null,delivery_pricing:'manual',
+        cancellation_reason:null,cancelled_at:null,note:null,full_name:text(raw.full_name,'Məlumatları yoxlayın'),phone:null,
+        created_at:row.received_at,updated_at:row.received_at,items:[]}};
+    })});
   } finally {await sql.end();}
 }
 async function handlePOST(request:Request) {
@@ -20,12 +44,16 @@ async function handlePOST(request:Request) {
     try {return Response.json(await syncOrders());}
     catch(error) {return Response.json({error:isDeliveryUpgradeError(error)?desktopDeliveryUpgradeMessage:"Sifarişlər yenilənmədi. Bağlantını yoxlayın; yerli məlumatlar saxlanılıb."},{status:isDeliveryUpgradeError(error)?409:502});}
   }
+  // A changed pairing cannot operate on another store's historical inbox.
+  const target=z.object({id:z.string().uuid()}).safeParse(body);
+  if(target.success){const config=await readSyncConfig(),sql=storeDb();try{const [row]=await sql.unsafe('select store_url from desktop_order_inbox where id=$1',[target.data.id]);if(!row||!config||row.store_url!==config.url)return Response.json({error:'Sifariş cari veb bağlantısına aid deyil.'},{status:404});}finally{await sql.end();}}
   const stage=z.object({action:z.literal('delivery-stage'),id:z.string().uuid(),stage:z.enum(['preparing','ready','dispatched','delivered'])}).safeParse(body);
   if(stage.success){
     const sql=storeDb();try{
       await sql.begin(async tx=>{
-        const [order]=await tx.unsafe('select o.id,o.status,o.fulfillment,o.delivery_stage from desktop_order_inbox i join sales_orders o on o.id=i.local_order_id where i.id=$1 for update of o',[stage.data.id]);
+        const [order]=await tx.unsafe('select o.id,o.status,o.fulfillment,o.delivery_stage,i.sync_conflict from desktop_order_inbox i join sales_orders o on o.id=i.local_order_id where i.id=$1 for update of o',[stage.data.id]);
         if(!order||order.status==='cancelled')throw new Error('Sifariş bağlıdır.');
+        if(order.sync_conflict)throw new Error('Sifarişdə ziddiyyət var. Baş rəhbər yoxlamalıdır.');
         const next:Record<string,string[]>={received:['preparing'],preparing:['ready'],ready:order.fulfillment==='delivery'?['dispatched']:['delivered'],dispatched:['delivered']};
         if(!next[order.delivery_stage]?.includes(stage.data.stage))throw new Error('Çatdırılma mərhələsi uyğun deyil.');
         await tx.unsafe("update sales_orders set delivery_stage=$1,status=case when $1='ready' and status='pending' then 'ready' else status end,updated_at=now() where id=$2",[stage.data.stage,order.id]);
@@ -38,36 +66,10 @@ async function handlePOST(request:Request) {
   const sql=storeDb();
   try {
     const result=await sql.begin(async tx=>{
-      const [inbox]=await tx.unsafe("select * from desktop_order_inbox where id=$1 for update",[parsed.data.id]);
-      if(!inbox)throw new Error("Sifariş tapılmadı.");
-      if(inbox.local_order_id)return {orderId:inbox.local_order_id};
-      const order=remoteOrderSchema.parse(inbox.payload);
-      if(!["pending","ready"].includes(order.status))throw new Error("Bağlanmış sifariş kassaya köçürülə bilməz.");
-      const lines=[];
-      for(const item of order.items) {
-        const [product]=await tx.unsafe("select id from products where sku=$1 and is_active=true",[item.sku]);
-        if(!product)throw new Error("Yerli məhsul tapılmadı (SKU): "+item.sku);
-        let optionId=null;
-        const options=await tx.unsafe("select id,label from product_options where product_id=$1 and is_active=true",[product.id]);
-        if(item.option_snapshot) {
-          const matches=options.filter(option=>option.label===item.option_snapshot);
-          if(matches.length!==1)throw new Error("Yerli məhsul seçimini yoxlayın: "+item.sku+" · "+item.option_snapshot);
-          optionId=matches[0].id;
-        } else if(options.length)throw new Error("Yerli məhsulun seçimlərini yoxlayın: "+item.sku);
-        lines.push({...item,productId:product.id,optionId});
-      }
-      let [customer]=order.phone?await tx.unsafe("select id from customers where phone=$1 limit 1",[order.phone]):[];
-      if(!customer)[customer]=await tx.unsafe("insert into customers(full_name,phone) values($1,$2) returning id",[order.full_name,order.phone]);
-      const [local]=await tx.unsafe(`insert into sales_orders(order_no,customer_id,status,total,note,created_by,source,
-        fulfillment,delivery_address,delivery_stage,coupon_discount,delivery_fee,distance_meters,delivery_lat,delivery_lng,delivery_pricing) values($1,$2,'pending',$3,$4,$5,'catalog',$6,$7,$8,$9,$10,$11,$12,$13,$14) returning id`,
-        ["WEB-"+inbox.id,customer.id,order.total,[order.order_no,order.note].filter(Boolean).join(" · "),request.headers.get("x-birkassa-user-id"),order.fulfillment,order.delivery_address,order.delivery_stage,order.coupon_discount,order.delivery_fee,order.distance_meters,order.delivery_lat,order.delivery_lng,order.delivery_pricing]);
-      for(const item of lines)await tx.unsafe(`insert into sales_order_items(sales_order_id,product_id,option_id,option_snapshot,quantity,unit_price,line_total,product_name_snapshot)
-        values($1,$2,$3,$4,$5,$6,$7,$8)`,[local.id,item.productId,item.optionId,item.option_snapshot,item.quantity,item.unit_price,item.line_total,item.name]);
-      await tx.unsafe("update desktop_order_inbox set local_order_id=$1 where id=$2",[local.id,inbox.id]);
-      await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id) values($1,'desktop.order_imported','sales_order',$2)",[request.headers.get("x-birkassa-user-id"),local.id]);
-      return {orderId:local.id};
+      try{return await tx.savepoint(sp=>importDesktopOrder(sp,parsed.data.id,request.headers.get('x-birkassa-user-id')));}
+      catch(error){const message=desktopImportError(error);await tx.unsafe('update desktop_order_inbox set import_error=$1 where id=$2',[message,parsed.data.id]);return {error:message};}
     });
-    return Response.json(result);
+    return Response.json(result,{status:'error' in result?409:200});
   } catch(error) {return Response.json({error:error instanceof Error?error.message:"Sifariş köçürülmədi."},{status:409});}
   finally {await sql.end();}
 }

@@ -3,21 +3,22 @@ import {useCallback,useEffect,useRef,useState,type FormEvent} from "react";
 import {t,useLanguage,languageLocale} from "@/lib/language";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
-import type {RemoteOrder} from "@/lib/desktop-sync";
+import {desktopWebLabel,type DesktopWebLabel} from '@/lib/desktop-web-labels';
+import {desktopInboxFilters,inboxIsUnpaid,inboxMatchesFilter,inboxNeedsAttention,type DesktopInboxFilter,type DesktopInboxRow,type DesktopPosOrder} from '@/lib/desktop-web-ui';
 import "./desktop.css";
 
-type Connection={local:boolean;configured:boolean;url?:string;mode?:'catalog'|'orders';lastSync?:string;lastError?:string;pending?:number;media?:{cached:number;total:number;failed:number}|null};
+type Connection={local:boolean;configured:boolean;url?:string;mode?:'catalog'|'orders';lastSync?:string;lastError?:string;pending?:number;media?:{cached:number;total:number;failed:number}|null;incomingCatalogChanged?:number;incomingCatalogConflicts?:number;ordersLastSync?:string;ordersLastError?:string;supportLastSync?:string;supportLastError?:string};
 async function getConnection(signal?:AbortSignal){const r=await fetch("/api/desktop-link",{cache:"no-store",signal});if(!r.ok)throw new Error("Bağlantı yoxlanmadı.");return r.json() as Promise<Connection>;}
-async function getInbox(signal?:AbortSignal){const r=await fetch("/api/desktop-inbox",{cache:"no-store",signal});if(!r.ok)throw new Error("Sifarişlər yüklənmədi");return (await r.json() as {rows:InboxRow[]}).rows;}
+async function getInbox(signal?:AbortSignal){const r=await fetch("/api/desktop-inbox",{cache:"no-store",signal});if(!r.ok)throw new Error("Sifarişlər yüklənmədi");return await r.json() as {rows:DesktopInboxRow[];limited?:boolean;limit?:number};}
 export function DesktopConnection() {
-  useLanguage();
+  const language=useLanguage(),copy=(key:DesktopWebLabel)=>desktopWebLabel(language,key);
   const [state,setState]=useState<Connection|null>(null),[url,setUrl]=useState(""),[key,setKey]=useState(""),[issued,setIssued]=useState(""),[message,setMessage]=useState(""),[error,setError]=useState(""),[statusError,setStatusError]=useState(""),[busy,setBusy]=useState<string|null>(null);
   const mounted=useRef(false),pending=useRef(false),urlEdited=useRef(false),statusRequest=useRef<AbortController|null>(null),actionRequest=useRef<AbortController|null>(null);
   const load=useCallback(async()=>{
     const controller=new AbortController();statusRequest.current?.abort();statusRequest.current=controller;
     try{const data=await getConnection(controller.signal);if(mounted.current&&!controller.signal.aborted){setState(data);setStatusError("");if(!urlEdited.current)setUrl(data.url||"");}}
     catch{if(mounted.current&&!controller.signal.aborted)setStatusError("Bağlantı yoxlanmadı.");}
-  },[]);
+  },[setUrl]);
   useEffect(()=>{
     mounted.current=true;let cancelled=false;queueMicrotask(()=>{if(!cancelled)void load();});
     // Status refresh is read-only. Publishing and key rotation require an explicit action.
@@ -61,6 +62,7 @@ export function DesktopConnection() {
       {!!state.media?.failed&&<p role="alert" className="form-error">{t('Endirilməyən şəkillər')}: {state.media.failed}</p>}
       <Button type="button" variant="outline" disabled={!!busy} onClick={()=>void act('cache-media')}>{t('Şəkilləri kompüterə endir')}</Button>
     </div>}
+    {state.local&&state.configured&&<div className="desktop-incoming-summary"><h3>{copy('syncSummary')}</h3><p>{copy('orderSync')}: {state.ordersLastSync?new Date(state.ordersLastSync).toLocaleString(languageLocale()):copy('notSynced')}</p>{state.ordersLastError&&<p className="form-error" role="alert">{t(state.ordersLastError)}</p>}<p>{copy('supportSync')}: {state.supportLastSync?new Date(state.supportLastSync).toLocaleString(languageLocale()):copy('notSynced')}</p>{state.supportLastError&&<p className="form-error" role="alert">{t(state.supportLastError)}</p>}<p>{copy('catalogIncoming')}: {state.incomingCatalogChanged||0}</p>{!!state.incomingCatalogConflicts&&<p className="desktop-review-note">{copy('catalogConflicts')}: {state.incomingCatalogConflicts}</p>}</div>}
     {state.local?<form onSubmit={(event:FormEvent)=>{event.preventDefault();void act("connect");}} className="desktop-connect-form">
       <p>{t('Vebdə: Tənzimləmələr → Masaüstü bağlantısı → Kataloq bağlantısı yarat. Sonra mağaza ünvanını və açarı burada yazın.')}</p>
       <label>{t("Mağaza ünvanı")}<Input type="url" value={url} onChange={e=>{urlEdited.current=true;setUrl(e.target.value);}} disabled={!!busy} required placeholder="https://magaza.az"/></label>
@@ -77,30 +79,61 @@ export function DesktopConnection() {
     {message&&<p role="status">{t(message)}</p>}
   </section>;
 }
-type InboxRow={id:string;payload:RemoteOrder;store_url:string;local_order_id:string|null;local_status:string|null;local_stage:string|null};
-const labels:Record<string,string>={pending:"Yeni",ready:"Hazır",completed:"Tamamlandı",cancelled:"Ləğv edilib"};
-export function DesktopInbox({onImported}:{onImported:()=>void}) {
-  useLanguage();
-  const [rows,setRows]=useState<InboxRow[]>([]),[error,setError]=useState(""),[busy,setBusy]=useState(false);
-  async function load(){setRows(await getInbox());}
-  useEffect(()=>{let active=true;const refresh=()=>getInbox().then(data=>{if(active)setRows(data);}).catch(()=>{if(active)setError("Sifarişlər yüklənmədi");});void refresh();const timer=setInterval(()=>void refresh(),15000);return()=>{active=false;clearInterval(timer);};},[]);
-  async function act(action:string,id?:string,stage?:string){setBusy(true);setError("");try{const r=await fetch("/api/desktop-inbox",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,id,stage})});const d=await r.json() as {error?:string};if(!r.ok)throw new Error(d.error);await load();if(action==="import")onImported();}catch(e){setError(e instanceof Error?e.message:"Sifarişlər yüklənmədi");}finally{setBusy(false);}}
-  return <section className="desktop-inbox"><div className="desktop-heading"><div><h2>{t("Veb sifarişləri")}</h2><p>{t("Sifarişi yerli kassaya köçürün. SKU və məhsul seçimləri uyğun olmalıdır.")}</p></div><Button disabled={busy} onClick={()=>void act("sync")}>{t("Yenilə")}</Button></div>
-    <p>{t("Stok ödəniş zamanı azalır. Yerli satış və ödənişlər vebə göndərilmir.")}</p>
-    {error&&<p role="alert" className="form-error">{t(error)}</p>}
-    <div className="desktop-order-grid">{rows.map(row=>{const o=row.payload;return <article key={row.id} className="panel desktop-order"><div className="desktop-heading"><strong>{o.order_no}</strong><span>{t(labels[o.status])}</span></div>
-      <small>{new Date(o.created_at).toLocaleString(languageLocale(),{timeZone:"Asia/Baku"})}</small>
-      <h3>{o.full_name}</h3><p>{o.phone}</p><p>{t(o.fulfillment==="delivery"?"Ünvana çatdırılma":"Mağazadan götürmə")}</p>{o.delivery_address&&<p>{o.delivery_address}</p>}
-      <ul>{o.items.map((line,index)=><li key={index}>{line.name}{line.option_snapshot?" · "+line.option_snapshot:""} <strong>× {line.quantity}</strong><small>{line.sku}</small></li>)}</ul>
-{o.delivery_fee>0&&<p>{t('Çatdırılma haqqı')}: {o.delivery_fee.toLocaleString(languageLocale(),{minimumFractionDigits:2})} ₼</p>}<strong>{o.total.toLocaleString(languageLocale(),{minimumFractionDigits:2})} ₼</strong>{o.note&&<p>{o.note}</p>}
-      {row.local_order_id&&row.local_status!=='cancelled'&&<div className="desktop-delivery-actions"><p>{t('Təhvil mərhələsi')}: {t(({received:'Qəbul edildi',preparing:'Hazırlanır',ready:'Hazırdır',dispatched:'Yoldadır',delivered:o.fulfillment==='pickup'?'Təhvil verildi':'Çatdırıldı'} as Record<string,string>)[row.local_stage||'received'])}</p>{row.local_stage!=='delivered'&&<Button variant="outline" disabled={busy} onClick={()=>void act('delivery-stage',row.id,({received:'preparing',preparing:'ready',ready:o.fulfillment==='delivery'?'dispatched':'delivered',dispatched:'delivered'} as Record<string,string>)[row.local_stage||'received'])}>{t(({received:'Hazırlamağa başla',preparing:'Hazırdır',ready:o.fulfillment==='delivery'?'Yola sal':'Təhvil verildi',dispatched:'Çatdırıldı'} as Record<string,string>)[row.local_stage||'received'])}</Button>}</div>}
-      {row.local_order_id?<p className="desktop-state">{t("Yerli sifariş")}: {t(labels[row.local_status||"pending"])}</p>:<Button disabled={busy||!["pending","ready"].includes(o.status)} onClick={()=>void act("import",row.id)}>{t("Kassaya köçür")}</Button>}
-    </article>;})}</div>{!rows.length&&<p className="empty-table">{t("Bu bölmədə sifariş yoxdur.")}</p>}
+export function DesktopInbox({onImported,onOpenAtPos}:{onImported?:()=>void;onOpenAtPos?:(order:DesktopPosOrder)=>void}) {
+  const language=useLanguage(),copy=(key:DesktopWebLabel)=>desktopWebLabel(language,key);
+  const [rows,setRows]=useState<DesktopInboxRow[]>([]),[filter,setFilter]=useState<DesktopInboxFilter>('active'),[error,setError]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[limited,setLimited]=useState(false),[connection,setConnection]=useState<Connection|null>(null);
+  const [hasLoaded,setHasLoaded]=useState(false);
+  const mounted=useRef(false),pending=useRef(false),request=useRef<AbortController|null>(null),actionRequest=useRef<AbortController|null>(null);
+  const load=useCallback(async()=>{
+    request.current?.abort();const controller=new AbortController();request.current=controller;
+    try{const [data,status]=await Promise.all([getInbox(controller.signal),getConnection(controller.signal).catch(()=>null)]);if(!mounted.current||controller.signal.aborted)return;setRows(data.rows);setHasLoaded(true);setLimited(data.limited===true||data.rows.length>=500);setConnection(status);setError(status?'':'connectionError');}
+    catch{if(mounted.current&&!controller.signal.aborted)setError('loadError');}
+    finally{if(mounted.current&&!controller.signal.aborted)setLoading(false);}
+  },[]);
+  useEffect(()=>{mounted.current=true;const frame=requestAnimationFrame(()=>void load());const refresh=()=>{if(!pending.current&&document.visibilityState!=='hidden')void load();};const timer=setInterval(refresh,15000);window.addEventListener('focus',refresh);return()=>{mounted.current=false;cancelAnimationFrame(frame);clearInterval(timer);window.removeEventListener('focus',refresh);request.current?.abort();actionRequest.current?.abort();};},[load]);
+  async function act(action:string,id?:string,stage?:string){
+    if(pending.current)return;pending.current=true;setBusy(true);setError('');request.current?.abort();const controller=new AbortController();actionRequest.current=controller;
+    try{const response=await fetch('/api/desktop-inbox',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,id,stage}),signal:controller.signal});const data=await response.json() as {error?:string};if(!response.ok)throw Error(data.error||'actionError');if(!mounted.current||controller.signal.aborted)return;await load();if(action==='import'||action==='sync')onImported?.();}
+    catch(cause){if(mounted.current&&!controller.signal.aborted)setError(cause instanceof Error?cause.message:'actionError');}
+    finally{pending.current=false;if(mounted.current&&!controller.signal.aborted)setBusy(false);}
+  }
+  const visible=rows.filter(row=>inboxMatchesFilter(row,filter)),unpaid=rows.filter(inboxIsUnpaid).length,unresolved=rows.filter(inboxNeedsAttention).length;
+  const statusLabel=(status:string)=>copy(({pending:'pendingOrder',ready:'ready',completed:'completedOrder',cancelled:'cancelledOrder'} as Record<string,DesktopWebLabel>)[status]||'pendingOrder');
+  return <section className="desktop-inbox" aria-busy={busy||loading}>
+    <div className="desktop-heading"><div><span className="desktop-eyebrow">WEB → POS</span><h2>{copy('webOrders')}</h2><p>{copy('inboxHelp')}</p></div><Button disabled={busy} onClick={()=>void act('sync')}>{copy(busy?'refreshing':'refresh')}</Button></div>
+    <p>{copy('stockHelp')}</p>
+    <div className="desktop-order-summary"><div><span>{copy('awaitingPayment')}</span><strong>{hasLoaded?unpaid:'—'}</strong></div><div className={unresolved?'needs-attention':''}><span>{copy('unresolved')}</span><strong>{hasLoaded?unresolved:'—'}</strong></div><div><span>{copy('lastSync')}</span><strong className="desktop-sync-time">{connection?.ordersLastSync?new Date(connection.ordersLastSync).toLocaleString(languageLocale(),{timeZone:'Asia/Baku'}):copy('notSynced')}</strong></div></div>
+    <p className="desktop-scope-note">{copy(limited?'limited':'scope')}</p>
+    {connection&&!connection.configured&&<p className="desktop-review-note" role="status">{copy('disconnected')}</p>}
+    {connection?.ordersLastError&&<p className="desktop-review-note" role="alert">{t(connection.ordersLastError)}</p>}
+    {error&&<div role="alert" className="desktop-review-note"><p>{error==='loadError'||error==='actionError'||error==='connectionError'?copy(error):t(error)}</p>{rows.length>0&&<small>{copy('previousData')}</small>}<Button type="button" variant="outline" disabled={busy} onClick={()=>void load()}>{copy('retry')}</Button></div>}
+    <div className="desktop-inbox-filters" role="group" aria-label={copy('filters')}>{desktopInboxFilters.map(value=><button type="button" key={value} aria-pressed={filter===value} className={filter===value?'selected':''} onClick={()=>setFilter(value)}>{copy(value)}<span>{rows.filter(row=>inboxMatchesFilter(row,value)).length}</span></button>)}</div>
+    {loading&&<p role="status">{copy('loading')}</p>}
+    <div className="desktop-order-grid">{visible.map(row=>{
+      const o=row.payload,attention=inboxNeedsAttention(row),cancelled=o.status==='cancelled'||row.local_status==='cancelled',stage=row.local_stage||'received';
+      const nextStage=({received:'preparing',preparing:'ready',ready:o.fulfillment==='delivery'?'dispatched':'delivered',dispatched:'delivered'} as Record<string,string>)[stage];
+      const nextLabel=({received:'startPreparing',preparing:'markReady',ready:o.fulfillment==='delivery'?'dispatch':'completeDelivery',dispatched:'completeDelivery'} as Record<string,DesktopWebLabel>)[stage];
+      return <article key={row.id} className={'panel desktop-order'+(attention?' needs-attention':'')+(cancelled?' is-cancelled':'')}>
+        <div className="desktop-heading"><strong>{o.order_no}</strong><span className={'desktop-order-badge '+o.status}>{statusLabel(o.status)}</span></div>
+        <small>{new Date(o.created_at).toLocaleString(languageLocale(),{timeZone:'Asia/Baku'})}</small>
+        {row.local_order_id&&<span className="desktop-import-badge">✓ {copy('automatic')}</span>}
+        <div className="desktop-order-customer"><h3>{o.full_name}</h3>{o.phone&&<p>{o.phone}</p>}<p>{t(o.fulfillment==='delivery'?'Ünvana çatdırılma':'Mağazadan götürmə')}</p>{o.delivery_address&&<p>{o.delivery_address}</p>}</div>
+        <ul>{o.items.map((line,index)=><li key={index}><span>{line.name}{line.option_snapshot?' · '+line.option_snapshot:''}<small>{line.sku}</small></span><strong>× {line.quantity}</strong></li>)}</ul>
+        <div className="desktop-order-total">{o.coupon_discount>0&&<p><span>{copy('couponDiscount')}</span><span>−{o.coupon_discount.toLocaleString(languageLocale(),{minimumFractionDigits:2})} ₼</span></p>}{o.delivery_fee>0&&<p><span>{t('Çatdırılma haqqı')}</span><span>{o.delivery_fee.toLocaleString(languageLocale(),{minimumFractionDigits:2})} ₼</span></p>}<strong>{row.invalid_payload?'—':o.total.toLocaleString(languageLocale(),{minimumFractionDigits:2})+' ₼'}</strong></div>{o.note&&<p>{o.note}</p>}
+        {cancelled&&<div className="desktop-cancel-reason"><strong>{copy('cancelReason')}</strong><p>{o.cancellation_reason||row.local_cancellation_reason||copy('noReason')}</p></div>}
+        {row.import_error&&<div className="desktop-review-note" role="status"><p>{copy('importProblem')}</p><small>{t(row.import_error)}</small></div>}
+        {row.invalid_payload&&<div className="desktop-review-note" role="status"><p>{copy('invalidOrder')}</p></div>}
+        {(row.sync_conflict||row.needs_review)&&<div className="desktop-review-note" role="status"><p>{copy('conflict')}</p>{row.sync_conflict&&<small>{t(row.sync_conflict)}</small>}</div>}
+        {row.local_order_id&&<p className="desktop-local-status">{copy('localStatus')}: {statusLabel(row.local_status||'pending')}</p>}
+        {row.local_order_id&&!cancelled&&<div className="desktop-delivery-actions"><p>{copy('delivery')}: {copy((['received','preparing','ready','dispatched','delivered'].includes(stage)?stage:'received') as DesktopWebLabel)}</p>{nextStage&&nextLabel&&<Button type="button" variant="outline" disabled={busy||attention} onClick={()=>void act('delivery-stage',row.id,nextStage)}>{copy(nextLabel)}</Button>}</div>}
+        <div className="desktop-order-buttons">{!row.local_order_id&&inboxIsUnpaid(row)&&<Button type="button" disabled={busy} variant={row.import_error?'outline':'default'} onClick={()=>void act('import',row.id)}>{copy(row.import_error?'retryImport':'import')}</Button>}{row.local_order_id&&row.local_order&&inboxIsUnpaid(row)&&onOpenAtPos&&<Button type="button" disabled={busy||attention} onClick={()=>onOpenAtPos(row.local_order!)}>{copy('openPos')}</Button>}</div>
+      </article>;
+    })}</div>{!loading&&!visible.length&&<p className="empty-table">{copy('empty')}</p>}
   </section>;
 }
 export function DesktopStatus({onOpen}:{onOpen:()=>void}) {
-  useLanguage();
-  const [state,setState]=useState<"loading"|"ok"|"error">("loading"),[count,setCount]=useState(0);
-  useEffect(()=>{let active=true,running=false;const controller=new AbortController();async function poll(){if(running)return;running=true;try{const [connection,rows]=await Promise.all([getConnection(controller.signal),getInbox(controller.signal)]);if(active){setCount(rows.filter(row=>!row.local_order_id&&["pending","ready"].includes(row.payload.status)).length);setState(connection.configured&&!connection.lastError?"ok":"error");}}catch{if(active)setState("error");}finally{running=false;}}void poll();const timer=setInterval(()=>void poll(),30000);return()=>{active=false;controller.abort();clearInterval(timer);};},[]);
-  return <button className={`desktop-status ${state}`} onClick={onOpen}><span>●</span> {t("Lokal kassa")} · {t(state==="error"?"Bağlantını yoxlayın":"Veb sifarişləri")}: {count}</button>;
+  const language=useLanguage(),copy=(key:DesktopWebLabel)=>desktopWebLabel(language,key);
+  const [state,setState]=useState<"loading"|"ok"|"error">("loading"),[count,setCount]=useState<number|null>(null);
+  useEffect(()=>{let active=true,running=false;const controller=new AbortController();async function poll(){if(running)return;running=true;try{const [connection,inbox]=await Promise.all([getConnection(controller.signal),getInbox(controller.signal)]);if(active){setCount(inbox.rows.filter(inboxIsUnpaid).length);setState(connection.configured&&!connection.ordersLastError?"ok":"error");}}catch{if(active)setState("error");}finally{running=false;}}void poll();const timer=setInterval(()=>{if(document.visibilityState!=='hidden')void poll();},30000);return()=>{active=false;controller.abort();clearInterval(timer);};},[]);
+  return <button type="button" className={`desktop-status ${state}`} onClick={onOpen} title={copy('unpaidCount')+' · '+copy('scope')}><span aria-hidden="true">●</span> {copy(state==='error'?'connectionError':'webOrders')}: {count??'—'}</button>;
 }

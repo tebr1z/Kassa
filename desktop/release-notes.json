@@ -1,7 +1,7 @@
 {
-  "az": "Proqram daxilindən onlayn yeniləmə. Baş rəhbərin təsdiqi, imzalı fayl və bütövlük yoxlaması, quraşdırmadan əvvəl baza və şəkillərin ehtiyatı. Beş dildə yeniləmə pəncərəsi və uzun Windows fayl yolları üçün düzəliş.",
-  "en": "Online updates from inside the app. Head-administrator approval, signed release and file-integrity verification, and a database/media backup before installation. Update window in five languages and a Windows long-path fix.",
-  "ru": "Онлайн-обновления из программы. Подтверждение главного администратора, проверка подписи и целостности файлов, резервная копия базы и изображений перед установкой. Пять языков и исправление длинных путей Windows.",
-  "tr": "Uygulama içinden çevrimiçi güncelleme. Baş yönetici onayı, imza ve dosya bütünlüğü doğrulaması, yüklemeden önce veri tabanı ve görsel yedeği. Beş dilde güncelleme penceresi ve Windows uzun dosya yolu düzeltmesi.",
-  "zh": "应用内在线更新。安装需要主管理员确认，并验证发布签名和文件完整性；安装前备份本地数据库和图片。支持五种语言，并修复 Windows 长文件路径问题。"
+  "az": "Veb sifarişləri kassaya avtomatik gəlir. Kassir sifarişi birbaşa POS-da aça bilər. Ləğv səbəbi, çatdırılma mərhələləri və məhsul dəyişiklikləri sinxronlaşdırılır. Veb dəstək mesajları ayrıca bölmədə görünür. Uyğunluq problemləri yoxlama növbəsində saxlanır; stok, alış qiyməti və ödənilmiş çeklər qorunur.",
+  "en": "Web orders arrive automatically in the till and cashiers can open them in POS. Cancellation reasons, delivery stages and public product changes sync. Website support conversations have a separate inbox. Conflicts require review; stock, purchase costs and paid receipts are preserved.",
+  "ru": "Заказы с сайта автоматически поступают в кассу и открываются в POS. Синхронизируются причины отмены, доставка и публичные изменения товаров. Переписка поддержки показана отдельно. Конфликты требуют проверки; остатки, закупочные цены и оплаченные чеки сохраняются.",
+  "tr": "Web siparişleri kasaya otomatik gelir ve POS'ta açılabilir. İptal nedenleri, teslimat aşamaları ve ürün değişiklikleri eşitlenir. Web destek yazışmaları ayrı bölümde görünür. Çakışmalar incelemeye alınır; stok, alış maliyeti ve ödenmiş fişler korunur.",
+  "zh": "网站订单自动进入收银系统，可直接在 POS 打开。同步取消原因、配送阶段和公开商品更改，网站客服对话显示在独立收件箱。冲突需要审核；保留本地库存、采购成本和已付款收据。"
 }

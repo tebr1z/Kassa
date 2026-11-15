@@ -25,27 +25,28 @@ for(const role of ['','owner','ADMIN','__proto__','constructor']){
  assert.deepEqual(policy.staffPermissions(role),[]);
 }
 assert.deepEqual(policy.staffPermissions('admin'),['*']);
-assert.deepEqual(policy.staffPermissions('cashier'),['Satış / POS']);
+assert.deepEqual(policy.staffPermissions('cashier'),['Satış / POS','Veb sifarişləri']);
 assert.deepEqual(policy.staffPermissions('warehouse'),['Məhsullar','Anbar','Satınalma']);
 assert.deepEqual(policy.staffPermissions('accountant'),['Maliyyə','Hesabatlar']);
 assert.deepEqual(policy.staffPermissions('online_manager'),[]);
 assert.deepEqual(policy.staffPermissions('online_assistant'),[]);
 assert.equal(policy.staffPermissions('manager').includes('İnsan resursları'),false);
 assert.equal(policy.staffPermissions('manager').includes('Tənzimləmələr'),false);
-assert.equal(policy.staffPermissions('manager').includes('Veb sifarişləri'),false);
+assert.equal(policy.staffPermissions('manager').includes('Veb sifarişləri'),true);
+assert.equal(policy.staffPermissions('manager').includes('Veb dəstək'),true);
 const changed=policy.staffPermissions('cashier');changed.push('*');
-assert.deepEqual(policy.staffPermissions('cashier'),['Satış / POS']);
+assert.deepEqual(policy.staffPermissions('cashier'),['Satış / POS','Veb sifarişləri']);
 
 const read=['GET','HEAD'];
 const expected={
- cashier:{'/api/products':read,'/api/dashboard':read,'/api/sales':['POST'],'/api/shifts':['POST'],'/api/pos-options':['GET','HEAD','POST','DELETE'],'/api/client-errors':['POST']},
+ cashier:{'/api/products':read,'/api/dashboard':read,'/api/sales':['POST'],'/api/shifts':['POST'],'/api/pos-options':['GET','HEAD','POST','DELETE'],'/api/client-errors':['POST'],'/api/desktop-link':read,'/api/desktop-inbox':['GET','HEAD','POST']},
  warehouse:{'/api/products':['GET','HEAD','POST','PATCH'],'/api/categories':['GET','HEAD','POST'],'/api/warehouses':read,'/api/stock/receipts':['POST'],'/api/stock/adjustments':['POST'],'/api/stock/transfers':['POST'],'/api/inventory-counts':['GET','HEAD','POST'],'/api/purchase-orders':['GET','HEAD','POST'],'/api/suppliers':['GET','HEAD','POST'],'/api/client-errors':['POST']},
  accountant:{'/api/finance':['GET','HEAD','POST'],'/api/reports':read,'/api/suppliers':read,'/api/client-errors':['POST']},
- manager:{'/api/dashboard':read,'/api/products':['GET','HEAD','POST','PATCH'],'/api/categories':['GET','HEAD','POST'],'/api/warehouses':read,'/api/stock/receipts':['POST'],'/api/stock/adjustments':['POST'],'/api/stock/transfers':['POST'],'/api/inventory-counts':['GET','HEAD','POST'],'/api/purchase-orders':['GET','HEAD','POST'],'/api/suppliers':['GET','HEAD','POST'],'/api/client-errors':['POST'],'/api/finance':['GET','HEAD','POST'],'/api/reports':read,'/api/sales':['POST'],'/api/shifts':['POST'],'/api/pos-options':['GET','HEAD','POST','DELETE'],'/api/orders':['GET','HEAD','POST'],'/api/returns':['POST'],'/api/audit':read,'/api/online-orders':['GET','HEAD','PATCH']},
+ manager:{'/api/dashboard':read,'/api/products':['GET','HEAD','POST','PATCH'],'/api/categories':['GET','HEAD','POST'],'/api/warehouses':read,'/api/stock/receipts':['POST'],'/api/stock/adjustments':['POST'],'/api/stock/transfers':['POST'],'/api/inventory-counts':['GET','HEAD','POST'],'/api/purchase-orders':['GET','HEAD','POST'],'/api/suppliers':['GET','HEAD','POST'],'/api/client-errors':['POST'],'/api/finance':['GET','HEAD','POST'],'/api/reports':read,'/api/sales':['POST'],'/api/shifts':['POST'],'/api/pos-options':['GET','HEAD','POST','DELETE'],'/api/orders':['GET','HEAD','POST'],'/api/returns':['POST'],'/api/audit':read,'/api/online-orders':['GET','HEAD','PATCH'],'/api/desktop-link':read,'/api/desktop-inbox':['GET','HEAD','POST'],'/api/desktop-web-support':read},
  online_manager:{'/api/online-orders':['GET','HEAD','PATCH']},
  online_assistant:{'/api/online-orders':['GET','HEAD','PATCH']},
 };
-const paths=[...new Set(Object.values(expected).flatMap(map=>Object.keys(map))),'/api/employees','/api/settings','/api/locations','/api/system','/api/system/dump','/api/admin/delivery','/api/store-admin','/api/store-admin/commerce','/api/desktop-link','/api/desktop-inbox','/api/products/private','/api/stock','/api/stock/receipts/unapproved','/api/products/','/api/not-approved'];
+const paths=[...new Set(Object.values(expected).flatMap(map=>Object.keys(map))),'/api/employees','/api/settings','/api/locations','/api/system','/api/system/dump','/api/admin/delivery','/api/store-admin','/api/store-admin/commerce','/api/desktop-link','/api/desktop-inbox','/api/desktop-web-support/messages','/api/products/private','/api/stock','/api/stock/receipts/unapproved','/api/products/','/api/not-approved'];
 const methods=['GET','HEAD','POST','PATCH','PUT','DELETE','OPTIONS','TRACE','get','UNKNOWN'];
 for(const role of [...roles,'owner','__proto__'])for(const path of paths)for(const method of methods){
  const allowed=role==='admin'||Boolean(expected[role]?.[path]?.includes(method));

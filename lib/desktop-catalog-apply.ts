@@ -13,6 +13,52 @@ type OptionField=keyof typeof optionColumns;
 type Option=Product['options'][number];
 type Parameter=string|number|boolean|null;
 
+function equalField(field:string,left:unknown,right:unknown){
+ // PostgreSQL numeric columns are returned as decimal strings by default.
+ if(field==='price'||field==='discountPrice')return left==null||right==null?left===right:Number(left)===Number(right);
+ return isDeepStrictEqual(left,right);
+}
+const changedOptionFields=(item:Option,before:Option|undefined)=>(Object.keys(optionColumns) as OptionField[]).filter(field=>item[field]!==undefined&&(!before||!equalField(field,item[field],before[field])));
+
+/** Lock and compare all touched fields before performing ANY product writes. */
+async function concurrentEdit(tx:Sql,id:string,product:Product,fields:Set<string>){
+ const [current]=await tx.unsafe(`select sku,name,public_code code,coalesce(category,'') category,unit,
+  sale_price price,discount_price as "discountPrice",coalesce(image_url,'') image,is_active as "isActive",
+  coalesce(description,'') description,coalesce(specifications,'') specifications from products where id=$1 for update`,[id]);
+ if(!current)return true;
+ const previous=product.previous;
+ for(const field of Object.keys(scalarColumns) as ScalarField[]){
+  if(!fields.has(field)||product[field]===undefined)continue;
+  if(equalField(field,current[field],product[field]))continue; // Safe replay.
+  if(!previous||!equalField(field,current[field],previous[field]))return true;
+ }
+ if(!fields.has('options'))return false;
+ const rows=await tx.unsafe(`select label,size,color,kind,price,position,is_active as "isActive",attributes,
+  coalesce(image_url,'') image from product_options where product_id=$1 for update`,[id]);
+ const web=new Map(rows.map(row=>[String(row.label),row]));
+ const before=new Map((previous?.options||[]).map(row=>[row.label,row]));
+ const incoming=new Map<string,Option>();
+ for(const item of product.options){if(incoming.has(item.label))throw new Error('Təkrar məhsul seçimi.');incoming.set(item.label,item);}
+ for(const [label,old]of before){
+  if(incoming.has(label))continue;
+  const existing=web.get(label);
+  // An already absent/inactive choice has already reached the desired state.
+  if(existing&&existing.isActive!==false&&(Object.keys(optionColumns) as OptionField[]).some(field=>!equalField(field,existing[field],old[field])))return true;
+ }
+ for(const item of product.options){
+  const old=before.get(item.label),existing=web.get(item.label),changed=changedOptionFields(item,old);
+  if(!old){
+   // A new local label cannot take ownership of a different web-only choice.
+   // Exact equality is an idempotent replay; private cost is never compared.
+   if(existing&&(Object.keys(optionColumns) as OptionField[]).some(field=>!equalField(field,existing[field],item[field]??(field==='image'?'' : item[field]))))return true;
+  }else if(changed.length){
+   if(!existing)return true; // Never recreate a choice removed on the website.
+   if(changed.some(field=>!equalField(field,existing[field],old[field])&&!equalField(field,existing[field],item[field])))return true;
+  }
+ }
+ return false;
+}
+
 // The caller validates the public-only DTO, locks the publication stream and
 // owns the transaction. No SQL here reads or updates inventory/cost/finance.
 export async function applyPublicProduct(tx:Sql,product:Product):Promise<string|undefined>{
@@ -29,6 +75,7 @@ export async function applyPublicProduct(tx:Sql,product:Product):Promise<string|
  // A product removed on the web after pairing must never be recreated by an
  // unrelated desktop edit. A genuinely new local product has previous:null.
  if(incremental&&product.previous&&!existing)return undefined;
+ if(incremental&&existing&&await concurrentEdit(tx,String(existing.id),product,fields))return undefined;
  let id:string;
  const values:Record<ScalarField,Parameter|undefined>={sku:product.sku,name:product.name,code:product.code,category:product.category,unit:product.unit,price:product.price,discountPrice:product.discountPrice,image:product.image,isActive:product.isActive,description:product.description,specifications:product.specifications};
  if(existing){

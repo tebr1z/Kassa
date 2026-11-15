@@ -20,7 +20,7 @@ function connection() {
 async function handlePOST(request: Request) {
   const sql = connection();
   try {
-    const body = await request.json() as { items?: SaleItemInput[]; paymentMethod?: string; cashAmount?:number|string; cardAmount?:number|string; discount?:number|string; customerId?:string; buyerName?:string; salesOrderId?:string; managerPin?:string };
+    const body = await request.json() as { items?: SaleItemInput[]; paymentMethod?: string; cashAmount?:number|string; cardAmount?:number|string; discount?:number|string; customerId?:string; buyerName?:string; salesOrderId?:string; managerPin?:string; expectedTotal?:number };
     const paymentMethod = String(body.paymentMethod || "").toLowerCase();
     if (!Array.isArray(body.items) || body.items.length === 0) {
       return NextResponse.json({ error: "Çek boşdur" }, { status: 400 });
@@ -55,10 +55,14 @@ async function handlePOST(request: Request) {
       if(shift.branch_id!==warehouse.branch_id)throw Object.assign(new Error('Növbənin mağazası dəyişib. Növbəni bağlayıb düzgün mağazada yenidən açın.'),{statusCode:409});
 
       let linkedOrder: {id:string;status:string;customer_id:string;source:string;coupon_discount:string;delivery_fee:string}|undefined;
+      let linkedWebOrder=false;
       let orderLines: {product_id:string;option_id:string|null;option_snapshot:string|null;quantity:string;unit_price:string}[]=[];
       if(body.salesOrderId){
        [linkedOrder]=await tx.unsafe("select id,status,customer_id,source,coupon_discount,delivery_fee from sales_orders where id=$1 for update",[body.salesOrderId]) as unknown as typeof linkedOrder[];
        if(!linkedOrder||linkedOrder.status!=="ready")throw Object.assign(new Error("Yalnız hazır sifariş ödənilə bilər"),{statusCode:409});
+       const [webConflict]=await tx.unsafe("select sync_conflict,import_error from desktop_order_inbox where local_order_id=$1",[linkedOrder.id]);
+       linkedWebOrder=!!webConflict;
+       if(webConflict?.sync_conflict||webConflict?.import_error)throw Object.assign(new Error('Veb sifarişində uyğunluq problemi var. Veb sifarişləri bölməsində yoxlayın; köhnə məbləğlə ödəniş edilmədi.'),{statusCode:409});
        orderLines=await tx.unsafe("select product_id,option_id,option_snapshot,quantity,unit_price from sales_order_items where sales_order_id=$1",[linkedOrder.id]) as unknown as typeof orderLines;
        if(orderLines.length!==merged.size||orderLines.some(l=>merged.get(`${l.product_id}:${l.option_id||""}`)!==Number(l.quantity)))throw Object.assign(new Error("Sifariş məhsulları, seçimləri və miqdarı dəyişdirilə bilməz"),{statusCode:409});
       }
@@ -116,6 +120,7 @@ async function handlePOST(request: Request) {
       const deliveryFee=Number(linkedOrder?.delivery_fee??0);
       if(!Number.isFinite(deliveryFee)||deliveryFee<0)throw Object.assign(new Error('Sifarişin çatdırılma məbləğini yoxlayın.'),{statusCode:409});
       const total=Number((subtotal-discount+deliveryFee).toFixed(2));
+      if(linkedWebOrder&&(typeof body.expectedTotal!=='number'||!Number.isFinite(body.expectedTotal)||Math.abs(body.expectedTotal-total)>.009))throw Object.assign(new Error('Sifarişin məbləği vebdə dəyişib. Sifarişi Veb sifarişləri bölməsindən yenidən açın; ödəniş edilmədi.'),{statusCode:409});
       const cashAmount=paymentMethod==='cash'?total:paymentMethod==='mixed'?Number(body.cashAmount):0;
       const cardAmount=paymentMethod==='card'?total:paymentMethod==='mixed'?Number(body.cardAmount):0;
       if(!Number.isFinite(cashAmount)||!Number.isFinite(cardAmount)||cashAmount<0||cardAmount<0||Math.abs(cashAmount+cardAmount-total)>.009)throw Object.assign(new Error("Nağd və kart məbləğlərinin cəmi yekuna bərabər olmalıdır"),{statusCode:400});

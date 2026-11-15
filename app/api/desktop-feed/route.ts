@@ -21,8 +21,8 @@ export async function GET(request:Request) {
       } catch { return Response.json({error:"Invalid cursor"},{status:400}); }
     }
     const rows=await sql.unsafe(`select o.id,o.order_no,o.status,o.fulfillment,o.delivery_address,o.delivery_stage,
-      o.total,o.coupon_discount,o.delivery_fee,o.distance_meters,o.delivery_lat,o.delivery_lng,o.delivery_pricing,o.note,o.created_at,o.updated_at::text updated_at,coalesce(o.customer_name_snapshot,c.full_name) full_name,coalesce(o.customer_phone_snapshot,c.phone) phone,
-      (select json_agg(json_build_object('sku',p.sku,'name',coalesce(i.product_name_snapshot,p.name),'option_snapshot',i.option_snapshot,
+      o.total,o.coupon_discount,o.delivery_fee,o.distance_meters,o.delivery_lat,o.delivery_lng,o.delivery_pricing,o.cancellation_reason,o.cancelled_at,o.note,o.created_at,o.updated_at::text updated_at,coalesce(o.customer_name_snapshot,c.full_name) full_name,coalesce(o.customer_phone_snapshot,c.phone) phone,
+      (select json_agg(json_build_object('product_id',p.id,'sku',p.sku,'name',coalesce(i.product_name_snapshot,p.name),'option_snapshot',i.option_snapshot,
       'quantity',i.quantity,'unit_price',i.unit_price,'line_total',i.line_total) order by i.id)
       from sales_order_items i join products p on p.id=i.product_id where i.sales_order_id=o.id) items
       from sales_orders o join customers c on c.id=o.customer_id

@@ -10,6 +10,8 @@ import {publicProductFields,desktopCatalogBaselineKey,seedDesktopCatalogBaseline
 import type {DesktopCatalogBaseline,DesktopCatalogChange,DesktopPublicProduct} from '@/lib/desktop-catalog-delta';
 import {readDesktopPublicProducts} from '@/lib/desktop-catalog-source';
 import {applyPublicProduct} from '@/lib/desktop-catalog-apply';
+import {filterDesktopOutboundChanges} from '@/lib/desktop-outbound-conflicts';
+import type {OrderCancellationNotification} from '@/lib/order-cancellation';
 
 export const syncKeyName='desktop_catalog_key_hash';
 type Sql=ReturnType<typeof postgres>;
@@ -38,7 +40,7 @@ export const publicProduct=publicProductBase.extend({
 export const syncBatch=z.object({
  protocol:z.literal(2),id:z.string().uuid(),clientId:z.string().uuid(),revision:z.string().regex(/^[1-9]\d{0,17}$/),
  catalog:z.array(publicProduct).max(10000),
- statuses:z.array(z.object({id:z.string().uuid(),status:z.enum(['pending','ready','completed','cancelled']),deliveryStage:z.enum(['received','preparing','ready','dispatched','delivered']),updatedAt:z.string().max(100)}).strict()).max(500)
+ statuses:z.array(z.object({id:z.string().uuid(),status:z.enum(['pending','ready','completed','cancelled']),deliveryStage:z.enum(['received','preparing','ready','dispatched','delivered']),updatedAt:z.string().max(100),cancellationReason:z.string().max(500).nullable().optional()}).strict()).max(500)
 }).strict();
 export type SyncBatch=z.infer<typeof syncBatch>;
 
@@ -46,7 +48,8 @@ export type SyncBatch=z.infer<typeof syncBatch>;
 // fields. Web administration has its own private inventory; this connection
 // only publishes public catalogue data and must preserve private web values.
 export async function applyDesktopBatch(sql:Sql,batch:SyncBatch,actor:{userId:string}){
- return sql.begin(async tx=>{
+ const notifications:OrderCancellationNotification[]=[];
+ const result=await sql.begin(async tx=>{
   await tx.unsafe("select pg_advisory_xact_lock(hashtext('birkassa.catalog-publication'))");
   const state=await tx.unsafe("select key,value from system_settings where key in ('desktop_catalog_device','desktop_catalog_revision')");
   const device=state.find(row=>row.key==='desktop_catalog_device')?.value;
@@ -57,22 +60,35 @@ export async function applyDesktopBatch(sql:Sql,batch:SyncBatch,actor:{userId:st
   const catalogConflicts:{id:string;reason:string}[]=[];
   for(const product of batch.catalog){
    if(seen.has(product.sku))throw new Error('Təkrar məhsul kodu.');seen.add(product.sku);
-   if(!await applyPublicProduct(tx,product)&&product.changedFields?.some(field=>field!=='isActive'))catalogConflicts.push({id:product.id,reason:'“'+product.name.slice(0,100)+'” vebdə silinib və ya tapılmadı. Yenidən yayımlama üçün məhsulu yoxlayın.'});
+   if(!await applyPublicProduct(tx,product)&&product.changedFields?.some(field=>field!=='isActive'))catalogConflicts.push({id:product.id,reason:'“'+product.name.slice(0,100)+'” vebdə dəyişib, silinib və ya tapılmadı. Məlumatlar əvəz edilmədi; məhsulu yoxlayın.'});
   }
   const conflicts:{id:string;status:string;reason:string}[]=[];
   const stages=['received','preparing','ready','dispatched','delivered'];
   for(const item of batch.statuses){
-   const [order]=await tx.unsafe("select id,status,fulfillment,delivery_stage,updated_at::text updated_at from sales_orders where id=$1 and source='catalog' for update",[item.id]);
-   if(order?.status===item.status&&order.delivery_stage===item.deliveryStage)continue;
+   const [order]=await tx.unsafe("select id,order_no,account_id,status,fulfillment,delivery_stage,cancellation_reason,updated_at::text updated_at from sales_orders where id=$1 and source='catalog' for update",[item.id]);
+   if(order?.status===item.status&&order.delivery_stage===item.deliveryStage&&(item.status!=='cancelled'||order.cancellation_reason===item.cancellationReason))continue;
    if(!order||order.status==='cancelled'||(order.status==='completed'&&item.status!=='completed')||order.updated_at!==item.updatedAt||stages.indexOf(item.deliveryStage)<stages.indexOf(order.delivery_stage)||(order.fulfillment==='pickup'&&item.deliveryStage==='dispatched')){
     conflicts.push({id:item.id,status:order?.status||'missing',reason:'Sifariş vebdə dəyişib; yoxlayın.'});continue;
    }
-   await tx.unsafe('update sales_orders set status=$1,delivery_stage=$2,updated_at=now() where id=$3',[item.status,item.deliveryStage,item.id]);
-   await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,after_json) values($1,'desktop.status_published','sales_order',$2,$3)",[actor.userId,item.id,JSON.stringify({status:item.status,deliveryStage:item.deliveryStage})]);
+   let reason:string|null=null;
+   if(item.status==='cancelled'){
+    const {isOrderCancellationReason,normalizeOrderCancellationReason}=await import('@/lib/order-cancellation');
+    if(!isOrderCancellationReason(item.cancellationReason)){conflicts.push({id:item.id,status:order.status,reason:'Ləğv səbəbini kassada aydın yazın; veb sifarişi ləğv edilmədi.'});continue;}
+    const [paid]=await tx.unsafe("select id from sales where sales_order_id=$1 and status='completed' limit 1",[order.id]);
+    if(paid){conflicts.push({id:item.id,status:order.status,reason:'Sifariş ödənilib; avtomatik ləğv edilmir.'});continue;}
+    reason=normalizeOrderCancellationReason(item.cancellationReason);
+   }
+   await tx.unsafe("update sales_orders set status=$1,delivery_stage=$2,cancellation_reason=case when $1='cancelled' then $4 else cancellation_reason end,cancelled_at=case when $1='cancelled' then now() else cancelled_at end,updated_at=now() where id=$3",[item.status,item.deliveryStage,item.id,reason]);
+   await tx.unsafe("insert into audit_logs(user_id,action,entity_type,entity_id,after_json) values($1,'desktop.status_published','sales_order',$2,$3)",[actor.userId,item.id,JSON.stringify({status:item.status,deliveryStage:item.deliveryStage,...(reason?{cancellationReason:reason}:{})})]);
+   if(reason&&order.account_id){const [account]=await tx.unsafe('select email from customer_accounts where id=$1',[order.account_id]);if(account?.email)notifications.push({id:order.id,orderNo:order.order_no,reason,to:account.email});}
   }
   for(const [key,value]of [['desktop_catalog_device',batch.clientId],['desktop_catalog_revision',batch.revision],['catalog_only_protocol','2']])await tx.unsafe('insert into system_settings(key,value) values($1,$2) on conflict(key) do update set value=excluded.value',[key,value]);
   return {acknowledged:batch.id,stale:false,published:batch.catalog.length-catalogConflicts.length,conflicts,catalogConflicts};
  });
+ // Mail is sent centrally only after commit. Retries are de-duplicated by the
+ // existing event key; mail configuration never travels to the desktop.
+ if(notifications.length){const {notifyCustomerEmail}=await import('@/lib/smtp-mail');const {orderCancellationEmail}=await import('@/lib/order-cancellation');for(const notification of notifications)await notifyCustomerEmail(orderCancellationEmail(notification)).catch(()=>{});}
+ return result;
 }
 async function publishImage(url:string,config:{url:string;key:string}){
  if(!url.startsWith('/api/desktop-media/'))return url;
@@ -113,10 +129,20 @@ export async function pushDesktopChanges(){
    const snapshot=await sql.begin(async tx=>{
     await tx.unsafe('set transaction isolation level repeatable read read only');
     const rows=await readDesktopPublicProducts(tx);
-    const statuses=await tx.unsafe(`select i.remote_id id,o.status,o.delivery_stage as "deliveryStage",i.payload->>'updated_at' as "updatedAt" from desktop_order_inbox i join sales_orders o on o.id=i.local_order_id where i.store_url=$1 and (o.status<>i.payload->>'status' or o.delivery_stage<>i.payload->>'delivery_stage') and i.payload->>'status'<>'cancelled' order by i.id limit 500`,[config.url]);
-    return {rows,statuses};
+    const mappings=await tx.unsafe<{local_product_id:string;conflicts:unknown}[]>('select local_product_id,conflicts from desktop_web_catalog_map where store_url=$1',[config.url]);
+    const [catalogState]=await tx.unsafe("select value from system_settings where key='desktop_web_catalog_status'");
+    let catalogErrors:{id?:string;sku?:string;fields?:string[]}[]=[];
+    if(catalogState){
+     const status=JSON.parse(catalogState.value);
+     if(status?.storeUrl===config.url&&Array.isArray(status.errors))catalogErrors=status.errors;
+    }
+    const statuses=await tx.unsafe(`select i.remote_id id,o.status,o.delivery_stage as "deliveryStage",o.cancellation_reason as "cancellationReason",i.payload->>'updated_at' as "updatedAt" from desktop_order_inbox i join sales_orders o on o.id=i.local_order_id where i.store_url=$1 and (o.status<>i.payload->>'status' or o.delivery_stage<>i.payload->>'delivery_stage') and i.payload->>'status'<>'cancelled' and coalesce(i.sync_conflict,'')='' and coalesce(i.import_error,'')='' order by i.id limit 500`,[config.url]);
+    return {rows,statuses,mappings,catalogErrors};
    });
-   localCatalog=buildDesktopCatalogChanges(snapshot.rows,baseline).catalog;
+   // An unavailable/invalid incoming snapshot must not turn an unseen web edit
+   // into an outgoing overwrite. Status publication remains independent.
+   const catalogBlocked=snapshot.catalogErrors.some(error=>!error||(!error.id&&!error.sku));
+   localCatalog=catalogBlocked?[]:filterDesktopOutboundChanges(buildDesktopCatalogChanges(snapshot.rows,baseline).catalog,snapshot.mappings,snapshot.catalogErrors);
    const imagesByUrl=new Map<string,Promise<string>>();
    const imageUrl=(url:string)=>{let saved=imagesByUrl.get(url);if(!saved){saved=publishImage(url,config);imagesByUrl.set(url,saved);}return saved;};
    async function publishProduct(row:DesktopPublicProduct){

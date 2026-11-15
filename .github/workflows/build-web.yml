@@ -36,6 +36,7 @@ jobs:
       - run: node scripts/test-desktop-publication-images.mjs
       - run: node scripts/test-desktop-connection-ui.mjs
       - run: node scripts/test-desktop-sync-independent.mjs
+      - run: npm run test:desktop-web
       - run: npm run test:desktop-updates
       - run: node scripts/test-category-media.mjs
       - run: node scripts/test-storefront-marketing.mjs

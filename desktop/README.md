@@ -1,8 +1,11 @@
-# RestaMarket Windows tətbiqi — 0.6.0
+# RestaMarket Windows tətbiqi — 0.6.3
 
-Yeni quraşdırıcının çıxış yolu: `desktop-release/v0.6.0/RestaMarket-Setup-0.6.0.exe`.
+Yeni quraşdırıcının çıxış yolu: `desktop-release/v0.6.3/RestaMarket-Setup-0.6.3.exe`.
+0.6.2 və sonrakı versiyalarda baş rəhbər hesabı ilə **RestaMarket → Yeniləmələr**
+menyusundan imzalanmış onlayn yeniləməni yoxlayın. Quraşdırmadan əvvəl təsdiq və
+yerli baza/şəkillərin yoxlanmış ehtiyat nüsxəsi tələb olunur.
 Proqram + cari lokal məlumatlar üçün `npm run desktop:transfer` işlədin. Nəticə
-`desktop-release/RestaMarket-Kocurme-0.6.0-TARIX` qovluğunda quraşdırıcı,
+`desktop-release/RestaMarket-Kocurme-0.6.3-TARIX` qovluğunda quraşdırıcı,
 `RestaMarket-data.birkassa`, yoxlama heşləri və `OXU-KOCURME.txt` olacaq.
 `.exe` özü mağaza məlumatlarını daşımır. Qovluğun hamısını köçürün.
 Ətraflı istifadəçi təlimatı: `desktop/TRANSFER.txt`.
@@ -25,11 +28,17 @@ Koddan açmaq: `npm install`, `npm run desktop:runtime`, `npm run build:desktop`
 
 ## Veb sifarişləri, stok və statuslar
 
-1. Canlı serverə bu versiyanın kodunu və `0028_desktop_sync_outbox.sql` daxil olmaqla bütün miqrasiyaları tətbiq edin. Köhnə server yenilənmədən bağlantı işləmir.
+1. Canlı serverə bu versiyanın kodunu və `0039_desktop_support_mirror.sql` daxil olmaqla nəzərdən keçirilmiş miqrasiyaları tətbiq edin. Mövcud bazanı ehtiyatlamadan geniş miqrasiya əmri işlətməyin. Köhnə server yenilənmədən yeni kanallar işləmir.
 2. Vebdə Administrator ilə daxil olun: **Tənzimləmələr → Masaüstü bağlantısı → Sinxronizasiya açarı yarat**. Açar yalnız bir dəfə göstərilir.
 3. Windows tətbiqində eyni bölmədə mağazanın HTTPS ünvanını və açarı daxil edib **Yoxla və qoş** seçin.
 4. Tətbiq açıq olduqda hər 30 saniyədən bir yeni sifarişlər alınır; açıq kataloq və sifariş statusları göndərilir. Giriş ekranında da arxa plan yoxlaması davam edir. Yeni sifarişlər Windows bildirişi yaradır.
-5. **Veb sifarişləri → Kassaya köçür**, sonra **Sifarişlər** bölməsində hazırlayıb kassada ödənişi tamamlayın. Stok yalnız ödənişdə azalır. SKU və məhsul seçimlərinin adları uyğun gəlməlidir; naməlum məhsul ödənişə buraxılmır. Veb qiyməti və kupon saxlanır.
+5. Uyğun açıq veb sifarişləri **Veb sifarişləri** bölməsinə avtomatik köçürülür. **POS-da aç** ilə kassada hazırlayıb ödənişi tamamlayın. Stok yalnız ödənişdə azalır. SKU, ölçü/rəng və əlavə xüsusiyyətlərin nüsxəsi uyğun gəlməlidir; naməlum məhsul ödənişə buraxılmır. Veb qiyməti, kupon və çatdırılma haqqı saxlanır. Xəta aradan qaldırıldıqda **Uyğunluğu yenidən yoxla** seçin.
+
+Vebdəki müştəri məlumatları, çatdırılma mərhələsi və ləğv səbəbi yerli sifarişlə yenilənir. Ödənmiş çek dəyişdirilmir; ziddiyyətli və köhnə məbləğli sifariş ödənişə buraxılmır. Sifarişin gəlməsi öz-özünə satış və ya ödəniş yaratmır.
+
+Tam kataloq açarı ilə veb məhsullarının açıq məlumatları da kompüterə alınır. Yerli dəyişikliklər səssizcə əvəz edilmir; eyni sahədə fərqli dəyişiklik varsa bağlantı panelində yoxlama xəbərdarlığı görünür. Yeni veb məhsulu yerli bazada aktiv olmayan, stoksuz yoxlama qeydi kimi yaranır: alış qiymətini, aktivliyi və yerli stok qəbulunu rəhbər yoxlamalıdır. Stok və alış qiyməti vebdən alınmır və vebə göndərilmir.
+
+**Veb dəstək** baş rəhbər və menecer üçün veb biletlərinin və yazışmalarının yalnız oxunan nüsxəsidir. Oxunmamış və cavab gözləyən sayları göstərilir; burada baxmaq vebdə oxunmuş işarəsi, cavab və ya e-poçt yaratmır. Cavab veb idarəetmədən verilir. Kassir veb sifarişlərini görə bilər, amma dəstək yazışmalarını görə bilməz.
 
 Sinxronizasiya açarı bir kompüter üçündür. Stok və maliyyə yalnız masaüstündə saxlanır. Vebə məhsul adı, satış qiyməti, təsviri, şəkilləri və seçimləri göndərilir; stok qalığı, alış qiyməti, maliyyə, PIN, çek və ödənişlər göndərilmir. Vebdə sifariş yaratmaq üçün stok saxlanması tələb olunmur. Son stok yoxlaması və azalma kassada satış tamamlananda edilir.
 
@@ -71,6 +80,8 @@ Azərbaycan, English, Русский və 中文 yuxarıdakı seçicidədir. Seç
 
 - `npm run test:desktop`: satış, stok, seçim və çek.
 - `npm run test:desktop-sync`: iki ayrıca bazada sifariş axını, icazələr, stok/status göndərilməsi, təkrar göndərmə, ziddiyyətlər, oflayn şəkillər və panel bərpası.
+- `npm run test:desktop-web`: verilənlər bazası və şəbəkə olmadan protokol, konflikt, status və beşdilli UI testləri.
+- `npm run test:desktop-web-data`: ayrıca PostgreSQL bazalarında avtomatik sifariş qəbulu, məhsul və dəstək sinxronizasiyası.
 - `node scripts/test-desktop-backup.mjs`: paket PostgreSQL-i, tam arxiv bərpası və zədələnmiş arxivin rəddi.
 - `node scripts/smoke-desktop.mjs`: real `.exe` açılışı; quraşdırılmış PostgreSQL-ə keçid qadağandır.
 

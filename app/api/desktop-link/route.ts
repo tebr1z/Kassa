@@ -14,10 +14,12 @@ async function handleGET() {
     const config=await readSyncConfig();
     const sql=storeDb();
     try {
-      const rows=await sql.unsafe("select key,value from system_settings where key in ('desktop_sync_last_success','desktop_sync_last_error','desktop_media_status')");
+      const rows=await sql.unsafe("select key,value from system_settings where key in ('desktop_sync_last_success','desktop_sync_last_error','desktop_media_status','desktop_order_last_success','desktop_order_last_error','desktop_support_last_success','desktop_support_last_error','desktop_web_catalog_status')");
       const value=(key:string)=>rows.find(row=>row.key===key)?.value||'';
       const [pending]=await sql.unsafe('select count(*) n from desktop_sync_outbox where acknowledged_at is null and store_url=$1',[config?.url||'']);
-      return Response.json({local:true,configured:!!config,url:config?.url||"",mode:config?.key.startsWith('bk_catalog_')?'catalog':'orders',lastSync:value('desktop_sync_last_success'),lastError:value('desktop_sync_last_error'),pending:Number(pending.n),media:value('desktop_media_status')?JSON.parse(value('desktop_media_status')):null});
+      let catalogue:{changed?:number;conflicts?:number;errors?:{reason?:string;sku?:string}[]}={};try{catalogue=JSON.parse(value('desktop_web_catalog_status')||'{}');}catch{/* Invalid old status is not an authority or a connection secret. */}
+      const catalogueError=Array.isArray(catalogue.errors)?catalogue.errors.map(item=>[item.sku,item.reason].filter(Boolean).join(' · ')).join(' ').slice(0,1000):'';
+      return Response.json({local:true,configured:!!config,url:config?.url||"",mode:config?.key.startsWith('bk_catalog_')?'catalog':'orders',lastSync:value('desktop_sync_last_success'),lastError:value('desktop_sync_last_error')||value('desktop_order_last_error')||value('desktop_support_last_error')||catalogueError,pending:Number(pending.n),media:value('desktop_media_status')?JSON.parse(value('desktop_media_status')):null,ordersLastSync:value('desktop_order_last_success'),ordersLastError:value('desktop_order_last_error'),supportLastSync:value('desktop_support_last_success'),supportLastError:value('desktop_support_last_error'),incomingCatalogChanged:catalogue.changed||0,incomingCatalogConflicts:catalogue.conflicts||0});
     }finally{await sql.end();}
   }
   const sql=storeDb();

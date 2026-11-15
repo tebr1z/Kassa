@@ -17,6 +17,7 @@ async function load(file,mocks={}){
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const images=await load('lib/product-option-image.ts');
 const delta=await load('lib/desktop-catalog-delta.ts');
+const outbound=await load('lib/desktop-outbound-conflicts.ts');
 const origin='https://catalogue-fixture.test',key='bk_catalog_'+'0'.repeat(64);
 const ids={product:'11111111-1111-4111-8111-111111111111',client:'22222222-2222-4222-8222-222222222222',batch:'33333333-3333-4333-8333-333333333333'};
 const cache=new Map(['main','gallery','variant'].map(name=>{
@@ -35,7 +36,7 @@ function noPrivateFields(value){
   noPrivateFields(item);
  }
 }
-async function run({existsStatus=404,uploadStatus=200,mutate=()=>{},missingCache=false,fetchFailure=false,baselineRow}={}){
+async function run({existsStatus=404,uploadStatus=200,mutate=()=>{},missingCache=false,fetchFailure=false,baselineRow,mappings=[],catalogErrors=[]}={}){
  const row=product();mutate(row);
  const state={lookups:[],checks:[],uploads:[],batches:[],settings:new Map([[delta.desktopCatalogBaselineKey(origin),JSON.stringify(delta.seedDesktopCatalogBaseline(baselineRow?[baselineRow]:[]))]]),acknowledged:false,outboxCreated:false,ended:false,remote:new Map()};
  const sql={
@@ -45,6 +46,8 @@ async function run({existsStatus=404,uploadStatus=200,mutate=()=>{},missingCache
    if(query.startsWith('select id,revision,payload from desktop_sync_outbox'))return [];
    if(query.startsWith('set transaction isolation level'))return [];
    if(query.startsWith('select i.remote_id'))return [];
+   if(query.startsWith('select local_product_id,conflicts'))return mappings;
+   if(query.includes("where key='desktop_web_catalog_status'"))return [{value:JSON.stringify({storeUrl:origin,errors:catalogErrors})}];
    if(query.startsWith('select value from system_settings'))return query.includes('desktop_sync_client_id')?[{value:ids.client}]:state.settings.has(params[0])?[{value:state.settings.get(params[0])}]:[];
    if(query.startsWith('select pg_advisory_xact_lock'))return [];
    if(query.startsWith("insert into system_settings(key,value) values('desktop_sync_client_id'"))return [];
@@ -61,6 +64,7 @@ async function run({existsStatus=404,uploadStatus=200,mutate=()=>{},missingCache
   '@/lib/desktop-media':{cachedMedia:async id=>{state.lookups.push(id);return missingCache?null:cache.get(id)||null;}},
   '@/lib/store-db':{storeDb:()=>sql},'@/lib/product-option-image':images,
   '@/lib/desktop-catalog-delta':delta,
+  '@/lib/desktop-outbound-conflicts':outbound,
   '@/lib/desktop-catalog-source':{readDesktopPublicProducts:async()=>[delta.normalizeDesktopPublicProduct(row)]},
   '@/lib/desktop-catalog-apply':{applyPublicProduct:async()=>{throw Error('Sender-only fixture must not apply products');}},
  });
@@ -113,6 +117,12 @@ const editedWire=edited.batches[0].catalog[0];assert.deepEqual(editedWire.change
 const acknowledgedBaseline=JSON.parse(edited.settings.get(delta.desktopCatalogBaselineKey(origin))).products[ids.product];assert.equal(acknowledgedBaseline.options[0].price,17);assert.equal(acknowledgedBaseline.options[0].image,urls[2],'Acknowledgement stores raw local image URLs rather than web-transformed paths');
 
 const existing=await run({existsStatus:200});assert.equal(existing.error,undefined);assert.equal(existing.uploads.length,0);assert.equal(existing.batches.length,1);assert.equal(existing.batches[0].catalog[0].image,expected[0]);
+const held=await run({baselineRow:product(),mutate:row=>{row.price=19;row.name='Safe title';},mappings:[{local_product_id:ids.product,conflicts:['price']}]});
+assert.equal(held.error,undefined);assert.deepEqual(held.batches[0].catalog[0].changedFields,['name']);assert.equal(JSON.parse(held.settings.get(delta.desktopCatalogBaselineKey(origin))).products[ids.product].price,12.5,'Acknowledgement must not erase the unresolved price conflict');
+const quarantined=await run({baselineRow:product(),mutate:row=>{row.price=19;},catalogErrors:[{id:ids.product,fields:['identity']}]});
+assert.equal(quarantined.error,undefined);assert.deepEqual(quarantined.batches[0].catalog,[]);assert.equal(quarantined.uploads.length,0,'Quarantined rows are filtered before image network activity/outbox creation');
+const unavailable=await run({baselineRow:product(),mutate:row=>{row.price=19;},catalogErrors:[{reason:'Incoming catalogue unavailable'}]});
+assert.equal(unavailable.error,undefined);assert.deepEqual(unavailable.batches[0].catalog,[],'A failed incoming snapshot cannot authorize blind new product publication');assert.equal(JSON.parse(unavailable.settings.get(delta.desktopCatalogBaselineKey(origin))).products[ids.product].price,12.5);
 for(const status of [401,403,429,500,503]){
  const failed=await run({existsStatus:status});assert.match(failed.error?.message||'',new RegExp(String(status)));assert.equal(failed.uploads.length,0,'Only 404 triggers an upload');assert.equal(failed.batches.length,0);assert.equal(failed.acknowledged,false);assert.equal(failed.settings.has('desktop_sync_last_success'),false);assert.ok(failed.settings.get('desktop_sync_last_error'));
 }

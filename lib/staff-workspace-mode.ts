@@ -1,5 +1,5 @@
 // UI convenience only. Server-side inventory boundaries make the security decision.
-const localSections=new Set(['Satış / POS','Məhsullar','Anbar','Sifarişlər','Satınalma','Maliyyə','Hesabatlar','Nəzarət jurnalı','Mağazalar və kassirlər','Veb sifarişləri']);
+const localSections=new Set(['Satış / POS','Məhsullar','Anbar','Sifarişlər','Satınalma','Maliyyə','Hesabatlar','Nəzarət jurnalı','Mağazalar və kassirlər','Veb sifarişləri','Veb dəstək']);
 type WorkspaceAuth={local?:boolean;user?:{permissions:string[]}};
 export function localStockSection(section:string){return localSections.has(section);}
 export function canOpenWorkspaceSection(auth:WorkspaceAuth,section:string){

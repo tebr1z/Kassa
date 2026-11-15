@@ -8,8 +8,8 @@ export function isStaffRole(role:string){return staffRoles.includes(role);}
 
 const sections:Record<string,readonly string[]>={
  admin:['*'],
- manager:['İdarə paneli','Satış / POS','Məhsullar','Anbar','Sifarişlər','Satınalma','Maliyyə','Hesabatlar','Nəzarət jurnalı'],
- cashier:['Satış / POS'],
+ manager:['İdarə paneli','Satış / POS','Məhsullar','Anbar','Sifarişlər','Veb sifarişləri','Veb dəstək','Satınalma','Maliyyə','Hesabatlar','Nəzarət jurnalı'],
+ cashier:['Satış / POS','Veb sifarişləri'],
  warehouse:['Məhsullar','Anbar','Satınalma'],
  accountant:['Maliyyə','Hesabatlar'],
  online_manager:[],
@@ -25,6 +25,8 @@ const pos:ApiAccess={
  '/api/shifts':['POST'],
  '/api/pos-options':['GET','HEAD','POST','DELETE'],
  '/api/client-errors':['POST'],
+ '/api/desktop-link':['GET','HEAD'],
+ '/api/desktop-inbox':['GET','HEAD','POST'],
 };
 const inventory:ApiAccess={
  '/api/products':['GET','HEAD','POST','PATCH'],
@@ -54,6 +56,7 @@ const access:Readonly<Record<string,ApiAccess>>={
   '/api/orders':['GET','HEAD','POST'],
   '/api/returns':['POST'],
   '/api/audit':['GET','HEAD'],
+  '/api/desktop-web-support':['GET','HEAD'],
  },
  online_manager:online,
  online_assistant:online,

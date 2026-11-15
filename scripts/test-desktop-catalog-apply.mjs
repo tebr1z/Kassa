@@ -22,6 +22,8 @@ function fixture({products=[webProduct()],images=[],options=[]}={}){
  const sql={async unsafe(query,params=[]){
   state.queries.push([query,params]);
   if(query.startsWith('select id,sku,deleted_at from products'))return state.products.filter(row=>row.id===params[0]||row.sku===params[1]||(params[2]!==null&&row.sku===params[2])).map(row=>({id:row.id,sku:row.sku,deleted_at:row.deleted_at}));
+  if(query.startsWith('select sku,name,public_code code'))return state.products.filter(row=>row.id===params[0]).map(row=>({sku:row.sku,name:row.name,code:row.public_code,category:row.category??'',unit:row.unit,price:row.sale_price,discountPrice:row.discount_price,image:row.image_url??'',isActive:row.is_active,description:row.description??'',specifications:row.specifications??''}));
+  if(query.startsWith('select label,size,color,kind,price,position'))return state.options.filter(row=>row.product_id===params[0]).map(row=>({label:row.label,size:row.size,color:row.color,kind:row.kind,price:row.price,position:row.position,isActive:row.is_active,attributes:structuredClone(row.attributes),image:row.image_url??''}));
   if(query.startsWith('update products set ')){
    const match=query.match(/^update products set (.+) where id=\$(\d+)$/);assert.ok(match);const row=state.products.find(item=>item.id===params[Number(match[2])-1]);assert.ok(row);
    for(const assignment of match[1].split(',')){const [column,number]=assignment.split('=$');assert.ok(!['cost_price','min_stock','stock','barcode'].includes(column));row[column]=params[Number(number)-1];}return [];
@@ -70,16 +72,16 @@ const publicRows=state=>state.images.filter(row=>row.product_id===id).sort((a,b)
  await applyPublicProduct(f.sql,patch(base,['options'],{options:[{...base.options[0],image:photo('c')}]}));
  const saved=f.state.options[0];assert.equal(saved.image_url,photo('c'));assert.equal(saved.size,'Veb 70');assert.equal(saved.color,'Veb yaşıl');assert.equal(saved.cost_price,7.75);
 }
-// Creating the same label locally does not imply explicitly clearing a photo
-// already attached to that previously web-only option.
+// A new local label cannot overwrite a different, previously web-only choice.
 {
  const base=product(),label='Əvvəl yalnız vebdə olan seçim';
  const existing=webOption(option(label),{image_url:photo('e'),cost_price:9.25});
  const f=fixture({options:[webOption(base.options[0]),existing]});
  const incoming=option(label,{size:'60',image:''});
- await applyPublicProduct(f.sql,patch(base,['options'],{options:[...base.options,incoming]}));
+ const before=structuredClone(f.state.options);
+ assert.equal(await applyPublicProduct(f.sql,patch(base,['options'],{options:[...base.options,incoming]})),undefined);
  const saved=f.state.options.find(row=>row.label===label);
- assert.equal(saved.size,'60');assert.equal(saved.image_url,photo('e'),'A newly added local label with blank image must preserve an existing web-only option photo');assert.equal(saved.cost_price,9.25);
+ assert.equal(saved.size,'40');assert.equal(saved.image_url,photo('e'));assert.equal(saved.cost_price,9.25);assert.deepEqual(f.state.options,before,'Colliding choices remain wholly unchanged until reviewed');
 }
 // Only explicit local gallery removals disappear; web-only images and IDs
 // survive. A baseline photo removed on the web is not resurrected by additions.

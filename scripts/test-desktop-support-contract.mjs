@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {createRequire} from 'node:module';
+import ts from 'typescript';
+const require=createRequire(import.meta.url),loaded={exports:{}};
+const source=await readFile('lib/desktop-support-contract.ts','utf8');
+new Function('require','module','exports',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(require,loaded,loaded.exports);
+const {supportTicketSnapshot,supportMessageSnapshot,supportTicketPage,supportMessagePage}=loaded.exports;
+const id='11111111-1111-4111-8111-111111111111',now='2026-11-15T12:00:00.123456+00:00';
+const ticket={id,ticketNo:'1234',subject:'Çatdırılma',kind:'order',status:'open',name:'Sınaq alıcısı',email:'test@example.invalid',phone:'+994701234567',unread:true,unanswered:true,updatedAt:now,lastBody:'Ünvanı dəqiqləşdirək',messageVersion:'a'.repeat(32),messageCount:1};
+const message={id,sender:'customer',body:'<script>this stays plain text</script>',createdAt:now,editedAt:null};
+assert.deepEqual(supportTicketSnapshot.parse(ticket),ticket);assert.deepEqual(supportMessageSnapshot.parse(message),message,'Message text is data, never instructions/HTML');
+for(const key of ['password_hash','staff_user_id','account_id','cost_price','stock','smtp_password']){
+ assert.equal(supportTicketSnapshot.safeParse({...ticket,[key]:'forbidden'}).success,false,key);
+ assert.equal(supportMessageSnapshot.safeParse({...message,[key]:'forbidden'}).success,false,key);
+}
+assert.equal(supportMessageSnapshot.safeParse({...message,sender:'admin'}).success,false);
+assert.equal(supportMessageSnapshot.safeParse({...message,body:'a'.repeat(4001)}).success,false);
+assert.equal(supportTicketSnapshot.safeParse({...ticket,updatedAt:'bad-date'}).success,false);
+assert.equal(supportTicketSnapshot.safeParse({...ticket,messageCount:-1}).success,false);
+assert.equal(supportTicketPage.safeParse({tickets:Array(51).fill(ticket),next:null}).success,false);
+assert.equal(supportMessagePage.safeParse({messages:Array(101).fill(message),next:null,messageVersion:'a'.repeat(32)}).success,false);
+const api=await readFile('app/api/desktop-support-feed/route.ts','utf8'),mirror=await readFile('lib/desktop-web-support.ts','utf8'),local=await readFile('app/api/desktop-web-support/route.ts','utf8');
+assert.match(api,/desktopAuthorization\(sql,key,true\)/);assert.ok(!/select\s+\*/i.test(api),'Feed only projects explicit correspondence fields');
+assert.ok(!/notifyCustomerEmail|fetch\([^)]*smtp|set-cookie/i.test(api+mirror+local),'Reading correspondence never emails or clones sessions');
+assert.ok(!/export const POST|export async function POST/.test(local),'The desktop support mirror is read-only');
+assert.match(mirror,/messageVersion===ticket\.messageVersion/,'Version changes restart partial conversation scans');
+console.log('PASS: strict private support projection, all ticket kinds, text-only data, paging bounds, microsecond timestamps, full-key authorization and read-only/offline mirror boundary. No DB, mail or network used.');
