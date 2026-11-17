@@ -48,7 +48,9 @@ async function handlePOST(request: Request) {
       if (!warehouse) throw Object.assign(new Error("Kassirə mağaza və satış anbarı təyin edin"), { statusCode: 409 });
 
       const [shift] = await tx.unsafe(
-        "select id,branch_id from cashier_shifts where cashier_id=$1 and closed_at is null order by opened_at desc limit 1",
+        // PostgreSQL rechecks closed_at after waiting for this row lock. A
+        // concurrent shift close/reset cannot leave an old payable shift here.
+        "select id,branch_id from cashier_shifts where cashier_id=$1 and closed_at is null order by opened_at desc limit 1 for update",
         [cashier.id],
       );
       if (!shift) throw Object.assign(new Error("Satış üçün əvvəlcə kassa növbəsini açın"), { statusCode: 409 });
@@ -132,7 +134,7 @@ async function handlePOST(request: Request) {
       const [{ next_no: nextNo }] = await tx.unsafe("select coalesce(max((regexp_replace(receipt_no, '[^0-9]', '', 'g'))::bigint),0)+1 as next_no from sales");
       const receiptNo = `#${String(nextNo).padStart(6, '0')}`;
       const [sale] = await tx.unsafe(
-        "insert into sales (receipt_no, shift_id, cashier_id, customer_id, sales_order_id, buyer_name, subtotal, discount, total, receipt_store, delivery_fee) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::text::jsonb,$11) returning id, created_at",
+        "insert into sales (receipt_no, shift_id, cashier_id, customer_id, sales_order_id, buyer_name, subtotal, discount, total, receipt_store, delivery_fee, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::text::jsonb,$11,clock_timestamp()) returning id, created_at",
         [receiptNo, shift.id, cashier.id, linkedOrder?.customer_id||body.customerId||null, salesOrderId, String(body.buyerName||"").trim()||null, subtotal,discount,total,JSON.stringify(receiptStore),deliveryFee],
       );
 

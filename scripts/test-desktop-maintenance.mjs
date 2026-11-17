@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {readFile} from 'node:fs/promises';
+const require=createRequire(import.meta.url);
+const {createDesktopMaintenance,resetInput}=require('../desktop/maintenance.cjs');
+const labels=require('../desktop/maintenance-labels.cjs');
+for(const lang of ['az','en','ru','tr','zh']){const row=labels(lang);assert.deepEqual(Object.keys(row).sort(),Object.keys(labels('az')).sort());assert.ok(Object.values(row).every(value=>typeof value==='string'&&value.trim()));}
+const input={confirm:'YENİ DÖVR',reason:'Yeni dövr',preview:'p'.repeat(70)};
+assert.deepEqual(resetInput(input),input);for(const invalid of [null,{},[],{...input,path:'/arbitrary'},{...input,confirm:'OK'},{...input,reason:''},{...input,preview:7}])assert.equal(resetInput(invalid),null);
+const handlers=new Map(),frame={url:'http://127.0.0.1:5760/heyet-g7m4q9x2k8'},webContents={mainFrame:frame};
+const parent={webContents,isDestroyed:()=>false};let admin=true,available=true,runs=0,transfers=0,resets=0,held;
+const maintenance=createDesktopMaintenance({ipcMain:{handle:(key,handler)=>handlers.set(key,handler),removeHandler:key=>handlers.delete(key)},parent,origin:'http://127.0.0.1:5760',getLanguage:()=> 'az',isAdmin:async()=>admin,available:()=>available,run:async task=>{runs++;return task();},exportTransfer:async()=>{transfers++;if(held)await held;return {ok:true};},resetSalesPeriod:async value=>{assert.deepEqual(value,input);resets++;return {ok:true};}});
+const event={sender:webContents,senderFrame:frame};
+assert.deepEqual(await handlers.get('maintenance:transfer')(event),{ok:true});assert.equal(transfers,1);
+assert.deepEqual(await handlers.get('maintenance:sales-period')(event,input),{ok:true});assert.equal(resets,1);
+for(const other of [{sender:{},senderFrame:frame},{sender:webContents,senderFrame:{url:frame.url}}])assert.throws(()=>handlers.get('maintenance:transfer')(other));
+frame.url='https://evil.example/heyet-g7m4q9x2k8';assert.throws(()=>handlers.get('maintenance:transfer')(event));frame.url='http://127.0.0.1:5760/';assert.throws(()=>handlers.get('maintenance:transfer')(event));frame.url='http://127.0.0.1:5760/heyet-g7m4q9x2k8';
+assert.throws(()=>handlers.get('maintenance:transfer')(event,'arbitrary-target'));assert.throws(()=>handlers.get('maintenance:sales-period')(event,{...input,file:'/anywhere'}));
+admin=false;assert.equal((await handlers.get('maintenance:transfer')(event)).ok,false);assert.equal(transfers,1);admin=true;
+available=false;assert.equal((await handlers.get('maintenance:sales-period')(event,input)).ok,false);assert.equal(resets,1);available=true;
+let release;held=new Promise(resolve=>{release=resolve;});const running=handlers.get('maintenance:transfer')(event);await new Promise(resolve=>setImmediate(resolve));assert.equal((await handlers.get('maintenance:transfer')(event)).ok,false);release();await running;held=null;
+assert.equal(runs,3);maintenance.dispose();assert.equal(handlers.size,0);
+const main=await readFile('desktop/main.cjs','utf8'),preload=await readFile('desktop/preload.cjs','utf8'),pkg=JSON.parse(await readFile('package.json','utf8'));
+assert.ok(main.includes('database.backupForUpdate(file)'));assert.ok(main.indexOf('await database.backupForUpdate(file)')<main.indexOf("await nativeRequest('POST'"),'External backup must finish before reset');
+assert.ok(main.includes('await stopServer(server);stopped=true;'));assert.ok(main.includes('downloadForTransfer()'));assert.ok(main.includes('verifyInstallerFile(installer,downloaded.manifest)'));
+assert.ok(preload.includes("ipcRenderer.invoke('maintenance:transfer')"));assert.ok(preload.includes("ipcRenderer.invoke('maintenance:sales-period',value)"));assert.ok(!preload.includes('desktopToken'));
+assert.ok(pkg.build.fileAssociations.some(item=>item.ext==='birkassa'));for(const name of ['maintenance.cjs','maintenance-labels.cjs','transfer-package.mjs'])assert.ok(pkg.build.files.includes(name));
+console.log('PASS: native maintenance admin gate, exact main-frame/origin/IPC input, serialized operations, private verified transfer and backup-before-reset wiring, backup association and five languages. Mock actions only.');

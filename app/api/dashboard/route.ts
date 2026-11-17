@@ -4,6 +4,7 @@ import { logSystemError } from "@/lib/log-error";
 import postgres from "postgres";
 import { recentReceiptsSql } from "@/lib/receipt-query";
 import { salesWarehouseSql } from "@/lib/warehouse";
+import {readSalesPeriod,salesPeriodMetadata,salesPeriodPredicate} from '@/lib/sales-period';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,12 +17,14 @@ function connection() {
 async function handleGET(request: Request) {
   const sql = connection();
   try {
+    const currentPeriod=await readSalesPeriod(sql),scope=new URL(request.url).searchParams.get('scope')==='all'?'all':'current';
+    const periodWhere=salesPeriodPredicate(currentPeriod,scope),salesPeriod=salesPeriodMetadata(currentPeriod,scope);
     if(request.headers.get('x-birkassa-role')==='cashier'){
       const id=request.headers.get('x-birkassa-user-id');
       const [warehouse]=await sql.unsafe(salesWarehouseSql(id||''));
       const [branch]=warehouse?await sql.unsafe('select name,address from branches where id=$1',[warehouse.branch_id]):[];
       const [shift]=await sql.unsafe("select cs.id,cs.opened_at,cs.opening_cash,coalesce(sum(p.amount) filter(where p.method='cash'),0) cash_sales,coalesce(sum(p.amount) filter(where p.method='card'),0) card_sales from cashier_shifts cs left join sales s on s.shift_id=cs.id and s.status='completed' left join payments p on p.sale_id=s.id where cs.cashier_id=$1 and cs.closed_at is null group by cs.id order by cs.opened_at desc limit 1",[id]);
-      return NextResponse.json({today:{total:0,count:0,profit:0},payments:{cash:0,card:0},weekly:[],recent:[],alerts:[],suspicious:[],branchName:branch?.name||'Mağaza təyin edilməyib',branchAddress:branch?.address||'',warehouseName:warehouse?.name||'',registerName:'Kassa',shift:shift?{id:shift.id,openedAt:shift.opened_at,openingCash:Number(shift.opening_cash),cashSales:Number(shift.cash_sales),cardSales:Number(shift.card_sales),expectedCash:Number(shift.opening_cash)+Number(shift.cash_sales)}:null});
+      return NextResponse.json({salesPeriod,today:{total:0,count:0,profit:0},payments:{cash:0,card:0},weekly:[],recent:[],alerts:[],suspicious:[],branchName:branch?.name||'Mağaza təyin edilməyib',branchAddress:branch?.address||'',warehouseName:warehouse?.name||'',registerName:'Kassa',shift:shift?{id:shift.id,openedAt:shift.opened_at,openingCash:Number(shift.opening_cash),cashSales:Number(shift.cash_sales),cardSales:Number(shift.card_sales),expectedCash:Number(shift.opening_cash)+Number(shift.cash_sales)}:null});
     }
     const [today] = await sql.unsafe(`
       select coalesce(sum(s.total),0) as total, count(*) as count,
@@ -31,13 +34,13 @@ async function handleGET(request: Request) {
         select coalesce(sum(si.cost_snapshot * si.quantity),0) as cost_total
         from sale_items si where si.sale_id=s.id
       ) costs on true
-      where s.status='completed'
+      where s.status='completed' and ${periodWhere}
         and (s.created_at at time zone 'Asia/Baku')::date=(now() at time zone 'Asia/Baku')::date
     `);
     const payments = await sql.unsafe(`
       select p.method, coalesce(sum(p.amount),0) as total
       from payments p join sales s on s.id=p.sale_id
-      where s.status='completed'
+      where s.status='completed' and ${periodWhere}
         and (s.created_at at time zone 'Asia/Baku')::date=(now() at time zone 'Asia/Baku')::date
       group by p.method
     `);
@@ -51,10 +54,10 @@ async function handleGET(request: Request) {
       )
       select d.day, coalesce(sum(s.total),0) as total
       from days d left join sales s
-        on (s.created_at at time zone 'Asia/Baku')::date=d.day and s.status='completed'
+        on (s.created_at at time zone 'Asia/Baku')::date=d.day and s.status='completed' and ${periodWhere}
       group by d.day order by d.day
     `);
-    const recent = await sql.unsafe(recentReceiptsSql);
+    const recent = await sql.unsafe(recentReceiptsSql.replace("where s.status in",`where ${periodWhere} and s.status in`));
     const [shift] = await sql.unsafe(`
       select cs.id, cs.opening_cash, cs.opened_at,
         coalesce(sum(p.amount) filter (where p.method='cash'),0) as cash_sales,
@@ -68,6 +71,7 @@ async function handleGET(request: Request) {
 
     const paymentMap = Object.fromEntries(payments.map((row) => [row.method, Number(row.total)]));
     return NextResponse.json({
+      salesPeriod,
       today: { total: Number(today.total), count: Number(today.count), profit: Number(today.profit) },
       payments: { cash: paymentMap.cash || 0, card: paymentMap.card || 0 },
       weekly: weekly.map((row) => ({ day: row.day, total: Number(row.total) })),
@@ -86,7 +90,7 @@ async function handleGET(request: Request) {
       branchAddress: (await sql.unsafe("select b.address from branches b join users u on u.branch_id=b.id where u.id=$1", [request.headers.get("x-birkassa-user-id")]))[0]?.address || "",
       warehouseName:(await sql.unsafe(salesWarehouseSql(request.headers.get('x-birkassa-user-id')||'')))[0]?.name||'Anbar təyin edilməyib',
       alerts: (await sql.unsafe("select value from system_settings where key='low_stock_alert'"))[0]?.value==="false"?[]:(await sql.unsafe(`select p.name, coalesce(max(wl.code),'Mövqe yoxdur') as location, p.min_stock, coalesce(sum(sm.quantity),0) stock from products p left join stock_movements sm on sm.product_id=p.id and sm.warehouse_id=(select id from (${salesWarehouseSql(request.headers.get("x-birkassa-user-id") || "")}) sales_warehouse) left join warehouse_locations wl on wl.id=sm.location_id where p.is_active=true group by p.id having coalesce(sum(sm.quantity),0) <= p.min_stock order by coalesce(sum(sm.quantity),0) limit 6`)).map((row: any)=>({name:row.name,location:row.location,min:Number(row.min_stock),stock:Number(row.stock)})),
-      suspicious: (await sql.unsafe(`select s.receipt_no, s.discount, s.subtotal, s.total, s.created_at, u.full_name, 'discount' kind from sales s join users u on u.id=s.cashier_id where s.status='completed' and s.subtotal>0 and s.discount/s.subtotal>=0.2 and s.created_at>now()-interval '7 days' union all select s.receipt_no, s.discount, s.subtotal, s.total, s.created_at, u.full_name, 'return' kind from sales s join users u on u.id=s.cashier_id where s.status='returned' and s.created_at>now()-interval '7 days' order by created_at desc limit 6`)).map((row: any)=>({receiptNo:row.receipt_no,kind:row.kind,cashier:row.full_name,total:Number(row.total),createdAt:row.created_at})),
+      suspicious: (await sql.unsafe(`select s.receipt_no, s.discount, s.subtotal, s.total, s.created_at, u.full_name, 'discount' kind from sales s join users u on u.id=s.cashier_id where s.status='completed' and ${periodWhere} and s.subtotal>0 and s.discount/s.subtotal>=0.2 and s.created_at>now()-interval '7 days' union all select s.receipt_no, s.discount, s.subtotal, s.total, s.created_at, u.full_name, 'return' kind from sales s join users u on u.id=s.cashier_id where s.status='returned' and ${periodWhere} and s.created_at>now()-interval '7 days' order by created_at desc limit 6`)).map((row: any)=>({receiptNo:row.receipt_no,kind:row.kind,cashier:row.full_name,total:Number(row.total),createdAt:row.created_at})),
     });
   } catch (error) {
     console.error("dashboard.get", error);void logSystemError("dashboard.get", error);

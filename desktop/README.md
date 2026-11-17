@@ -1,14 +1,30 @@
-# RestaMarket Windows tətbiqi — 0.6.4
+# RestaMarket Windows tətbiqi — 0.6.5
 
-Yeni quraşdırıcının çıxış yolu: `desktop-release/v0.6.4/RestaMarket-Setup-0.6.4.exe`.
+Yeni quraşdırıcının çıxış yolu: `desktop-release/v0.6.5/RestaMarket-Setup-0.6.5.exe`.
 0.6.2 və sonrakı versiyalarda baş rəhbər hesabı ilə **RestaMarket → Yeniləmələr**
 menyusundan imzalanmış onlayn yeniləməni yoxlayın. Quraşdırmadan əvvəl təsdiq və
 yerli baza/şəkillərin yoxlanmış ehtiyat nüsxəsi tələb olunur.
 Proqram + cari lokal məlumatlar üçün `npm run desktop:transfer` işlədin. Nəticə
-`desktop-release/RestaMarket-Kocurme-0.6.4-TARIX` qovluğunda quraşdırıcı,
+`desktop-release/RestaMarket-Kocurme-0.6.5-TARIX` qovluğunda quraşdırıcı,
 `RestaMarket-data.birkassa`, yoxlama heşləri və `OXU-KOCURME.txt` olacaq.
 `.exe` özü mağaza məlumatlarını daşımır. Qovluğun hamısını köçürün.
 Ətraflı istifadəçi təlimatı: `desktop/TRANSFER.txt`.
+
+Baş rəhbər **RestaMarket → Məlumatlarla başqa kompüterə köçür** menyusundan və ya
+**Tənzimləmələr → Məlumatların qorunması** bölməsindən məxfi paket yarada bilər.
+Proqram əvvəl imzalanmış quraşdırıcını yoxlayır, sonra yerli serveri dayandıraraq
+mövcud bazanı heç bir miqrasiya işlətmədən ixrac edir. Paket ayrıca müvəqqəti bazaya
+tam bərpa olunub bütün cədvəllər və sequence vəziyyətləri müqayisə edilir. Qovluğun
+hamısını şəxsi disklə köçürün. Yeni kompüterdə Setup-dan sonra `.birkassa` faylını
+iki dəfə açın və bərpanı təsdiqləyin. Bu, iki bazanı birləşdirmir.
+
+**Satış dövrünü sıfırla** satışları silmir: hesabatların cari dövrünü yenidən
+başladır. Əvvəl bütün kassa növbələri bağlanır, səbəb və `YENİ DÖVR` təsdiqi
+yazılır, ayrıca qovluq/diskdə yoxlanmış ehtiyat saxlanır və baş rəhbər native
+təsdiq verir. Köhnə çeklər, stok, sifarişlərin ödənilmiş mühafizəsi, maaş və xərclər
+qalır. Tarixçəyə hesabat/maliyyə bölməsində **Bütün dövrlər / Arxiv** seçimi ilə
+baxılır; tarix filtrləri də tətbiq edilir. Xərclər sıfırlanmadığı üçün yeni dövrdə
+xalis nəticə mənfi görünə bilər. Veb və adi işçi bu funksiyanı işlədə bilməz.
 
 Satış, stok, istifadəçi, maliyyə və çek məlumatları kompüterdə ayrıca PostgreSQL bazasında saxlanır. Kassa və endirilmiş şəkillər internet olmadan işləyir. Yeni veb sifarişləri və mesaj xidmətləri internet tələb edir.
 

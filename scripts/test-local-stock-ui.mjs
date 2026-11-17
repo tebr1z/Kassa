@@ -42,14 +42,21 @@ for(const role of roles)for(const local of [false,undefined,true]){
 for(const name of ['loadProducts','loadDashboard']){
  const fn=home.body.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text===name);assert.ok(fn);
  let requests=0;
- const run=new Function('auth','fetch','setDataStatus','setProductList','setDashboard','setDashboardError','archivedProductIds',compile(fn.getText(ast))+'return '+name+'();');
- for(const local of [false,undefined])await run({local},async()=>{requests++;throw Error('Forbidden web inventory fetch');},()=>{},()=>{},()=>{},()=>{},{current:new Set()});
+ const run=new Function('auth','fetch','setDataStatus','setProductList','setDashboard','setDashboardError','archivedProductIds','dashboardScope','dashboardRequest',compile(fn.getText(ast))+'return '+name+'();');
+ for(const local of [false,undefined])await run({local},async()=>{requests++;throw Error('Forbidden web inventory fetch');},()=>{},()=>{},()=>{},()=>{},{current:new Set()},'current',{current:0});
  assert.equal(requests,0,name+' itself refuses web calls, not only the initial effect');
 }
 for(const view of ['PosView','InventoryView','OrdersView','PurchasingView','ReportsView','AuditView','LocationsPanel','FinanceOverview']){
  let found=false;function scan(node){if(ts.isJsxExpression(node)&&node.expression&&node.expression.getText(ast).includes('<'+view)&&node.expression.getText(ast).startsWith('auth.local===true&&'))found=true;ts.forEachChild(node,scan);}scan(home);assert.ok(found,view+' cannot mount or fetch in web mode');
 }
-assert.match(source,/auth\.local===true\?<>\s*<DesktopConnection\/><SettingsView\/><\/>:<WebSettings\/>/);
+// Inspect the real settings ternary rather than requiring the old fragment's
+// exact spelling: native maintenance is now an additional LOCAL ADMIN child.
+let settingsBoundary;
+function findSettings(node){if(ts.isConditionalExpression(node)&&node.condition.getText(ast)==='auth.local===true'&&ts.isJsxSelfClosingElement(node.whenFalse)&&node.whenFalse.tagName.getText(ast)==='WebSettings')settingsBoundary=node;ts.forEachChild(node,findSettings);}findSettings(home);
+assert.ok(settingsBoundary,'Web/local settings retain an explicit local-mode boundary');assert.ok(ts.isJsxFragment(settingsBoundary.whenTrue));
+const settingsChildren=settingsBoundary.whenTrue.children.filter(node=>!ts.isJsxText(node));assert.equal(settingsChildren.length,3);
+assert.equal(settingsChildren[0].tagName.getText(ast),'DesktopConnection');assert.equal(settingsChildren[2].tagName.getText(ast),'SettingsView');
+assert.ok(ts.isJsxExpression(settingsChildren[1]));const maintenance=settingsChildren[1].expression;assert.ok(ts.isBinaryExpression(maintenance));assert.equal(maintenance.operatorToken.kind,ts.SyntaxKind.AmpersandAmpersandToken);assert.equal(maintenance.left.getText(ast),'auth.user.role==="admin"');assert.equal(maintenance.right.tagName.getText(ast),'DesktopMaintenancePanel','Only local head administrators receive native maintenance');
 assert.match(source,/canReadProductData=auth\.local===true/);assert.doesNotMatch(source,/Veb kassası ayrıca baza ilə işləyir/);
 
 const variant=draft.variantDraft({id:'11111111-1111-4111-8111-111111111111',label:'',size:'40 sm',color:'Qara',kind:'Dəmir',price:20,cost_price:9,image_url:'https://res.cloudinary.com/test/image/upload/black.webp',is_active:true,attributes:{Qalınlıq:'2 mm'}});

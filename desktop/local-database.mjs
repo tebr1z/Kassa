@@ -1,5 +1,5 @@
 import {spawn} from 'node:child_process';
-import {mkdir,readFile,writeFile,access,readdir,rename,unlink,rm,cp} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,access,readdir,rename,unlink,rm,cp,lstat,realpath} from 'node:fs/promises';
 import {randomBytes,createHash,randomUUID} from 'node:crypto';
 import path from 'node:path';
 import postgres from 'postgres';
@@ -15,6 +15,65 @@ export async function findPostgres(major=''){
  const root=path.join(process.env.ProgramFiles||'C:\\Program Files','PostgreSQL');
  for(const version of (await readdir(root).catch(()=>[])).sort((a,b)=>Number(b)-Number(a))){if(major&&version!==major)continue;const bin=path.join(root,version,'bin');if(await exists(path.join(bin,'pg_ctl.exe')))return bin;}
  throw new Error('PostgreSQL tapılmadı. PostgreSQL 17+ quraşdırın və ya BIRKASSA_PG_BIN yolunu göstərin.');
+}
+// Exporting a shop must never bootstrap it. In particular, do NOT replace this
+// with openLocalDatabase: that function intentionally migrates and seeds data.
+export async function openExistingLocalDatabase(dataRoot,{pgBin}={}){
+ const root=path.resolve(dataRoot),cluster=path.join(root,'postgres'),configFile=path.join(root,'database.json');
+ for(const [file,directory] of [[root,true],[cluster,true],[configFile,false],[path.join(cluster,'PG_VERSION'),false]]){
+  const info=await lstat(file);
+  if(info.isSymbolicLink()||(directory?!info.isDirectory():!info.isFile()))throw new Error('Mövcud yerli məlumat yolu etibarlı deyil.');
+ }
+ const config=JSON.parse(await readFile(configFile,'utf8'));
+ const major=(await readFile(path.join(cluster,'PG_VERSION'),'utf8')).trim(),databaseName=config.database||'birkassa';
+ if(!/^[1-9][0-9]{0,2}$/.test(major)||!Number.isInteger(config.port)||config.port<1024||config.port>65535||
+  typeof config.password!=='string'||!config.password||config.password.length>4096||config.password.includes('\0')||
+  !/^[a-z][a-z0-9_]{0,62}$/.test(databaseName))throw new Error('Mövcud yerli baza ayarı etibarlı deyil.');
+ const bin=pgBin?path.resolve(pgBin):await findPostgres(major),environment={...process.env,PGPASSWORD:config.password,PGOPTIONS:'-c default_transaction_read_only=on'};
+ const pg=(command,args=[],extra={})=>execute(path.join(bin,command+'.exe'),args,{windowsHide:true,env:environment,...extra});
+ let owned=false,sql;
+ const normalized=value=>process.platform==='win32'?path.resolve(value).toLowerCase():path.resolve(value);
+ const noOtherClients=async connection=>{
+  const [clients]=await connection.unsafe("select count(*)::int n from pg_stat_activity where backend_type='client backend' and pid<>pg_backend_pid()");
+  if(clients.n!==0)throw new Error('RestaMarket və bazaya qoşulan digər proqramları bağlayıb köçürməni yenidən başladın.');
+ };
+ const url=new URL('postgres://127.0.0.1');url.username='birkassa';url.password=config.password;url.port=String(config.port);url.pathname='/'+databaseName;
+ try{
+  try{await pg('pg_ctl',['-D',cluster,'status']);}catch{
+   // Only an already initialized, exact existing cluster can be started here.
+   // A server started solely for export also refuses SQL writes globally.
+   await pg('pg_ctl',['-D',cluster,'-l',path.join(root,'postgres.log'),'-o',`-h 127.0.0.1 -p ${config.port} -c default_transaction_read_only=on`,'-w','start']);owned=true;
+  }
+  sql=postgres(url.href,{max:1,prepare:false,connect_timeout:5,onnotice:()=>{},connection:{default_transaction_read_only:'on',TimeZone:'UTC',application_name:'RestaMarket private transfer'}});
+  const [identity]=await sql.unsafe("select current_setting('data_directory') directory,current_setting('server_version_num')::int version,current_setting('port')::int port,host(inet_server_addr()) host,current_database() database,current_user username");
+  if(normalized(await realpath(identity.directory))!==normalized(await realpath(cluster))||identity.host!=='127.0.0.1'||identity.port!==config.port||identity.database!==databaseName||identity.username!=='birkassa'||Math.floor(identity.version/10000)!==Number(major))throw new Error('Qoşulan baza mövcud mağaza qovluğuna uyğun deyil.');
+  await noOtherClients(sql);
+  return {dataRoot:root,bin,major,async snapshot(callback){
+   await noOtherClients(sql);
+   return sql.begin('isolation level repeatable read read only',async tx=>{
+    const [{snapshot}]=await tx.unsafe('select pg_export_snapshot() snapshot');
+    const result=await callback({sql:tx,async dump(destination){
+     await pg('pg_dump',['-h','127.0.0.1','-p',String(config.port),'-U','birkassa','-d',databaseName,'-Fc','--snapshot',snapshot,'-f',destination]);
+    }});
+    await noOtherClients(tx);return result;
+   });
+  },async close(){
+   if(sql){await sql.end({timeout:2});sql=null;}
+   if(owned){
+    // Never stop another client that connected after our export began.
+    const checked=postgres(url.href,{max:1,prepare:false,connect_timeout:5,connection:{default_transaction_read_only:'on'}});
+    try{await noOtherClients(checked);}finally{await checked.end({timeout:2});}
+    await pg('pg_ctl',['-D',cluster,'-m','fast','-w','stop']);owned=false;
+   }
+  }};
+ }catch(error){
+  if(sql)await sql.end({timeout:2}).catch(()=>{});
+  if(owned){
+   const checked=postgres(url.href,{max:1,prepare:false,connect_timeout:5,connection:{default_transaction_read_only:'on'}});
+   try{await noOtherClients(checked);await checked.end({timeout:2});await pg('pg_ctl',['-D',cluster,'-m','fast','-w','stop']);}catch{await checked.end({timeout:2}).catch(()=>{});}
+  }
+  throw error;
+ }
 }
 export async function openLocalDatabase(dataRoot,projectRoot,{port=55432}={}){
  if(!Number.isInteger(port)||port<1024||port>65535)throw new Error('Yanlış PostgreSQL portu.');

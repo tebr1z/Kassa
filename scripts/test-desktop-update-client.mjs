@@ -48,6 +48,11 @@ try{
  await writeFile(downloaded.file,Buffer.alloc(bytes.length));await assert.rejects(()=>client.revalidateDownloaded(),expectCode('UPDATE_HASH_MISMATCH'));
  const noUpdateManifest=manifest({version:'0.6.1',file:{...manifest().file,url:'https://kassa.nex.autos/desktop-updates/win-x64/stable/0.6.1/RestaMarket-Setup-0.6.1.exe'}});
  const noUpdate=newClient(async()=>response(envelope(noUpdateManifest)));assert.equal((await noUpdate.check()).available,false);await assert.rejects(()=>noUpdate.download(),expectCode('UPDATE_NOT_AVAILABLE'));
+ const transferCopy=newClient(async url=>response(url===feedUrl?envelope(noUpdateManifest):bytes));assert.equal((await transferCopy.check()).available,false);
+ const currentInstaller=await transferCopy.downloadForTransfer();assert.deepEqual(await readFile(currentInstaller.file),bytes,'A private transfer package may include the signed current installer');
+ await assert.rejects(()=>transferCopy.download(),expectCode('UPDATE_NOT_AVAILABLE'),'Normal update still rejects reinstalling current version');
+ await assert.rejects(()=>transferCopy.revalidateDownloaded(),expectCode('UPDATE_NOT_AVAILABLE'),'Transfer copying cannot weaken installation eligibility');
+ await writeFile(currentInstaller.file,Buffer.alloc(bytes.length));await assert.rejects(()=>verifyInstallerFile(currentInstaller.file,currentInstaller.manifest),expectCode('UPDATE_HASH_MISMATCH'));
  const unChecked=newClient(async()=>{throw Error('Must not fetch');});await assert.rejects(()=>unChecked.download(),expectCode('UPDATE_NOT_AVAILABLE'));
  for(const status of [301,302,307,404,500]){const bad=newClient(async()=>response('',{status}));await assert.rejects(()=>bad.check(),expectCode('UPDATE_NETWORK_ERROR'));}
  const redirect=newClient(async()=>({status:200,redirected:true,url:'https://evil.example',body:new ReadableStream(),headers:new Headers()}));await assert.rejects(()=>redirect.check(),expectCode('UPDATE_NETWORK_ERROR'));

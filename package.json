@@ -1,6 +1,6 @@
 {
   "name": "birkassa-system",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "private": true,
   "main": "desktop/main.cjs",
   "productName": "RestaMarket",
@@ -35,6 +35,8 @@
     "test:desktop-sync": "node scripts/test-desktop-sync.mjs",
     "test:desktop-web": "node scripts/test-desktop-order-protocol.mjs && node scripts/test-desktop-support-contract.mjs && node scripts/test-desktop-web-catalog-protocol.mjs && node scripts/test-desktop-outbound-conflicts.mjs && node scripts/test-desktop-catalog-race.mjs && node scripts/test-desktop-status-publication.mjs && node scripts/test-desktop-web-ui.mjs",
     "test:desktop-web-data": "node scripts/test-desktop-order-autoimport.mjs && node scripts/test-desktop-web-catalog.mjs && node scripts/test-desktop-web-support.mjs",
+    "test:desktop-maintenance": "node scripts/test-desktop-maintenance.mjs && node scripts/test-desktop-maintenance-ui.mjs",
+    "test:desktop-maintenance-data": "node scripts/test-desktop-transfer.mjs && node scripts/test-sales-period.mjs",
     "build:desktop": "next build --webpack && node scripts/test-web-build.mjs",
     "desktop:runtime": "node scripts/prepare-postgres-runtime.mjs",
     "desktop:update:key": "node scripts/init-desktop-update-key.mjs",
@@ -103,17 +105,23 @@
     "appId": "az.birkassa.desktop",
     "productName": "RestaMarket",
     "artifactName": "RestaMarket-Setup-${version}.${ext}",
+    "fileAssociations": [
+      {"ext":"birkassa","name":"RestaMarket məlumat ehtiyatı","description":"RestaMarket məlumatlarının bərpası","role":"Editor"}
+    ],
     "win": {
       "icon": "desktop/assets/restamarket.ico",
       "executableName": "RestaMarket"
     },
     "directories": {
-      "output": "desktop-release/v0.6.4",
+      "output": "desktop-release/v0.6.5",
       "app": "desktop"
     },
     "files": [
       "main.cjs",
       "local-database.mjs",
+      "transfer-package.mjs",
+      "maintenance.cjs",
+      "maintenance-labels.cjs",
       "package.json",
       "preload.cjs",
       "menu-language.cjs",

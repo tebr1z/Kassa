@@ -138,12 +138,16 @@ class DesktopUpdateClient{
   }catch(error){if(operation.signal.aborted)throw cancelled();if(error?.code?.startsWith('UPDATE_'))throw error;throw failure('UPDATE_NETWORK_ERROR','Yeniləmə serverinə qoşulmaq mümkün olmadı.');}
   finally{operation.finish();}
  }
- async download(){
+ async download(){return this.#download(false);}
+ // Copying the signed current installer into a PRIVATE transfer package is
+ // allowed. The normal updater and install revalidation still reject equality.
+ async downloadForTransfer(){return this.#download(true);}
+ async #download(allowCurrentForTransfer){
   const operation=this.#start(10*60*1000);let partial,handle;
   try{
    if(!this.#checked)throw failure('UPDATE_NOT_AVAILABLE','Əvvəlcə yeniləmələri yoxlayın.');
    const {envelope}=this.#checked,manifest=this.#verify(envelope);
-   if(compareVersions(manifest.version,this.#version)<=0||compareVersions(manifest.version,this.#highestVersion)<0)throw failure('UPDATE_NOT_AVAILABLE','Yeni yeniləmə yoxdur.');
+   if((allowCurrentForTransfer?compareVersions(manifest.version,this.#version)<0:compareVersions(manifest.version,this.#version)<=0)||compareVersions(manifest.version,this.#highestVersion)<0)throw failure('UPDATE_NOT_AVAILABLE','Yeni yeniləmə yoxdur.');
    await mkdir(this.#cache,{recursive:true,mode:0o700});const directory=await lstat(this.#cache);
    if(!directory.isDirectory()||directory.isSymbolicLink())throw failure('UPDATE_DOWNLOAD_FAILED','Yeniləmə qovluğu təhlükəsiz deyil.');
    const file=path.join(this.#cache,`RestaMarket-Setup-${manifest.version}-${manifest.file.sha256}.exe`);
