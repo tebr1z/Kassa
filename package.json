@@ -1,6 +1,6 @@
 {
   "name": "birkassa-system",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "private": true,
   "main": "desktop/main.cjs",
   "productName": "RestaMarket",
@@ -35,7 +35,7 @@
     "test:desktop-sync": "node scripts/test-desktop-sync.mjs",
     "test:desktop-web": "node scripts/test-desktop-order-protocol.mjs && node scripts/test-desktop-support-contract.mjs && node scripts/test-desktop-web-catalog-protocol.mjs && node scripts/test-desktop-outbound-conflicts.mjs && node scripts/test-desktop-catalog-race.mjs && node scripts/test-desktop-status-publication.mjs && node scripts/test-desktop-web-ui.mjs",
     "test:desktop-web-data": "node scripts/test-desktop-order-autoimport.mjs && node scripts/test-desktop-web-catalog.mjs && node scripts/test-desktop-web-support.mjs",
-    "test:desktop-maintenance": "node scripts/test-desktop-maintenance.mjs && node scripts/test-desktop-maintenance-ui.mjs",
+    "test:desktop-maintenance": "node scripts/test-desktop-maintenance.mjs && node scripts/test-desktop-maintenance-ui.mjs && node scripts/test-sales-period-proxy.mjs",
     "test:desktop-maintenance-data": "node scripts/test-desktop-transfer.mjs && node scripts/test-sales-period.mjs",
     "build:desktop": "next build --webpack && node scripts/test-web-build.mjs",
     "desktop:runtime": "node scripts/prepare-postgres-runtime.mjs",
@@ -113,7 +113,7 @@
       "executableName": "RestaMarket"
     },
     "directories": {
-      "output": "desktop-release/v0.6.5",
+      "output": "desktop-release/v0.6.6",
       "app": "desktop"
     },
     "files": [

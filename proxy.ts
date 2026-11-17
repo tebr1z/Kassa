@@ -25,6 +25,7 @@ const rules:Rule[]=[
   {prefix:"/api/inventory-counts",read:["admin","manager","warehouse"],write:["admin","manager","warehouse"]},
   {prefix:"/api/purchase-orders",read:["admin","manager","warehouse"],write:["admin","manager","warehouse"]},
   {prefix:"/api/suppliers",read:["admin","manager","warehouse","accountant"],write:["admin","manager","warehouse"]},
+  {prefix:'/api/sales-period',read:['admin'],write:['admin']},
   {prefix:"/api/sales",read:["admin","manager","cashier"],write:["admin","manager","cashier"]},
   {prefix:"/api/shifts",read:["admin","manager","cashier"],write:["admin","manager","cashier"]},
   {prefix:"/api/orders",read:["admin","manager","cashier"],write:["admin","manager","cashier"]},
