@@ -1,0 +1,11 @@
+module restamarket_central_pg_nnp 1.0;
+
+require {
+    type init_t;
+    type postgresql_t;
+    class process2 nnp_transition;
+}
+
+# Permit systemd's PostgreSQL transition while retaining NoNewPrivileges.
+# No file, network, capability, role, or database access is granted here.
+allow init_t postgresql_t:process2 nnp_transition;

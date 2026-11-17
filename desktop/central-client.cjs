@@ -48,7 +48,7 @@ async function centralIdentity(dataRoot,safeStorage){
   }
   if(!identity||Object.keys(identity).sort().join(',')!=='id,privateKeyEncrypted,publicKeyPem,schema'||identity.schema!==1||!DEVICE_ID.test(identity.id)||typeof identity.publicKeyPem!=='string'||identity.publicKeyPem.length>2048||!identity.publicKeyPem.startsWith('-----BEGIN PUBLIC KEY-----')||typeof identity.privateKeyEncrypted!=='string'||identity.privateKeyEncrypted.length>24576)throw failure();
   const encrypted=Buffer.from(identity.privateKeyEncrypted,'base64');if(encrypted.length<32||encrypted.toString('base64')!==identity.privateKeyEncrypted)throw failure();
-  const decrypted=safeStorage.decryptString(encrypted);if(typeof decrypted!=='string'||decrypted.length>4096)throw failure();
+  let decrypted;try{decrypted=safeStorage.decryptString(encrypted);}catch{throw Error('Mövcud kompüter açarının Windows istifadəçisi və ya təhlükəsizlik profili uyğun deyil. Açar dəyişdirilmədi; açarı yenidən yaratmadan profil miqrasiyası tələb olunur.');}if(typeof decrypted!=='string'||decrypted.length>4096)throw failure();
   const privateKey=createPrivateKey({key:decrypted,format:'pem',type:'pkcs8'});if(privateKey.asymmetricKeyType!=='ed25519'||createPublicKey(privateKey).export({type:'spki',format:'pem'})!==identity.publicKeyPem)throw failure();
   const registration=path.join(directory,'RestaMarket-komputer-qeydiyyati.json'),publicRegistration={schema:1,id:identity.id,publicKeyPem:identity.publicKeyPem,active:true};
   try{const existing=JSON.parse(await privateRead(registration));if(JSON.stringify(existing)!==JSON.stringify(publicRegistration))throw failure();}catch(error){if(error.code!=='ENOENT')throw failure();await atomicNewFile(registration,JSON.stringify(publicRegistration,null,2));}

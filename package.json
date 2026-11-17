@@ -37,7 +37,7 @@
     "test:desktop-web-data": "node scripts/test-desktop-order-autoimport.mjs && node scripts/test-desktop-web-catalog.mjs && node scripts/test-desktop-web-support.mjs",
     "test:desktop-maintenance": "node scripts/test-desktop-maintenance.mjs && node scripts/test-desktop-maintenance-ui.mjs && node scripts/test-sales-period-proxy.mjs && node scripts/test-central-access.mjs",
     "test:desktop-maintenance-data": "node scripts/test-desktop-transfer.mjs && node scripts/test-sales-period.mjs && node scripts/test-sales-period-quota.mjs && node scripts/test-central-backups.mjs",
-    "test:central-desktop": "node scripts/test-central-gateway.mjs && node scripts/test-central-client.mjs && node scripts/test-central-provision-plan.mjs",
+    "test:central-desktop": "node scripts/test-central-gateway.mjs && node scripts/test-central-client.mjs && node scripts/test-central-provision-plan.mjs && node scripts/test-central-device-probe.mjs",
     "build:desktop": "next build --webpack && node scripts/test-web-build.mjs",
     "desktop:runtime": "node scripts/prepare-postgres-runtime.mjs",
     "desktop:update:key": "node scripts/init-desktop-update-key.mjs",

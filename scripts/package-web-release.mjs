@@ -20,10 +20,15 @@ await cp('scripts/central-reset-policy.sql',path.join(output,'scripts/central-re
 await cp('scripts/provision-central-server.mjs',path.join(output,'scripts/provision-central-server.mjs'));
 await cp('scripts/central-operator-backup.mjs',path.join(output,'scripts/central-operator-backup.mjs'));
 await cp('scripts/central-devices.mjs',path.join(output,'scripts/central-devices.mjs'));
+await cp('scripts/CENTRAL-OPERATIONS.txt',path.join(output,'scripts/CENTRAL-OPERATIONS.txt'));
+await cp('scripts/selinux',path.join(output,'scripts/selinux'),{recursive:true});
 await mkdir(path.join(output,'desktop'),{recursive:true});
 for(const name of ['central-gateway.mjs','central-protocol.cjs','backup-archive.mjs','database-fingerprint.mjs'])await cp(path.join('desktop',name),path.join(output,'desktop',name));
-// The migration CLI uses dotenv; server-only tracing may not include this dependency.
-await cp('node_modules/dotenv',path.join(output,'node_modules/dotenv'),{recursive:true});
+// Operator CLIs execute outside Next's bundle, so tracing may omit these modules.
+for(const name of ['dotenv','postgres'])await cp(path.join('node_modules',name),path.join(output,'node_modules',name),{recursive:true});
+const {createRequire}=await import('node:module');
+const releaseRequire=createRequire(path.join(output,'server.js'));
+for(const name of ['dotenv','postgres'])releaseRequire.resolve(name);
 const entries=await readdir(output);
 if(entries.some(name=>/^(?:\.env|\.private|\.local|\.public-media|media$|desktop-release$|outputs$|work$)/.test(name)))throw new Error('Private/runtime state must not be packaged.');
 const pkg=JSON.parse(await readFile('package.json','utf8'));

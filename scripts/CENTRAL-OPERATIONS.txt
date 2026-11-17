@@ -1,0 +1,61 @@
+RESTAMARKET CENTRAL INVENTORY — OPERATOR NOTES
+
+Trust boundary
+- The public shop continues using its existing PostgreSQL instance and role.
+- Inventory PostgreSQL17 is loopback-only on 55433. Its backend and signed-device
+  gateway listen only on 127.0.0.1:5791 and :5790 respectively.
+- Only the SSL vhost proxies /desktop-private/. A device signature does not
+  replace staff authentication or role checks. Never put SQL credentials or a
+  shared enrollment secret in an EXE, Git, or the public update directory.
+
+Preparation
+- Verify the Linux artifact checksum/release commit before extraction. CLI
+  dependencies include postgres and dotenv independently of Next tracing.
+- Use the fixed private staging paths documented in provision-central-server.mjs.
+  Keep all archives, manifests and pairing settings root-only. Do not open the
+  existing website environment or modify its PostgreSQL configuration.
+- --prepare claims a root-only receipt before creating the new cluster. It does
+  not start the backend/gateway/timer. Review all restored fingerprints first.
+
+SELinux enforcing hosts
+- Keep SELinux and service NoNewPrivileges enabled. If the actual AVC explicitly
+  denies init_t -> postgresql_t process2 nnp_transition, the adjacent reviewed
+  selinux/restamarket_central_pg_nnp.te grants only that domain transition.
+  Compile with checkmodule/semodule_package and load as root; never generate a
+  broad allow rule from unrelated audit events or disable SELinux.
+- Label only the new PostgreSQL17 executable, new data/socket paths and 55433
+  using the platform's PostgreSQL contexts. Do not relabel the public cluster.
+- Preserve original SELinux contexts during atomic SSL configuration changes
+  and rollbacks. Validate Apache configuration before reload and verify both
+  public home 200 and unsigned private auth 401 afterwards.
+
+Interrupted preparation
+- Normal reruns reject a partial receipt. Never delete/reinitialize a cluster,
+  overwrite the receipt, or replay pg_restore to bypass this protection.
+- Explicit --resume-empty-cluster accepts only the owned, pinned empty stage.
+- Explicit --resume-restored-source accepts only the original pinned cluster
+  with no app roles/config/control policy, verifies the retained dump/media and
+  ALL source table/sequence fingerprints, and never restores the database again.
+- Any later partial stage requires a separate deliberate operator investigation.
+
+Windows device profile
+- Main and enrollment use the same BirKassa userData AND sessionData paths.
+- Legacy enrollment under a different profile must not rotate the device key.
+  With RestaMarket closed, the explicit same-key migration helper preserves ID
+  and public key, verifies a fresh target process, and retains a private encrypted
+  rollback copy. It never sends the key to the server or changes profile settings.
+- The read-only device probe checks signed HTTPS, replay/path binding and staff
+  gates. Its parent must remove only its own temporary profile after child exit.
+  Manual profile probes read actual encrypted profiles and must not run in CI.
+
+Operation and recovery
+- Enable central services and the daily full operator-backup timer only after
+  health checks. Full private operator dumps include restamarket_control.
+- The master reporting-period quota has three successful lifetime uses; history
+  and stock remain. Failed/cancelled actions consume none. Ordinary client
+  snapshots exclude the protected ledger and central restore is disabled in EXE.
+- Verify disaster recovery preserves both quota counter and ledger. Root is a
+  trusted operator and can alter the database: do not promise absolute secrecy
+  against a compromised server/Windows administrator.
+- Retain the original local database and private transfer archive until the
+  central rollout and recovery checks are accepted. Never publish these files.

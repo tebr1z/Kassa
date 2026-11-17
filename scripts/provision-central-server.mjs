@@ -4,6 +4,7 @@ import {mkdir,readFile,writeFile,lstat,readdir,chown,chmod,rename,rm,statfs} fro
 import {createHash,createPublicKey,randomBytes,randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {createGunzip} from 'node:zlib';
 import {readArchive} from '../desktop/backup-archive.mjs';
 
 // Operator-only, first-time provisioning. Never import a desktop startup module,
@@ -32,21 +33,66 @@ function validateManifest(manifest,archive){
 
 // Pure plan: callers cannot provide filesystem/SQL targets. Runtime checks below
 // independently establish every fact before this plan can authorize mutations.
-export function buildCentralPlan({commit,release,postgresVersion,platform,uid,trustedRelease,stage,existing={}}){
+export function buildCentralPlan({commit,release,postgresVersion,platform,uid,trustedRelease,stage,existing={},resumeEmptyCluster=false,resumeRestoredSource=false}){
+ required(!(resumeEmptyCluster&&resumeRestoredSource),'Choose exactly one explicit recovery point');
  required(platform==='linux'&&uid===0,'Central provisioning requires an explicit Linux root operator');
  required(commitPattern.test(commit||'')&&release?.commit===commit&&release.platform==='linux'&&release.arch==='x64'&&typeof release.version==='string'&&trustedRelease===true,'Only the exact trusted Linux release can be provisioned');
  required(/^postgres \(PostgreSQL\) 17\.[0-9]+(?:\s|$)/.test(postgresVersion||''),'The separately verified PostgreSQL17 binaries are required');
  validateManifest(stage?.manifest,stage?.archive);registration(stage?.registration);
  for(const name of ['manifestSha256','registrationSha256','pairingSha256'])required(hashPattern.test(stage?.[name]),'Missing staged input checksum');
  const identity={commit,archiveSha256:stage.archive.sha256,manifestSha256:stage.manifestSha256,registrationSha256:stage.registrationSha256,pairingSha256:stage.pairingSha256};
- if(existing.receipt){required(existing.receipt.schema===1&&existing.receipt.status==='prepared'&&Object.entries(identity).every(([key,value])=>existing.receipt[key]===value),'Partial or mismatched provisioning receipt: explicit operator recovery is required');return {action:'verify-existing',identity,targets:centralPaths,units:centralUnits,postgresPort:pgPort,backendPort:5791,gatewayPort:5790};}
+ if(existing.receipt){
+  required(existing.receipt.schema===1&&Object.entries(identity).every(([key,value])=>existing.receipt[key]===value),'Partial or mismatched provisioning receipt: explicit operator recovery is required');
+  if(resumeEmptyCluster||resumeRestoredSource){
+   const receipt=existing.receipt;required(receipt.status==='preparing'&&uuidPattern.test(receipt.deploymentId||'')&&receipt.release==='/opt/restamarket-central/releases/'+commit&&receipt.database===database&&receipt.postgresPort===pgPort&&!receipt.protectedFiles&&existing.cluster===true&&!existing.configuration&&existing.resumeTargetsEmpty===true&&existing.units?.length===1&&existing.units[0]===centralUnits[0],'Only the explicitly owned, still empty, interrupted PostgreSQL stage may resume');
+   if(resumeRestoredSource)required(/^[1-9][0-9]{15,19}$/.test(receipt.emptyClusterSystemIdentifier||'')&&existing.restoredWorkPresent===true,'Restored-source recovery requires the original pinned cluster and exact retained work');
+   return {action:resumeRestoredSource?'resume-restored-source':'resume-empty-cluster',identity,targets:centralPaths,units:centralUnits,postgresPort:pgPort,backendPort:5791,gatewayPort:5790,startBackend:false,startGateway:false,startBackupTimer:false};
+  }
+  required(existing.receipt.status==='prepared','Partial or mismatched provisioning receipt: explicit operator recovery is required');return {action:'verify-existing',identity,targets:centralPaths,units:centralUnits,postgresPort:pgPort,backendPort:5791,gatewayPort:5790};
+ }
+ required(!resumeEmptyCluster&&!resumeRestoredSource,'An explicit recovery requires its original preparing receipt');
  required(!existing.cluster&&!existing.nonemptyTargets&&!existing.units?.length&&!existing.configuration,'Existing central targets without a complete ownership receipt cannot be reused');
  return {action:'prepare-new',identity,targets:centralPaths,units:centralUnits,postgresPort:pgPort,backendPort:5791,gatewayPort:5790,expectedCounts,publicSiteChanges:false,publicPostgresChanges:false,startBackend:false,startGateway:false,startBackupTimer:false};
 }
 
-async function execute(program,args,{input,inputStream,accepted=[0],maximum=16*1024*1024,environment={}}={}){
+// The only supported recovery point is before the first inventory database or
+// application role exists. Both the live server and on-disk control file must
+// identify this exact freshly initialized cluster. There is no drop/reinitialize
+// fallback, no generalized resume and no way to skip archive verification.
+export function validateEmptyClusterFacts({receipt,identity,controlIdentifier,databases,roles,userObjects}){
+ required(identity?.port===String(pgPort)&&/^17[0-9]{4}$/.test(identity.version||'')&&identity.directory===centralPaths.postgres&&identity.username===operator,'Empty-cluster recovery connected to the wrong PostgreSQL instance');
+ required(/^[1-9][0-9]{15,19}$/.test(identity.systemIdentifier||'')&&identity.systemIdentifier===controlIdentifier&&(!receipt.emptyClusterSystemIdentifier||receipt.emptyClusterSystemIdentifier===identity.systemIdentifier),'Empty-cluster system identifier changed or does not match its control file');
+ required(JSON.stringify(databases)===JSON.stringify(['postgres','template0','template1'])&&JSON.stringify(roles)===JSON.stringify([operator])&&userObjects===0,'The interrupted cluster is no longer empty; explicit operator recovery is required');
+ return {systemIdentifier:identity.systemIdentifier};
+}
+export function validateRestoredSourceFacts({receipt,identity,controlIdentifier,databases,roles,userObjects,controlSchemas,inventoryOwner}){
+ required(receipt.emptyClusterSystemIdentifier===identity?.systemIdentifier,'Restored-source recovery requires the previously pinned system identifier');
+ const checked=validateEmptyClusterFacts({receipt,identity,controlIdentifier,databases:['postgres','template0','template1'],roles,userObjects});
+ required(JSON.stringify(databases)===JSON.stringify(['postgres',database,'template0','template1'])&&controlSchemas===0&&inventoryOwner===operator,'Restored-source recovery found unexpected databases, control policy or inventory ownership');return checked;
+}
+
+// Stream-verify the original archive against retained files without extracting,
+// restoring or rewriting anything. Injectable lookup keeps its tests pure.
+export async function verifyRetainedArchive(input,lookup){
+ const stream=input.pipe(createGunzip()),iterator=stream[Symbol.asyncIterator]();input.on('error',error=>stream.destroy(error));let buffer=Buffer.alloc(0),total=0,finished=false;const names=new Set();
+ async function take(length){const parts=[];let left=length;while(left){if(!buffer.length){const next=await iterator.next();required(!next.done,'Retained source archive is truncated');buffer=Buffer.from(next.value);}const size=Math.min(left,buffer.length);parts.push(buffer.subarray(0,size));buffer=buffer.subarray(size);left-=size;}return Buffer.concat(parts);}
+ try{
+  required((await take(19)).equals(Buffer.from('BIRKASSA_BACKUP_V1\n')),'Retained source archive format is invalid');
+  for(let count=0;count<50000;count++){
+   const length=(await take(4)).readUInt32BE();if(length===0){finished=true;break;}required(length<=4096,'Retained archive header is invalid');const header=JSON.parse((await take(length)).toString('utf8'));
+   required((header.name==='database.dump'||/^media\/[a-f0-9]{64}\.(bin|json)$/.test(header.name))&&!names.has(header.name)&&Number.isSafeInteger(header.size)&&header.size>=0&&header.size<=1024*1024*1024&&hashPattern.test(header.sha256),'Retained archive entry is invalid');total+=header.size;required(total<=5*1024*1024*1024,'Retained archive is too large');names.add(header.name);
+   const digest=createHash('sha256');let left=header.size;while(left){const chunk=await take(Math.min(left,65536));digest.update(chunk);left-=chunk.length;}required(digest.digest('hex')===header.sha256,'Retained archive content checksum is invalid');const file=await lookup(header.name);required(file.bytes===header.size&&file.sha256===header.sha256,'Retained extraction differs from the authorized archive');
+  }
+  required(finished&&names.has('database.dump')&&!buffer.length&&(await iterator.next()).done,'Retained archive trailer is invalid');return [...names].sort();
+ }finally{input.destroy();stream.destroy();}
+}
+export async function waitForCentralPostgres(probe=async()=>{const result=await execute('/usr/sbin/runuser',['-u',operator,'--',centralPaths.pgBin+'/pg_isready','-h',centralPaths.socket,'-p',String(pgPort),'-U',operator,'-d','postgres','-t','1'],{accepted:[0,1,2,3],timeout:2000});return result.code===0;},delay=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds))){
+ for(let attempt=0;attempt<15;attempt++){try{if(await probe())return;}catch{}if(attempt<14)await delay(500);}fail('The exact isolated PostgreSQL endpoint did not become ready within the bounded startup check');
+}
+
+async function execute(program,args,{input,inputStream,accepted=[0],maximum=16*1024*1024,environment={},timeout=0}={}){
  return new Promise((resolve,reject)=>{
-  const child=spawn(program,args,{stdio:['pipe','pipe','pipe'],env:{PATH:'/usr/local/bin:/usr/bin:/bin:/usr/sbin',LANG:'C.UTF-8',...environment}});let out='',err='',overflow=false;
+  const child=spawn(program,args,{stdio:['pipe','pipe','pipe'],...(timeout?{timeout}:{}),env:{PATH:'/usr/local/bin:/usr/bin:/bin:/usr/sbin',LANG:'C.UTF-8',...environment}});let out='',err='',overflow=false;
   child.stdout.on('data',part=>{out+=part;if(Buffer.byteLength(out)>maximum){overflow=true;child.kill('SIGTERM');}});child.stderr.on('data',part=>{if(err.length<65536)err+=part;});
   child.once('error',()=>reject(new Error('Required operator command could not start: '+path.basename(program))));
   child.once('exit',code=>{if(accepted.includes(code)&&!overflow)resolve({code,output:out.trim()});else{const error=new Error('Operator step failed: '+path.basename(program));Object.defineProperty(error,'privateDiagnostic',{value:err});reject(error);}});
@@ -65,11 +111,23 @@ async function directory(file,uid=0,gid=0,mode=0o700){
  const item=await exists(file);if(!item)await mkdir(file,{mode});else required(item.isDirectory()&&!item.isSymbolicLink(),'Unsafe central directory');await chown(file,uid,gid);await chmod(file,mode);
 }
 async function newFile(file,content,{uid=0,gid=0,mode=0o600}={}){await writeFile(file,content,{flag:'wx',mode});await chown(file,uid,gid);await chmod(file,mode);}
-async function account(name,home){
+async function account(name,home,{existingOnly=false}={}){
  let result=await execute('/usr/bin/getent',['passwd',name],{accepted:[0,2]});
- if(result.code===2){await execute('/usr/sbin/useradd',['--system','--no-create-home','--home-dir',home,'--shell','/sbin/nologin','--user-group',name]);result=await execute('/usr/bin/getent',['passwd',name]);}
+ if(result.code===2){required(!existingOnly,'An interrupted deployment service account is missing');await execute('/usr/sbin/useradd',['--system','--no-create-home','--home-dir',home,'--shell','/sbin/nologin','--user-group',name]);result=await execute('/usr/bin/getent',['passwd',name]);}
  const row=result.output.split(':');required(row.length===7&&row[0]===name&&Number(row[2])>0&&Number(row[3])>0&&row[5]===home&&['/sbin/nologin','/usr/sbin/nologin'].includes(row[6]),'Existing service account does not belong to this deployment');
  return {uid:Number(row[2]),gid:Number(row[3])};
+}
+async function replaceReceipt(receipt){const temporary=centralPaths.receipt+'.'+randomUUID()+'.tmp';await newFile(temporary,JSON.stringify(receipt,null,2));await rename(temporary,centralPaths.receipt);}
+async function checkResumeDirectories({pgAccount,appAccount,gatewayAccount,release}){
+ for(const [target,uid]of [[centralPaths.postgres,pgAccount.uid],[centralPaths.socket,pgAccount.uid],[centralPaths.data,appAccount.uid],[centralPaths.operatorBackups,pgAccount.uid]]){const info=await noLinks(target);required(info.uid===uid&&(info.mode&0o077)===0,'Interrupted central directory ownership or permissions changed');}
+ const privateInfo=await noLinks(centralPaths.private,{rootOwned:true});required(privateInfo.gid===gatewayAccount.gid&&(privateInfo.mode&0o777)===0o710,'Interrupted operator receipt directory changed');
+ const unitFile=path.join(centralPaths.units,centralUnits[0]);await noLinks(unitFile,{fileOnly:true,rootOwned:true});required(await hashFile(unitFile)===sha(units(release).get(centralUnits[0])),'Interrupted PostgreSQL unit changed; automatic recovery is forbidden');
+ const versionFile=path.join(centralPaths.postgres,'PG_VERSION');await noLinks(versionFile,{fileOnly:true});required((await readFile(versionFile,'utf8')).trim()==='17','Interrupted cluster is not PostgreSQL17');
+}
+async function checkRetainedWork(archiveFile,work){
+ await noLinks(work,{rootOwned:true,privateMode:true});const actual=[];
+ for(const entry of await readdir(work,{withFileTypes:true})){if(entry.name==='database.dump'&&entry.isFile())actual.push(entry.name);else if(entry.name==='media'&&entry.isDirectory()&&!entry.isSymbolicLink()){await noLinks(path.join(work,'media'),{rootOwned:true});for(const media of await readdir(path.join(work,'media'),{withFileTypes:true})){required(media.isFile()&&!media.isSymbolicLink()&&/^[a-f0-9]{64}\.(bin|json)$/.test(media.name),'Unexpected retained media entry');actual.push('media/'+media.name);}}else fail('Unexpected retained restore work entry');}
+ const verified=await verifyRetainedArchive(createReadStream(archiveFile),async name=>{const file=path.join(work,...name.split('/')),info=await noLinks(file,{fileOnly:true,rootOwned:true});return {bytes:info.size,sha256:await hashFile(file)};});required(JSON.stringify(actual.sort())===JSON.stringify(verified),'Retained work has missing or extra archive files');return {dump:path.join(work,'database.dump'),media:path.join(work,'media'),files:verified.length};
 }
 async function psql(sql,db='postgres'){
  required(['postgres',database].includes(db),'Unapproved operator database');
@@ -107,11 +165,11 @@ async function verifyCompleted(receipt,release){
  return {prepared:true,alreadyPrepared:true,commit:receipt.commit,counts:receipt.counts,backendStarted:false,gatewayStarted:false,backupTimerStarted:false};
 }
 
-export async function prepareCentralServer(commit){
+export async function prepareCentralServer(commit,{resumeEmptyCluster=false,resumeRestoredSource=false}={}){
  required(process.platform==='linux'&&process.getuid?.()===0,'Run this operator command only as Linux root');required(commitPattern.test(commit||''),'An exact verified release commit is required');
  const release='/opt/restamarket-central/releases/'+commit;await noLinks(release,{rootOwned:true});
  for(const name of ['release.json','server.js','desktop/backup-archive.mjs','desktop/database-fingerprint.mjs','scripts/central-reset-policy.sql','scripts/start-central-gateway.mjs','scripts/central-operator-backup.mjs'])await noLinks(path.join(release,name),{fileOnly:true,rootOwned:true});
- const metadata=JSON.parse(await readFile(path.join(release,'release.json'),'utf8'));for(const name of ['initdb','postgres','psql','pg_restore','pg_ctl'])await noLinks(path.join(centralPaths.pgBin,name),{fileOnly:true,rootOwned:true});
+ const metadata=JSON.parse(await readFile(path.join(release,'release.json'),'utf8'));for(const name of ['initdb','postgres','psql','pg_restore','pg_ctl','pg_controldata','pg_isready'])await noLinks(path.join(centralPaths.pgBin,name),{fileOnly:true,rootOwned:true});
  const version=(await execute(centralPaths.pgBin+'/postgres',['--version'])).output;
  await noLinks(centralPaths.base,{rootOwned:true});await noLinks(centralPaths.staging,{rootOwned:true});
  const archiveFile=path.join(centralPaths.staging,'RestaMarket-data.birkassa'),manifestFile=path.join(centralPaths.staging,'transfer-manifest.json'),registrationFile=path.join(centralPaths.staging,'device-registration.json'),pairingFile=path.join(centralPaths.staging,'desktop-sync.json');
@@ -122,27 +180,48 @@ export async function prepareCentralServer(commit){
  const configuration=Boolean(await exists(centralPaths.backendEnv)||await exists(centralPaths.gatewayEnv)||await exists(centralPaths.registry));
  const foundUnits=[];for(const name of centralUnits)if(await exists(path.join(centralPaths.units,name)))foundUnits.push(name);
  let nonemptyTargets=false;for(const target of [centralPaths.postgres,centralPaths.socket,centralPaths.data,centralPaths.private,centralPaths.operatorBackups]){const info=await exists(target);if(info){required(info.isDirectory()&&!info.isSymbolicLink(),'Unsafe existing central target');if((await readdir(target)).length)nonemptyTargets=true;}}
- const plan=buildCentralPlan({commit,release:metadata,postgresVersion:version,platform:process.platform,uid:process.getuid(),trustedRelease:true,stage,existing:{receipt:priorReceipt,cluster:Boolean(await exists(path.join(centralPaths.postgres,'PG_VERSION'))),configuration,units:foundUnits,nonemptyTargets}});
+ let resumeTargetsEmpty=false;
+ const expectedWork=priorReceipt&&uuidPattern.test(priorReceipt.deploymentId||'')?'restore-'+priorReceipt.deploymentId:null;let restoredWorkPresent=false;
+ if(resumeEmptyCluster||resumeRestoredSource){resumeTargetsEmpty=true;for(const target of [centralPaths.data,centralPaths.operatorBackups]){const info=await exists(target);if(!info||!info.isDirectory()||info.isSymbolicLink()||(await readdir(target)).length)resumeTargetsEmpty=false;}const privateEntries=await exists(centralPaths.private)?await readdir(centralPaths.private):[];if(JSON.stringify(privateEntries.sort())!==JSON.stringify(['provision-receipt.json']))resumeTargetsEmpty=false;const works=(await readdir(centralPaths.staging)).filter(name=>name.startsWith('restore-'));restoredWorkPresent=works.length===1&&works[0]===expectedWork;if(resumeRestoredSource?!restoredWorkPresent:works.length>0)resumeTargetsEmpty=false;}
+ const plan=buildCentralPlan({commit,release:metadata,postgresVersion:version,platform:process.platform,uid:process.getuid(),trustedRelease:true,stage,resumeEmptyCluster,resumeRestoredSource,existing:{receipt:priorReceipt,cluster:Boolean(await exists(path.join(centralPaths.postgres,'PG_VERSION'))),configuration,units:foundUnits,nonemptyTargets,resumeTargetsEmpty,restoredWorkPresent}});
  if(plan.action==='verify-existing')return verifyCompleted(priorReceipt,release);
  const disk=await statfs(centralPaths.base);required(Number(disk.bavail)*Number(disk.bsize)>Math.max(512*1024*1024,archiveInfo.size*8),'Not enough private disk space for a verified central restore');
  // Claim before creating any cluster, credentials or unit. A crash leaves a
  // private explicit-recovery receipt; an unattended rerun can never re-import.
- await directory(centralPaths.base,0,0,0o711);await directory(centralPaths.private);const receipt={schema:1,status:'preparing',deploymentId:randomUUID(),...plan.identity,release,database,postgresPort:pgPort,createdAt:new Date().toISOString()};await newFile(centralPaths.receipt,JSON.stringify(receipt,null,2));
- const pgAccount=await account(operator,centralPaths.postgres),appAccount=await account('rmcentral',centralPaths.data),gatewayAccount=await account('rmgateway',centralPaths.private);
+ let receipt;const restoredResuming=plan.action==='resume-restored-source',resuming=plan.action==='resume-empty-cluster'||restoredResuming,unitContents=units(release);
+ if(resuming)receipt={...priorReceipt};else{await directory(centralPaths.base,0,0,0o711);await directory(centralPaths.private);receipt={schema:1,status:'preparing',deploymentId:randomUUID(),...plan.identity,release,database,postgresPort:pgPort,createdAt:new Date().toISOString()};await newFile(centralPaths.receipt,JSON.stringify(receipt,null,2));}
+ const pgAccount=await account(operator,centralPaths.postgres,{existingOnly:resuming}),appAccount=await account('rmcentral',centralPaths.data,{existingOnly:resuming}),gatewayAccount=await account('rmgateway',centralPaths.private,{existingOnly:resuming});
+ if(resuming){await checkResumeDirectories({pgAccount,appAccount,gatewayAccount,release});}
+ else{
  await directory(centralPaths.postgres,pgAccount.uid,pgAccount.gid);await directory(centralPaths.socket,pgAccount.uid,pgAccount.gid);await directory(centralPaths.data,appAccount.uid,appAccount.gid);await directory(centralPaths.operatorBackups,pgAccount.uid,pgAccount.gid);await chown(centralPaths.private,0,gatewayAccount.gid);await chmod(centralPaths.private,0o710);
  await execute('/usr/sbin/runuser',['-u',operator,'--',centralPaths.pgBin+'/initdb','-D',centralPaths.postgres,'--auth-local=peer','--auth-host=scram-sha-256','--username='+operator,'--encoding=UTF8','--no-locale']);
  const configurationText=`\n# RestaMarket isolated cluster. No public-site PostgreSQL settings are read.\nlisten_addresses = '127.0.0.1'\nport = ${pgPort}\nunix_socket_directories = '${centralPaths.socket}'\nunix_socket_permissions = 0700\nshared_buffers = '32MB'\nmax_connections = 30\nwork_mem = '2MB'\nmaintenance_work_mem = '16MB'\npassword_encryption = 'scram-sha-256'\nlog_statement = 'none'\nlog_min_error_statement = 'panic'\n`;
  await writeFile(path.join(centralPaths.postgres,'postgresql.conf'),configurationText,{flag:'a'});
  const hba=`local all ${operator} peer\nlocal all all reject\nhost all ${operator} 127.0.0.1/32 reject\nhost ${database} ${application} 127.0.0.1/32 scram-sha-256\nhost all ${backupRole} 127.0.0.1/32 scram-sha-256\nhost all all 127.0.0.1/32 reject\nhost all all ::1/128 reject\n`;
  await writeFile(path.join(centralPaths.postgres,'pg_hba.conf'),hba);for(const file of ['postgresql.conf','pg_hba.conf']){await chown(path.join(centralPaths.postgres,file),pgAccount.uid,pgAccount.gid);await chmod(path.join(centralPaths.postgres,file),0o600);}
- const unitContents=units(release);await newFile(path.join(centralPaths.units,centralUnits[0]),unitContents.get(centralUnits[0]),{mode:0o644});await execute('/usr/bin/systemctl',['daemon-reload']);await execute('/usr/bin/systemctl',['start',centralUnits[0]]);
- const pgIdentity=JSON.parse(await psql("select json_build_object('port',current_setting('port'),'version',current_setting('server_version_num'),'directory',current_setting('data_directory'),'username',current_user);"));required(pgIdentity.port===String(pgPort)&&/^17[0-9]{4}$/.test(pgIdentity.version)&&pgIdentity.directory===centralPaths.postgres&&pgIdentity.username===operator,'The new operator connection is not the isolated PostgreSQL17 service');await psql('ALTER ROLE '+operator+' PASSWORD NULL;');
+ await newFile(path.join(centralPaths.units,centralUnits[0]),unitContents.get(centralUnits[0]),{mode:0o644});await execute('/usr/bin/systemctl',['daemon-reload']);await execute('/usr/bin/systemctl',['start',centralUnits[0]]);
+ }
+ await waitForCentralPostgres();
+ const pgIdentity=JSON.parse(await psql("select json_build_object('port',current_setting('port'),'version',current_setting('server_version_num'),'directory',current_setting('data_directory'),'username',current_user,'systemIdentifier',(select system_identifier::text from pg_control_system()));"));required(pgIdentity.port===String(pgPort)&&/^17[0-9]{4}$/.test(pgIdentity.version)&&pgIdentity.directory===centralPaths.postgres&&pgIdentity.username===operator,'The new operator connection is not the isolated PostgreSQL17 service');
+ if(resuming){
+  const control=(await execute('/usr/sbin/runuser',['-u',operator,'--',centralPaths.pgBin+'/pg_controldata','-D',centralPaths.postgres])).output,controlIdentifier=control.match(/^Database system identifier:\s*([0-9]+)\s*$/m)?.[1];
+  const databases=JSON.parse(await psql("select coalesce(json_agg(datname order by datname),'[]') from pg_database;")),roles=JSON.parse(await psql("select coalesce(json_agg(rolname order by rolname),'[]') from pg_roles where rolname !~ '^pg_';"));
+  const userObjects=Number(await psql("select (select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname not like 'pg_%' and n.nspname<>'information_schema')+(select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname not like 'pg_%' and n.nspname<>'information_schema');"));
+  if(restoredResuming){const controlSchemas=Number(await psql("select count(*) from pg_namespace where nspname='restamarket_control';",database)),inventoryOwner=await psql("select pg_get_userbyid(datdba) from pg_database where datname='restamarket_inventory';");validateRestoredSourceFacts({receipt,identity:pgIdentity,controlIdentifier,databases,roles,userObjects,controlSchemas,inventoryOwner});}
+  else{const checked=validateEmptyClusterFacts({receipt,identity:pgIdentity,controlIdentifier,databases,roles,userObjects});receipt={...receipt,emptyClusterSystemIdentifier:checked.systemIdentifier,resumedEmptyClusterAt:new Date().toISOString()};await replaceReceipt(receipt);}
+ }
+ const work=path.join(centralPaths.staging,'restore-'+receipt.deploymentId);let extracted;
+ if(restoredResuming)extracted=await checkRetainedWork(archiveFile,work);
+ else{
+ await psql('ALTER ROLE '+operator+' PASSWORD NULL;');
  await psql('CREATE DATABASE '+database+' OWNER '+operator+' TEMPLATE template0 ENCODING \'UTF8\';');
- const work=path.join(centralPaths.staging,'restore-'+receipt.deploymentId);await mkdir(work,{mode:0o700});const extracted=await readArchive(archiveFile,work);
+ await mkdir(work,{mode:0o700});extracted=await readArchive(archiveFile,work);
  const toc=(await execute(centralPaths.pgBin+'/pg_restore',['--list'],{inputStream:createReadStream(extracted.dump)})).output;
  if(/^\d+;\s+\d+\s+\d+\s+SCHEMA\s+-\s+public\s/m.test(toc))await psql('DROP SCHEMA public;',database);
  await execute('/usr/sbin/runuser',['-u',operator,'--',centralPaths.pgBin+'/pg_restore','-h',centralPaths.socket,'-p',String(pgPort),'-U',operator,'-d',database,'--no-owner','--no-acl','--exit-on-error'],{inputStream:createReadStream(extracted.dump)});
+ }
  const restored=await fingerprint(release);required(JSON.stringify(restored)===JSON.stringify(manifest.tables),'Restored central data differs from the authorized source fingerprint');
+ if(restoredResuming){receipt={...receipt,resumedRestoredSourceAt:new Date().toISOString(),retainedRestoreWork:true};await replaceReceipt(receipt);}
  const before=await counts();for(const [table,count]of Object.entries(expectedCounts))required(before[table]===count,'Restored source count differs: '+table);required(before.auth_sessions===0,'Unexpected active sessions in the authorized source archive');
  const migrations=await migrate(release),after=await counts();for(const [table,count]of Object.entries(expectedCounts))required(after[table]===count,'Migration changed protected business rows: '+table);required(after.desktop_order_inbox===before.desktop_order_inbox,'Migration changed preserved web inbox rows');
  const clientIdentity=await psql("select value from public.system_settings where key='desktop_sync_client_id';",database);required(uuidPattern.test(clientIdentity),'The existing website client identity must be preserved');
@@ -163,11 +242,11 @@ export async function prepareCentralServer(commit){
  const temporary=centralPaths.receipt+'.'+receipt.deploymentId+'.tmp';await newFile(temporary,JSON.stringify(completed,null,2));await rename(temporary,centralPaths.receipt);
  // This exact fresh extraction belongs to this completed attempt. Keep original
  // staged archive/manifest/registration/pairing and every operator backup intact.
- required(path.dirname(work)===centralPaths.staging&&path.basename(work)==='restore-'+receipt.deploymentId,'Unsafe extraction cleanup');await rm(work,{recursive:true});
+ required(path.dirname(work)===centralPaths.staging&&path.basename(work)==='restore-'+receipt.deploymentId,'Unsafe extraction cleanup');if(!restoredResuming)await rm(work,{recursive:true});
  return {prepared:true,alreadyPrepared:false,commit,counts:after,sourceVerifiedAllTables:true,registeredDevices:1,backendStarted:false,gatewayStarted:false,backupTimerStarted:false,publicSiteChanged:false};
 }
 
 if(process.argv[1]&&pathToFileURL(path.resolve(process.argv[1])).href===import.meta.url){
- if(process.argv.length!==4||process.argv[2]!=='--prepare'||!commitPattern.test(process.argv[3])){console.error('Explicit operator invocation required: --prepare <verified-40-hex-commit>');process.exitCode=1;}
- else try{console.log(JSON.stringify(await prepareCentralServer(process.argv[3])));}catch(error){console.error(error instanceof Error?error.message:'Central preparation failed closed');process.exitCode=1;}
+ if(process.argv.length!==4||!['--prepare','--resume-empty-cluster','--resume-restored-source'].includes(process.argv[2])||!commitPattern.test(process.argv[3])){console.error('Explicit operator invocation required: --prepare, --resume-empty-cluster or --resume-restored-source <verified-40-hex-commit>');process.exitCode=1;}
+ else try{console.log(JSON.stringify(await prepareCentralServer(process.argv[3],{resumeEmptyCluster:process.argv[2]==='--resume-empty-cluster',resumeRestoredSource:process.argv[2]==='--resume-restored-source'})));}catch(error){console.error(error instanceof Error?error.message:'Central preparation failed closed');process.exitCode=1;}
 }

@@ -24,6 +24,7 @@ if(process.platform==='win32')app.setAppUserModelId('az.birkassa.desktop');
 const profile=process.env.BIRKASSA_DATA_DIR?path.join(process.env.BIRKASSA_DATA_DIR,'electron-profile'):path.join(app.getPath('appData'),'BirKassa');
 require('node:fs').mkdirSync(profile,{recursive:true});
 app.setPath('userData',profile);
+app.setPath('sessionData',profile);
 if(!app.requestSingleInstanceLock())app.quit();
 else app.whenReady().then(async()=>{
  try{
