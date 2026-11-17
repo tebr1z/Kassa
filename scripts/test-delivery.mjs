@@ -72,7 +72,7 @@ function database(){
 }
 const dbMock={storeDb:database};
 const customerMock={customerAccount:async()=>fixture.account};
-const adminGuard=await load('lib/require-admin.ts',{'@/lib/store-db':dbMock,'@/lib/admin-security':adminSecurity,'@/lib/staff-access':staffAccess,'@/lib/inventory-mode':inventory});
+const adminGuard=await load('lib/require-admin.ts',{'@/lib/store-db':dbMock,'@/lib/admin-security':adminSecurity,'@/lib/staff-access':staffAccess,'@/lib/inventory-mode':inventory,'@/lib/central-access':await load('lib/central-access.ts')});
 const admin=await load('app/api/admin/delivery/route.ts',{'@/lib/require-admin':adminGuard,'@/lib/store-db':dbMock,'@/lib/delivery-server':deliveryServer,'@/lib/open-routing':openRouting,'@/lib/azerbaijan-location':country});
 const quote=await load('app/api/delivery-quote/route.ts',{'@/lib/store-db':dbMock,'@/lib/customer-session':customerMock,'@/lib/delivery-server':deliveryServer,'@/lib/delivery':delivery,'@/lib/open-routing':openRouting,'@/lib/azerbaijan-location':country,'@/lib/customer-contact':customerContact});
 const publicRoute=await load('app/api/delivery-settings/route.ts',{'@/lib/store-db':dbMock,'@/lib/delivery-server':deliveryServer});

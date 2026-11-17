@@ -9,8 +9,9 @@ import postgres from 'postgres';
 import {openExistingLocalDatabase} from './local-database.mjs';
 import {writeArchive,readArchive} from './backup-archive.mjs';
 import {protectData} from './protect-data.mjs';
+import {databaseFingerprint} from './database-fingerprint.mjs';
+export {databaseFingerprint} from './database-fingerprint.mjs';
 
-const quote=value=>'"'+String(value).replaceAll('"','""')+'"';
 const execute=(file,args,env)=>new Promise((resolve,reject)=>{
  const child=spawn(file,args,{windowsHide:true,stdio:['ignore','ignore','pipe'],env});let diagnostic='';
  child.stderr.on('data',part=>{if(diagnostic.length<65536)diagnostic+=part;});
@@ -38,21 +39,6 @@ async function noMediaLinks(directory){
 // Counts alone can miss wrong stock, prices or receipt lines. Compare a stable
 // digest of EVERY user table (including unknown future tables), not just a
 // hand-maintained list of products/sales. Data never leaves this private folder.
-export async function databaseFingerprint(sql){
- const tables=await sql.unsafe("select n.nspname as schema,c.relname as name from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind in ('r','p') and n.nspname not like 'pg_%' and n.nspname<>'information_schema' order by n.nspname,c.relname");
- const result=[];
- for(const table of tables){
-  const qualified=quote(table.schema)+'.'+quote(table.name),hash=createHash('sha256');let rows=0;
-  const columns=await sql.unsafe("select a.attname as name,format_type(a.atttypid,a.atttypmod) as type,a.attnotnull as required from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname=$1 and c.relname=$2 and a.attnum>0 and not a.attisdropped order by a.attnum",[table.schema,table.name]);
-  hash.update(JSON.stringify(columns));
-  for await(const batch of sql.unsafe("select encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') as fingerprint from "+qualified+' t order by fingerprint').cursor(1000))for(const row of batch){hash.update(row.fingerprint+'\n');rows++;}
-  result.push({kind:'table',schema:table.schema,table:table.name,rows,sha256:hash.digest('hex')});
- }
- const sequences=await sql.unsafe("select n.nspname as schema,c.relname as name from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind='S' and n.nspname not like 'pg_%' and n.nspname<>'information_schema' order by n.nspname,c.relname");
- for(const sequence of sequences){const [state]=await sql.unsafe('select last_value::text as last_value,is_called from '+quote(sequence.schema)+'.'+quote(sequence.name));result.push({kind:'sequence',schema:sequence.schema,table:sequence.name,rows:1,sha256:createHash('sha256').update(JSON.stringify(state)).digest('hex')});}
- return result;
-}
-
 // This separate cluster exists ONLY under the fresh export work directory. We
 // never pg_restore into, CREATE DATABASE in, or migrate the source shop.
 export async function verifyTransferArchive(archiveFile,{bin,workRoot,expected}){

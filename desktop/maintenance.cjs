@@ -22,7 +22,7 @@ function createDesktopMaintenance({ipcMain,parent,origin,getLanguage,isAdmin,ava
     if(!await isAdmin())return {ok:false,error:words().admin};
     return action==='transfer'?exportTransfer():resetSalesPeriod(value);
    });
-  }catch{return {ok:false,error:words().failed};}finally{busy=false;}
+  }catch(error){if(['MASTER_REQUIRED','RESET_LIMIT_EXHAUSTED','RESET_POLICY_NOT_CONFIGURED','CENTRAL_BACKUP_REQUIRED'].includes(error?.code))return {ok:false,error:error.message,code:error.code,...(error.resetPolicy?{resetPolicy:error.resetPolicy}:{})};return {ok:false,error:words().failed};}finally{busy=false;}
  }
  ipcMain.handle('maintenance:transfer',(event,...args)=>{if(!allowed(event)||args.length)throw Error('Maintenance operation not allowed');return perform('transfer');});
  ipcMain.handle('maintenance:sales-period',(event,...args)=>{const value=args.length===1?resetInput(args[0]):null;if(!allowed(event)||!value)throw Error('Maintenance operation not allowed');return perform('reset',value);});

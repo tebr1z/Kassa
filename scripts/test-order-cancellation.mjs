@@ -47,7 +47,7 @@ const sql={async unsafe(query,args=[]){
 const authDb={async unsafe(){return role?[{id:actor,role}]:[];},async end(){}};
 const access=await load('lib/staff-access.ts'),security=await load('lib/admin-security.ts');
 const inventory=await load('lib/inventory-mode.ts',{'server-only':{}});
-const auth=await load('lib/require-admin.ts',{'server-only':{},'@/lib/store-db':{storeDb:()=>authDb},'@/lib/admin-security':security,'@/lib/staff-access':access,'@/lib/inventory-mode':inventory});
+const auth=await load('lib/require-admin.ts',{'server-only':{},'@/lib/store-db':{storeDb:()=>authDb},'@/lib/admin-security':security,'@/lib/staff-access':access,'@/lib/inventory-mode':inventory,'@/lib/central-access':await load('lib/central-access.ts',{'server-only':{}})});
 const mail={async notifyCustomerEmail(message){assert(events.includes('commit'),'Email must only run after a committed transaction');assert.equal(row.status,'cancelled');emails.push(message);if(failEmail)throw Error('fixture SMTP failure');}};
 const common={'@/lib/require-admin':auth,'@/lib/order-cancellation':cancellation,'@/lib/smtp-mail':mail};
 const online=await load('app/api/online-orders/route.ts',{...common,'@/lib/store-db':{storeDb:()=>sql}});

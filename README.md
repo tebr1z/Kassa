@@ -46,4 +46,5 @@ real şifrələr və istifadəçi faylları GitHub-a qoyulmur. Açıq repozitori
 
 Ətraflı: `WEB-ADMIN-SECURITY.txt`, `SEO-RESTAMARKET.txt`, `OPERATIONS-0.5.txt`.
 Masaüstü quraşdırma və məlumat köçürməsi: `desktop/TRANSFER.txt`.
+Yeni quraşdırıcıda mərkəzi PostgreSQL və cihaz icazələri: `desktop/CENTRAL.txt`.
 Veb və masaüstü bazaları ayrıdır; variantlar məhsulun ümumi stokunu paylaşır.

@@ -28,7 +28,7 @@ try{
   assert.match(query,/expires_at>now\(\).*is_active=true.*password_hash is not null/);
   return valid?[{id:'actual-session-user',role,authentication_method:authenticationMethod,active}]:[];
  },async end(){closes++;}};
- const mocks={'next/server':{NextResponse:MockNextResponse},postgres:url=>{assert.equal(url,fixtureUrl);return sql;},'./lib/log-error':{logSystemError:async()=>assert.fail('Unexpected proxy database failure')},'./lib/admin-security':security,'./lib/staff-access':roles,'./lib/staff-portal':portal,'./lib/inventory-mode':inventory};
+ const mocks={'next/server':{NextResponse:MockNextResponse},postgres:url=>{assert.equal(url,fixtureUrl);return sql;},'./lib/log-error':{logSystemError:async()=>assert.fail('Unexpected proxy database failure')},'./lib/admin-security':security,'./lib/staff-access':roles,'./lib/staff-portal':portal,'./lib/inventory-mode':inventory,'./lib/central-access':await load('lib/central-access.ts')};
  const source=await readFile('proxy.ts','utf8');
  const real=await load('proxy.ts',mocks,source+'\nexport const __fixtureRules=rules;');
  const exact=real.__fixtureRules.filter(rule=>rule.prefix==='/api/sales-period');

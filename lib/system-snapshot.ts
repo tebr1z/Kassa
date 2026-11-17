@@ -24,6 +24,7 @@ export async function createSnapshot(sql:Sql):Promise<Snapshot> {
   });
 }
 export async function restoreSnapshot(sql:Sql,payload:unknown,actorId:string|null,backupId:string) {
+  if(process.env.BIRKASSA_CENTRAL==='1')throw new Error('Mərkəzi bazanın bərpası tətbiqdən bağlıdır.');
   const snapshot=payload as Partial<Snapshot>;
   if(snapshot?.version!==2||!snapshot.tables||typeof snapshot.tables!=='object')throw new Error('Köhnə ehtiyat nüsxə tam bərpanı dəstəkləmir. Tam SQL/.birkassa nüsxəsini istifadə edin.');
   return sql.begin(async tx=>{

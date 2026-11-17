@@ -5,9 +5,10 @@ const moduleUrl=source=>'data:text/javascript;base64,'+Buffer.from(source).toStr
 const policyUrl=moduleUrl(ts.transpile(await readFile('lib/admin-security.ts','utf8'),{module:ts.ModuleKind.ESNext}));
 const rolesUrl=moduleUrl(ts.transpile(await readFile('lib/staff-access.ts','utf8'),{module:ts.ModuleKind.ESNext}));
 const inventoryUrl=moduleUrl(ts.transpile((await readFile('lib/inventory-mode.ts','utf8')).replace("import 'server-only';",''),{module:ts.ModuleKind.ESNext}));
+const centralUrl=moduleUrl(ts.transpile((await readFile('lib/central-access.ts','utf8')).replace("import 'server-only';",''),{module:ts.ModuleKind.ESNext}));
 const dbUrl=moduleUrl(`export let valid=false,failing=false;export function configure(ok,error=false){valid=ok;failing=error;}export function storeDb(){return {unsafe:async()=>{if(failing)throw Error('unavailable');return valid?[{id:'actual-admin',role:'admin'}]:[];},end:async()=>{}};}`);
 let source=await readFile('lib/require-admin.ts','utf8');
-source=source.replace("import 'server-only';",'').replace("@/lib/store-db",dbUrl).replace("@/lib/admin-security",policyUrl).replace('@/lib/staff-access',rolesUrl).replace('@/lib/inventory-mode',inventoryUrl);
+source=source.replace("import 'server-only';",'').replace("@/lib/store-db",dbUrl).replace("@/lib/admin-security",policyUrl).replace('@/lib/staff-access',rolesUrl).replace('@/lib/inventory-mode',inventoryUrl).replace('@/lib/central-access',centralUrl);
 const {withAdminSession}=await import(moduleUrl(ts.transpile(source,{module:ts.ModuleKind.ESNext})));
 const db=await import(dbUrl);
 const previousLocal=process.env.BIRKASSA_LOCAL;

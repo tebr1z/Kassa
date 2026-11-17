@@ -1,0 +1,44 @@
+RESTAMARKET — MƏRKƏZİ POSTGRESQL / İCAZƏLİ EXE
+
+Mərkəzi rejimdə məhsullar, stok, satışlar, hesablar və maliyyə vahid serverdədir.
+İnternet bağlantısı tələb olunur. Bağlantı itəndə proqram yerli bazaya keçib ayrıca
+satış yaratmır və uğursuz satış sorğusunu özbaşına təkrarlamır. Əvvəl çekləri yoxlayın.
+
+GİRİŞ
+- PostgreSQL yalnız serverin localhost ünvanında işləyir; SQL portu açıq internetə
+  verilmir. EXE SQL şifrəsini daşımır; ayrıca HTTPS xidmətindən istifadə edir.
+- İctimai veb mağaza bu bazanın giriş məlumatlarını və SQL hüquqlarını almır.
+- Hər Windows istifadəçisi/kompüter üçün ayrıca Ed25519 cihaz açarı yaranır.
+  Məxfi açar Windows qoruması və istifadəçi/SYSTEM fayl icazələri ilə saxlanır.
+- Cihaz icazəsi işçi şifrəsini əvəz etmir. Kassir/anbardar/mühasib yalnız öz
+  hüquqları ilə işləyir. Baş rəhbər ayrıca təyin edilir.
+- EXE daxilində hamı üçün ortaq, kopyalanan məxfi açar yerləşdirilmir.
+  Windows/server administratoruna qarşı “heç kim görə bilməz” zəmanəti verilmir.
+
+YENİ KOMPÜTER
+1. Yeni RestaMarket quraşdırıcısını quraşdırın və açın.
+2. İlk açılışda cihaz qeydiyyatı yoxdursa giriş bağlanır. Açıq qeydiyyat faylı:
+   %APPDATA%\BirKassa\local-data\.private\central-device\RestaMarket-komputer-qeydiyyati.json
+3. Yalnız bu AÇIQ qeydiyyat faylını etibarlı server operatoruna göndərin.
+   identity.json məxfi faylını göndərməyin və başqa kompüterə köçürməyin.
+4. Operator cihazı təsdiqləyəndən sonra proqramı yenidən açın və işçi şifrənizlə
+   daxil olun. Stok arxivi köçürmək lazım deyil: məlumatlar eyni serverdən gəlir.
+
+SATIŞ DÖVRÜ — MAKSİMUM 3 UĞURLU İSTİFADƏ
+- Yalnız operatorun ayrıca təyin etdiyi baş rəhbər istifadə edə bilər.
+- Açıq kassa növbələri bağlanmalıdır. Yeni server ehtiyatı ayrıca bazaya bərpa
+  edilərək yoxlanır, sonra seçdiyiniz şəxsi qovluğa endirilir.
+- Köhnə çeklər, stok, məhsullar və xərclər silinmir; yeni hesabat dövrü açılır.
+- Sayğac serverdə qorunan sxemdə saxlanır, adi məlumat nüsxəsinə daxil deyil.
+  Uğursuz/ləğv olunmuş əməliyyat limiti azaltmır; üçüncü uğurdan sonra giriş
+  həm düymədə, həm serverdə bağlanır. EXE yenidən qurulması limiti artırmır.
+- Mərkəzi bazanı köhnə arxivlə əvəz etmək kassadan bağlıdır. Fəlakət bərpası
+  yalnız operator proseduru ilə, limitin qorunması yoxlanaraq aparılmalıdır.
+
+OPERATOR
+- Yeni cihaz: node scripts/central-devices.mjs --approve /private/public-registration.json
+- Girişi bağla: node scripts/central-devices.mjs --revoke DEVICE_UUID
+- Public veb, gateway və stok serveri ayrı xidmət/OS hesabları ilə işləyir.
+- PostgreSQL tam operator ehtiyatı limit jurnalını da saxlayır. Şəxsi arxivləri
+  GitHub-a və açıq yeniləmə qovluğuna yükləməyin. Ehtiyat diski şifrəli saxlayın.
+- Yeni server tam yoxlanana qədər əvvəlki yerli bazanı və ehtiyatı SİLMƏYİN.

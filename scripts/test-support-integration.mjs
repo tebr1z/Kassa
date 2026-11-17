@@ -26,7 +26,7 @@ async function load(file,mocks={}){
 }
 const db={storeDb:()=>postgres(database.url,{max:1,prepare:false,connect_timeout:5})};
 const security=await load('lib/admin-security.ts'),roles=await load('lib/staff-access.ts');
-const guard=await load('lib/require-admin.ts',{'@/lib/store-db':db,'@/lib/admin-security':security,'@/lib/staff-access':roles,'@/lib/inventory-mode':await load('lib/inventory-mode.ts')});
+const guard=await load('lib/require-admin.ts',{'@/lib/store-db':db,'@/lib/admin-security':security,'@/lib/staff-access':roles,'@/lib/inventory-mode':await load('lib/inventory-mode.ts'),'@/lib/central-access':await load('lib/central-access.ts')});
 const contact=await load('lib/customer-contact.ts');
 let account,mailFailure=false,urlFailure=false;
 const mail=[];

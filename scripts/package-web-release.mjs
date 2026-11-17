@@ -15,6 +15,13 @@ await cp('.next/static',path.join(output,'.next/static'),{recursive:true});
 await cp('drizzle',path.join(output,'drizzle'),{recursive:true});
 await mkdir(path.join(output,'scripts'),{recursive:true});
 await cp('scripts/migrate-postgres.mjs',path.join(output,'scripts/migrate-postgres.mjs'));
+await cp('scripts/start-central-gateway.mjs',path.join(output,'scripts/start-central-gateway.mjs'));
+await cp('scripts/central-reset-policy.sql',path.join(output,'scripts/central-reset-policy.sql'));
+await cp('scripts/provision-central-server.mjs',path.join(output,'scripts/provision-central-server.mjs'));
+await cp('scripts/central-operator-backup.mjs',path.join(output,'scripts/central-operator-backup.mjs'));
+await cp('scripts/central-devices.mjs',path.join(output,'scripts/central-devices.mjs'));
+await mkdir(path.join(output,'desktop'),{recursive:true});
+for(const name of ['central-gateway.mjs','central-protocol.cjs','backup-archive.mjs','database-fingerprint.mjs'])await cp(path.join('desktop',name),path.join(output,'desktop',name));
 // The migration CLI uses dotenv; server-only tracing may not include this dependency.
 await cp('node_modules/dotenv',path.join(output,'node_modules/dotenv'),{recursive:true});
 const entries=await readdir(output);

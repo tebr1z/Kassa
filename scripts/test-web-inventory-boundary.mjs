@@ -23,7 +23,8 @@ try{
  process.env.BIRKASSA_LOCAL='1';assert.equal(inventory.isLocalInventory(),true);delete process.env.BIRKASSA_LOCAL;
  let authenticated=true,role='admin',queryCount=0,handlerCalls=0;
  const authSql={async unsafe(){queryCount++;return authenticated?[{id:'fixture-admin',role,authentication_method:'password',active:true}]:[];},async end(){}};
- const guard=await load('lib/require-admin.ts',{'@/lib/store-db':{storeDb:()=>authSql},'@/lib/admin-security':security,'@/lib/staff-access':roles,'@/lib/inventory-mode':inventory});
+ const central=await load('lib/central-access.ts');
+ const guard=await load('lib/require-admin.ts',{'@/lib/store-db':{storeDb:()=>authSql},'@/lib/admin-security':security,'@/lib/staff-access':roles,'@/lib/inventory-mode':inventory,'@/lib/central-access':central});
  const guarded=guard.withAdminSession(()=>{handlerCalls++;return Response.json({local:inventory.isLocalInventory()});});
  const request=(path,method='GET',auth=true)=>new Request('https://fixture.example'+path,{method,headers:{host:'fixture.example',origin:'https://fixture.example',...(auth?{cookie:'birkassa_session=fixture'}:{}),'x-birkassa-role':'admin','x-birkassa-user-id':'spoofed','x-birkassa-local':'1','birkassa_local':'1'}});
  for(const path of blocked)for(const method of ['GET','HEAD','POST','PATCH','DELETE']){
@@ -34,7 +35,7 @@ try{
  authenticated=false;assert.equal((await guarded(request('/api/products'))).status,401);authenticated=true;
  role='online_assistant';const denied=await guarded(request('/api/products'));assert.equal(denied.status,403);assert.ok(!(await denied.json()).code,'Role authorization comes before local-inventory capability');role='admin';
  process.env.BIRKASSA_LOCAL='1';assert.equal((await guarded(request('/api/products'))).status,200);assert.equal(handlerCalls,1,'Local EXE keeps existing business handlers');delete process.env.BIRKASSA_LOCAL;
- const proxy=await load('proxy.ts',{'./lib/log-error':{logSystemError:async()=>{}},postgres:()=>authSql,'./lib/admin-security':security,'./lib/staff-access':roles,'./lib/staff-portal':portal,'./lib/inventory-mode':inventory});
+ const proxy=await load('proxy.ts',{'./lib/log-error':{logSystemError:async()=>{}},postgres:()=>authSql,'./lib/admin-security':security,'./lib/staff-access':roles,'./lib/staff-portal':portal,'./lib/inventory-mode':inventory,'./lib/central-access':central});
  for(const path of blocked){const response=await proxy.proxy(new NextRequest(request(path)));assert.equal(response.status,403,path);assert.equal((await response.json()).code,'INVENTORY_LOCAL_ONLY');}
  assert.equal((await proxy.proxy(new NextRequest(request('/api/products','GET',false)))).status,401);
  process.env.BIRKASSA_LOCAL='1';assert.equal((await proxy.proxy(new NextRequest(request('/api/products')))).status,200);delete process.env.BIRKASSA_LOCAL;

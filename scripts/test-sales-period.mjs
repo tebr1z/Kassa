@@ -8,13 +8,14 @@ import ts from 'typescript';
 import {openLocalDatabase} from '../desktop/local-database.mjs';
 
 // Fresh isolated PostgreSQL only. Never read the installed profile or real keys.
-const previous={local:process.env.BIRKASSA_LOCAL,token:process.env.BIRKASSA_DESKTOP_TOKEN,url:process.env.DATABASE_URL,bin:process.env.BIRKASSA_PG_BIN};
+const previous={local:process.env.BIRKASSA_LOCAL,token:process.env.BIRKASSA_DESKTOP_TOKEN,url:process.env.DATABASE_URL,bin:process.env.BIRKASSA_PG_BIN,central:process.env.BIRKASSA_CENTRAL};
 const fixture=path.resolve('.local-desktop-data','sales-period-'+randomUUID()),secret='sales-period-fixture-'+randomUUID();
 process.env.BIRKASSA_LOCAL='1';process.env.BIRKASSA_DESKTOP_TOKEN=secret;process.env.BIRKASSA_PG_BIN=path.resolve('desktop/vendor/postgres/bin');
+delete process.env.BIRKASSA_CENTRAL;
 const require=createRequire(import.meta.url),modules=new Map(),pools=new Set();let database,sql;
 async function load(file){
  if(modules.has(file))return modules.get(file);
- const source=await readFile(file,'utf8'),m={exports:{}},mocks={'server-only':{},'@/lib/log-error':{logSystemError:async()=>{}},'@/lib/store-db':{storeDb:()=>{const pool=postgres(database.url,{max:1,prepare:false,onnotice:()=>{}});pools.add(pool);return pool;}}};
+ const source=await readFile(file,'utf8'),m={exports:{}},mocks={'server-only':{},'@/desktop/central-backups.mjs':await import('../desktop/central-backups.mjs'),'@/lib/log-error':{logSystemError:async()=>{}},'@/lib/store-db':{storeDb:()=>{const pool=postgres(database.url,{max:1,prepare:false,onnotice:()=>{}});pools.add(pool);return pool;}}};
  for(const [,name]of source.matchAll(/from\s*['"](@\/[^'"]+)['"]/g))if(!Object.hasOwn(mocks,name))mocks[name]=await load(name.replace('@/','')+'.ts');
  const compiled=ts.transpileModule(source,{fileName:file,compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
  new Function('require','module','exports',compiled)(name=>Object.hasOwn(mocks,name)?mocks[name]:require(name),m,m.exports);modules.set(file,m.exports);return m.exports;
@@ -44,6 +45,14 @@ try{
   const user=role==='admin'?admin:(await sql.unsafe("insert into users(full_name,role,branch_id,password_hash) values($1,$2,$3,'fixture-only-password-marker') returning id",['Fixture '+role,role,admin.branch_id]))[0];
   await sql.unsafe("insert into auth_sessions(user_id,token_hash,expires_at,authentication_method,last_seen_at) values($1,$2,now()+interval '1 hour','password',now())",[user.id,createHash('sha256').update(role+'-fixture').digest('hex')]);
  }
+ // Operator initialization is explicit, including in fixtures. Application code
+ // must never pick a master or silently create/replenish a reset policy.
+ const operator=postgres(database.url,{max:1,prepare:false,onnotice:()=>{}});pools.add(operator);
+ const fixtureRole='period_app_'+randomUUID().replaceAll('-','');
+ await operator.unsafe('create role "'+fixtureRole+'" nologin nosuperuser nocreatedb nocreaterole noinherit noreplication nobypassrls');
+ await operator.unsafe("select set_config('restamarket.application_role',$1,false)",[fixtureRole]);
+ await operator.unsafe(await readFile('scripts/central-reset-policy.sql','utf8'));
+ await operator.unsafe('select restamarket_control.initialize_sales_reset_policy($1::uuid)',[admin.id]);await operator.end({timeout:2});
  [product]=await sql.unsafe("insert into products(sku,name,sale_price,cost_price) values('PERIOD-FIXTURE','Dövr sınaq məhsulu',10,7) returning id");
  await sql.unsafe("insert into stock_movements(product_id,warehouse_id,type,quantity,unit_cost,performed_by) values($1,$2,'receipt',100,7,$3)",[product.id,warehouse.id,admin.id]);
  await sql.unsafe("insert into cashier_shifts(branch_id,cashier_id,opening_cash,expected_cash,actual_cash,closed_at) values($1,$2,5,35,35,now())",[admin.branch_id,admin.id]);
@@ -56,7 +65,7 @@ try{
  const core=await load('lib/sales-period.ts'),api=await load('app/api/sales-period/route.ts'),dashboard=await load('app/api/dashboard/route.ts'),reports=await load('app/api/reports/route.ts'),finance=await load('app/api/finance/route.ts'),sales=await load('app/api/sales/route.ts');
  assert.match(await readFile('app/api/sales/route.ts','utf8'),/insert into sales \([^\n]+created_at\) values \([^\n]+clock_timestamp\(\)\)/,'A transaction started before the boundary must use actual receipt posting time');
  assert.equal(core.salesPeriodPredicate({startedAt:null,resetId:null}),'true');assert.throws(()=>core.salesPeriodPredicate({startedAt:"');delete from sales;--",resetId:null}));
- const first=await (await api.GET(request('sales-period'))).json();assert.equal(first.sales.receipts,3);assert.equal(first.sales.completed,2);assert.equal(first.sales.returned,1);assert.equal(first.sales.total,20);assert.equal(first.openShiftCount,0);
+ const first=await (await api.GET(request('sales-period'))).json();assert.equal(first.sales.receipts,3);assert.equal(first.sales.completed,2);assert.equal(first.sales.returned,1);assert.equal(first.sales.total,20);assert.equal(first.openShiftCount,0);assert.deepEqual(first.resetPolicy,{master:true,used:0,remaining:3,limit:3,exhausted:false});
  const body=()=>({confirm:'YENİ DÖVR',reason:'İzolyasiya olunmuş sınaq dövrü',preview:first.preview,backup});
  assert.equal((await api.POST(request('sales-period',{method:'POST',body:body()}))).status,403,'Browser cannot attest a native verified backup');
  assert.equal((await api.POST(request('sales-period',{method:'POST',native:true,headers:{authorization:'Bearer '+secret+'x'},body:body()}))).status,403,'Incorrect native token fails closed');
@@ -74,7 +83,7 @@ try{
  assert.equal((await api.POST(request('sales-period',{method:'POST',native:true,body:{...body(),preview:preview.preview}}))).status,409,'New sale invalidates preview/backup');
  preview=await (await api.GET(request('sales-period'))).json();const before=await protectedState();
  const archive=path.join(fixture,'backups',backup.fileName);await database.backupForUpdate(archive);backup.sha256=createHash('sha256').update(await readFile(archive)).digest('hex');backup.bytes=(await stat(archive)).size;
- const response=await api.POST(request('sales-period',{method:'POST',native:true,body:{...body(),preview:preview.preview}}));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));const reset=await response.json();assert.equal(reset.archivedReceipts,4);assert.ok(reset.currentPeriod.startedAt);
+ const response=await api.POST(request('sales-period',{method:'POST',native:true,body:{...body(),preview:preview.preview}}));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));const reset=await response.json();assert.equal(reset.archivedReceipts,4);assert.ok(reset.currentPeriod.startedAt);assert.deepEqual(reset.resetPolicy,{master:true,used:1,remaining:2,limit:3,exhausted:false});
  assert.equal(await protectedState(),before,'Receipts, stock, costs, prices, employees, financial rows and sync links unchanged');
  assert.equal((await sql.unsafe("select count(*)::int n from audit_logs where action='sales.period_reset'"))[0].n,1);
  assert.equal((await sql.unsafe("select count(*)::int n from sales where sales_order_id=$1 and status='completed'",[linkedOrder.id]))[0].n,1,'Paid-order protection remains true');
@@ -99,5 +108,5 @@ try{
  console.log('PASS: isolated sales-period reset, real session/native authorization, stale preview/open shifts, verified archive, all/current reporting, protected stock/products/users/finance/sync data, paid-order guards, monotonic receipts and shift-close/sale race; no real data touched.');
 }finally{
  if(sql)await sql.end({timeout:2});for(const pool of pools)await pool.end({timeout:2});if(database)await database.close();
- for(const [key,value]of Object.entries({BIRKASSA_LOCAL:previous.local,BIRKASSA_DESKTOP_TOKEN:previous.token,DATABASE_URL:previous.url,BIRKASSA_PG_BIN:previous.bin}))if(value===undefined)delete process.env[key];else process.env[key]=value;
+ for(const [key,value]of Object.entries({BIRKASSA_LOCAL:previous.local,BIRKASSA_DESKTOP_TOKEN:previous.token,DATABASE_URL:previous.url,BIRKASSA_PG_BIN:previous.bin,BIRKASSA_CENTRAL:previous.central}))if(value===undefined)delete process.env[key];else process.env[key]=value;
 }

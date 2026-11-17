@@ -142,6 +142,7 @@ async function handlePOST(request: Request) {
       return NextResponse.json(row, { status: 201 });
     }
     if (body.action === "restore") {
+      if(process.env.BIRKASSA_CENTRAL==='1')return NextResponse.json({error:'Mərkəzi bazanın bərpası yalnız ayrıca server xidməti proseduru ilə mümkündür.',code:'CENTRAL_RESTORE_DISABLED'},{status:403});
       if (body.confirm !== "BƏRPA") return NextResponse.json({ error: "Bərpanı təsdiqləmək üçün BƏRPA yazın" }, { status: 400 });
       const [backup] = await sql.unsafe("select payload from system_backups where id=$1", [body.backupId || ""]);
       if (!backup) return NextResponse.json({ error: "Ehtiyat nüsxə tapılmadı" }, { status: 404 });

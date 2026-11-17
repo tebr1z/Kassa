@@ -49,7 +49,7 @@ class FakeNextResponse extends Response{
 const access=await load('lib/staff-access.ts'),portal=await load('lib/staff-portal.ts'),security=await load('lib/admin-security.ts');
 const inventory=await load('lib/inventory-mode.ts',{'server-only':{}});
 let connections=0;
-const {proxy,config}=await load('proxy.ts',{'next/server':{NextResponse:FakeNextResponse},postgres:()=>{connections++;throw Error('Unexpected database connection');},'./lib/log-error':{logSystemError:async()=>{}},'./lib/admin-security':security,'./lib/staff-access':access,'./lib/staff-portal':portal,'./lib/inventory-mode':inventory});
+const {proxy,config}=await load('proxy.ts',{'next/server':{NextResponse:FakeNextResponse},postgres:()=>{connections++;throw Error('Unexpected database connection');},'./lib/log-error':{logSystemError:async()=>{}},'./lib/admin-security':security,'./lib/staff-access':access,'./lib/staff-portal':portal,'./lib/inventory-mode':inventory,'./lib/central-access':await load('lib/central-access.ts',{'server-only':{}})});
 const request=path=>{const value=new Request('https://restamarket.az'+path,{headers:{'x-birkassa-user-id':'forged','x-birkassa-role':'admin'}});value.nextUrl=new URL(value.url);value.cookies={get:()=>undefined};return value;};
 assert.ok(config.matcher.includes('/istifadeci-sertleri/:path*'));
 let response=await proxy(request('/istifadeci-sertleri?source=footer'));assert.equal(response.status,308);assert.equal(response.headers.get('location'),'https://restamarket.az/istifadeci-sertleri/?source=footer');

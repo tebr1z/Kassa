@@ -11,7 +11,7 @@ const entries=await readdir(application);
 assert.deepEqual(entries.filter(name=>forbidden.includes(name)),[],'Release must not contain old release trees, local data or environment secrets');
 await access(path.join(root,'RestaMarket.exe'));
 const archive=path.join(root,'resources','app.asar');
-for(const name of ['main.cjs','local-database.mjs','protect-data.mjs','transfer-package.mjs','maintenance.cjs','maintenance-labels.cjs','updates.cjs','update-client.cjs','update-lifecycle.cjs','update-preload.cjs','update-labels.cjs','update-trust.json','update-window.html','update-window.css','update-window.js'])assert.deepEqual(asar.extractFile(archive,name),await readFile(path.join('desktop',name)),'Missing or stale native module: '+name);
+for(const name of ['main.cjs','central-client.cjs','central-protocol.cjs','CENTRAL.txt','local-database.mjs','protect-data.mjs','transfer-package.mjs','database-fingerprint.mjs','maintenance.cjs','maintenance-labels.cjs','updates.cjs','update-client.cjs','update-lifecycle.cjs','update-preload.cjs','update-labels.cjs','update-trust.json','update-window.html','update-window.css','update-window.js'])assert.deepEqual(asar.extractFile(archive,name),await readFile(path.join('desktop',name)),'Missing or stale native module: '+name);
 assert.deepEqual(JSON.parse(asar.extractFile(archive,'update-trust.json').toString()),JSON.parse(await readFile('desktop/update-trust.json','utf8')),'Packaged trust must match the local release key');
 assert.ok(!asar.listPackage(archive).some(name=>/\.key$|PRIVATE KEY|ReleaseKeys/i.test(name)),'Private signing keys must never be packaged');
 assert.equal(JSON.parse(asar.extractFile(archive,'package.json').toString()).version,pkg.version);

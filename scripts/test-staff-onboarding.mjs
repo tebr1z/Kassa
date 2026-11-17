@@ -27,7 +27,7 @@ const sql={async unsafe(query,params=[]){
  if(query.startsWith('select id,name,address from branches')||query.startsWith('select w.id,w.name')||query.startsWith('select id,name,code,is_active from cash_registers')||query.startsWith('select l.id,l.code')||query.startsWith('select key,value from system_settings'))return [];
  throw Error('Unexpected mock SQL: '+query);
 },async begin(callback){return callback(this);},async end(){}};
-const guard=await load('lib/require-admin.ts',{'@/lib/store-db':{storeDb:()=>sql},'@/lib/admin-security':security,'@/lib/staff-access':policy,'@/lib/inventory-mode':inventory});
+const guard=await load('lib/require-admin.ts',{'@/lib/store-db':{storeDb:()=>sql},'@/lib/admin-security':security,'@/lib/staff-access':policy,'@/lib/inventory-mode':inventory,'@/lib/central-access':await load('lib/central-access.ts')});
 const next={NextResponse:{json:Response.json.bind(Response)}};
 const settings=await load('app/api/settings/route.ts',{'@/lib/require-admin':guard,'@/lib/staff-password':passwords,'@/lib/log-error':{logSystemError(){}},'next/server':next,postgres:()=>sql,'@/lib/inventory-mode':inventory});
 const locations=await load('app/api/locations/route.ts',{'@/lib/require-admin':guard,'@/lib/store-db':{storeDb:()=>sql},'@/lib/staff-access':policy,'@/lib/staff-password':passwords,'@/lib/inventory-mode':inventory});

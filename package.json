@@ -1,6 +1,6 @@
 {
   "name": "birkassa-system",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "private": true,
   "main": "desktop/main.cjs",
   "productName": "RestaMarket",
@@ -35,8 +35,9 @@
     "test:desktop-sync": "node scripts/test-desktop-sync.mjs",
     "test:desktop-web": "node scripts/test-desktop-order-protocol.mjs && node scripts/test-desktop-support-contract.mjs && node scripts/test-desktop-web-catalog-protocol.mjs && node scripts/test-desktop-outbound-conflicts.mjs && node scripts/test-desktop-catalog-race.mjs && node scripts/test-desktop-status-publication.mjs && node scripts/test-desktop-web-ui.mjs",
     "test:desktop-web-data": "node scripts/test-desktop-order-autoimport.mjs && node scripts/test-desktop-web-catalog.mjs && node scripts/test-desktop-web-support.mjs",
-    "test:desktop-maintenance": "node scripts/test-desktop-maintenance.mjs && node scripts/test-desktop-maintenance-ui.mjs && node scripts/test-sales-period-proxy.mjs",
-    "test:desktop-maintenance-data": "node scripts/test-desktop-transfer.mjs && node scripts/test-sales-period.mjs",
+    "test:desktop-maintenance": "node scripts/test-desktop-maintenance.mjs && node scripts/test-desktop-maintenance-ui.mjs && node scripts/test-sales-period-proxy.mjs && node scripts/test-central-access.mjs",
+    "test:desktop-maintenance-data": "node scripts/test-desktop-transfer.mjs && node scripts/test-sales-period.mjs && node scripts/test-sales-period-quota.mjs && node scripts/test-central-backups.mjs",
+    "test:central-desktop": "node scripts/test-central-gateway.mjs && node scripts/test-central-client.mjs && node scripts/test-central-provision-plan.mjs",
     "build:desktop": "next build --webpack && node scripts/test-web-build.mjs",
     "desktop:runtime": "node scripts/prepare-postgres-runtime.mjs",
     "desktop:update:key": "node scripts/init-desktop-update-key.mjs",
@@ -113,13 +114,16 @@
       "executableName": "RestaMarket"
     },
     "directories": {
-      "output": "desktop-release/v0.6.6",
+      "output": "desktop-release/v0.6.7",
       "app": "desktop"
     },
     "files": [
       "main.cjs",
+      "central-client.cjs",
+      "central-protocol.cjs",
       "local-database.mjs",
       "transfer-package.mjs",
+      "database-fingerprint.mjs",
       "maintenance.cjs",
       "maintenance-labels.cjs",
       "package.json",
@@ -135,6 +139,7 @@
       "update-window.css",
       "update-window.js",
       "UPDATES.txt",
+      "CENTRAL.txt",
       "backup-archive.mjs",
       "protect-data.mjs",
       "assets/**/*"

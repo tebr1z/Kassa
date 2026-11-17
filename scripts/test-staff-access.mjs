@@ -118,6 +118,7 @@ const db={
  async end(){},
 };
 const mocks={
+ '@/lib/central-access':await load('lib/central-access.ts'),
  '@/lib/inventory-mode':await load('lib/inventory-mode.ts'),
  '@/lib/staff-access':policy,
  '@/lib/store-db':{storeDb:()=>db},

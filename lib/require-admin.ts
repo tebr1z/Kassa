@@ -4,11 +4,13 @@ import {storeDb} from '@/lib/store-db';
 import {secureAdminRequest} from '@/lib/admin-security';
 import {canUseStaffApi,isStaffRole,staffRoleSqlList} from '@/lib/staff-access';
 import {inventoryPathRequiresLocal,inventoryLocalOnlyResponse,isLocalInventory} from '@/lib/inventory-mode';
+import {hasCentralDesktopAccess,centralDesktopDenied} from '@/lib/central-access';
 
 // Check again at the data boundary: protection does not depend on Proxy running,
 // and identity headers supplied by a caller are never trusted.
 export function withAdminSession(handler:(request:Request)=>Promise<Response>|Response) {
  return async function protectedHandler(request:Request):Promise<Response> {
+  if(!hasCentralDesktopAccess(request))return centralDesktopDenied();
   const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'};
   const deny=(error:string,status:number)=>Response.json({error},{status,headers});
   if(!secureAdminRequest(request))return deny('İdarəetmə üçün HTTPS tələb olunur.',426);

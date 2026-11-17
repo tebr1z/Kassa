@@ -6,6 +6,7 @@ import {secureAdminRequest} from "./lib/admin-security";
 import {canUseStaffApi,staffRoles} from './lib/staff-access';
 import {STAFF_PORTAL_PATH,isStaffPortalPath,canOpenStaffPage} from './lib/staff-portal';
 import {inventoryPathRequiresLocal,inventoryLocalOnlyResponse,isLocalInventory} from './lib/inventory-mode';
+import {hasCentralDesktopAccess,centralDesktopDenied} from './lib/central-access';
 
 type Rule={prefix:string;read:string[];write:string[]};
 const rules:Rule[]=[
@@ -26,6 +27,7 @@ const rules:Rule[]=[
   {prefix:"/api/purchase-orders",read:["admin","manager","warehouse"],write:["admin","manager","warehouse"]},
   {prefix:"/api/suppliers",read:["admin","manager","warehouse","accountant"],write:["admin","manager","warehouse"]},
   {prefix:'/api/sales-period',read:['admin'],write:['admin']},
+  {prefix:'/api/central-backup',read:['admin'],write:[]},
   {prefix:"/api/sales",read:["admin","manager","cashier"],write:["admin","manager","cashier"]},
   {prefix:"/api/shifts",read:["admin","manager","cashier"],write:["admin","manager","cashier"]},
   {prefix:"/api/orders",read:["admin","manager","cashier"],write:["admin","manager","cashier"]},
@@ -55,6 +57,7 @@ function forward(request:NextRequest,user?:{id:string;role:string}){
  return response;
 }
 export async function proxy(request:NextRequest){
+ if(!hasCentralDesktopAccess(request))return centralDesktopDenied();
  const path=request.nextUrl.pathname;
  // Do not reveal the unlisted replacement with a legacy redirect, even to a
  // signed-in user. The legacy page modules independently return notFound too.

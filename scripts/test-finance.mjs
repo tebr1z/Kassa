@@ -48,7 +48,7 @@ const db={
  },
  async end(){closes++;},
 };
-const {withAdminSession}=await load('lib/require-admin.ts',{'@/lib/staff-access':policy,'@/lib/admin-security':security,'@/lib/store-db':{storeDb:()=>db},'@/lib/inventory-mode':inventory});
+const {withAdminSession}=await load('lib/require-admin.ts',{'@/lib/staff-access':policy,'@/lib/admin-security':security,'@/lib/store-db':{storeDb:()=>db},'@/lib/inventory-mode':inventory,'@/lib/central-access':await load('lib/central-access.ts')});
 const salesPeriod=await load('lib/sales-period.ts');
 const finance=await load('app/api/finance/route.ts',{'@/lib/require-admin':{withAdminSession},'@/lib/store-db':{storeDb:()=>db},'@/lib/sales-period':salesPeriod});
 const request=(search='',authenticated=true)=>new Request('https://staff.example/api/finance'+search,{headers:{host:'staff.example',...(authenticated?{cookie:'birkassa_session=fixture'}:{}),'x-birkassa-role':'admin','x-birkassa-user-id':'forged'}});
