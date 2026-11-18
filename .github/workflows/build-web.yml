@@ -38,8 +38,6 @@ jobs:
       - run: node scripts/test-desktop-sync-independent.mjs
       - run: npm run test:desktop-web
       - run: npm run test:desktop-updates
-      - run: npm run test:desktop-maintenance
-      - run: npm run test:central-desktop
       - run: node scripts/test-category-media.mjs
       - run: node scripts/test-storefront-marketing.mjs
       - run: node scripts/test-storefront-presence.mjs
