@@ -12,7 +12,7 @@ const source=await readFile('app/storefront-presence.tsx','utf8');
 const compiled=ts.transpileModule(source,{fileName:'app/storefront-presence.tsx',compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX},reportDiagnostics:true});
 assert.deepEqual((compiled.diagnostics||[]).filter(row=>row.category===ts.DiagnosticCategory.Error),[]);
 const loaded={exports:{}};
-new Function('require','module','exports',compiled.outputText)(name=>name==='@/lib/language'?{useTranslations:()=>({language})}:name.endsWith('.css')?{}:require(name),loaded,loaded.exports);
+new Function('require','module','exports',compiled.outputText)(name=>name==='@/lib/language'?{useTranslations:()=>({language,t:text=>text})}:name.endsWith('.css')?{}:require(name),loaded,loaded.exports);
 const {AboutLocation,StoreSocialLinks}=loaded.exports;
 function nodes(node){return !node||typeof node!=='object'?[]:[node,...[node.props?.children].flat(Infinity).flatMap(nodes)];}
 const socialUrls=['https://www.instagram.com/restamarket.az/','https://www.tiktok.com/@restamarket.az','https://www.youtube.com/@restamarket_az'];
@@ -22,7 +22,7 @@ const titles=new Set();
 for(language of ['az','ru','en','tr','zh']){
  const location=AboutLocation({address:'Merchant address is retained'}),all=nodes(location);
  const frames=all.filter(node=>node.type==='iframe');assert.equal(frames.length,1);
- const frame=frames[0];assert.equal(frame.props.src,embed);assert.equal(frame.props.loading,'lazy');assert.equal(frame.props.allow,undefined,'No location/camera permission is requested');assert.ok(frame.props.title);titles.add(frame.props.title);
+ const frame=frames[0];assert.equal(frame.props.src,embed+'&hl='+({az:'az',ru:'ru',en:'en',tr:'tr',zh:'zh-CN'}[language]));assert.equal(frame.props.loading,'lazy');assert.equal(frame.props.allow,undefined,'No location/camera permission is requested');assert.ok(frame.props.title);titles.add(frame.props.title);
  assert.ok(all.some(node=>node.props?.children==='Merchant address is retained'));
  const links=all.filter(node=>node.type==='a');assert.equal(links.length,2);
  for(const link of links){assert.equal(link.props.href,mapUrl);assert.equal(link.props.target,'_blank');assert.equal(link.props.rel,'noopener noreferrer');assert.ok(link.props['aria-label']);}

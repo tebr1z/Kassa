@@ -19,8 +19,8 @@ async function harness(){
  const hooks=[];let cursor=0;
  const react={useState(initial){const index=cursor++;if(!(index in hooks))hooks[index]=typeof initial==='function'?initial():initial;return [hooks[index],value=>{hooks[index]=typeof value==='function'?value(hooks[index]):value;}];},useCallback:callback=>callback,useEffect(){},useRef:initial=>({current:initial})};
  const {default:Storefront}=await load('app/storefront.tsx',{
-  react,'next/link':child,'lucide-react':icons,'@/lib/commerce':commerce,'@/lib/storefront-cart':cart,
-  '@/lib/language':{useTranslations:()=>({t:value=>value}),languageAmount:value=>String(value),LanguageSwitcher:child},
+  react,'next/link':child,'lucide-react':icons,'@/lib/storefront-about-translations':await load('lib/storefront-about-translations.ts'),'@/lib/commerce':commerce,'@/lib/storefront-cart':cart,
+  '@/lib/language':{useTranslations:()=>({t:value=>value,language:'az'}),languageAmount:value=>String(value),LanguageSwitcher:child},
   '@/lib/product-discount':await load('lib/product-discount.ts'),'@/lib/product-options':await load('lib/product-options.ts'),'@/lib/catalog-illustrations':await load('lib/catalog-illustrations.ts'),
   './product-price':child,'./storefront-presence':{AboutLocation:child,StoreSocialLinks:child},'./product-view':child,'./hero-slider':child,'./catalog-search':child,'./storefront-announcement':child,'./cart-sheet':child,'./brand-logo':{BrandLogo:child},'./commerce-ui':{ContactBox:child,WhatsAppButton:child},'./storefront-v2.css':{},
  });

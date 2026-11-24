@@ -54,7 +54,7 @@ function ProductImage({ product,preferredImage='' }: { product: CatalogProduct;p
       className={`pd-image-frame${zoomed ? " pd-image-zoomed" : ""}`}
       type="button"
       disabled={!hasImage}
-      aria-label={`${product.name} — şəkli ${zoomed ? "kiçilt" : "böyüt"}`}
+      aria-label={`${product.name} — ${t(zoomed ? "Şəkli kiçilt" : "Şəkli böyüt")}`}
       aria-pressed={zoomed}
       aria-describedby={hintId}
       style={{ touchAction: pinned ? "none" : "pan-y" }}
@@ -87,12 +87,12 @@ function ProductImage({ product,preferredImage='' }: { product: CatalogProduct;p
       }}
       onBlur={() => { setPinned(false); setHover(false); }}
     >
-      {hasImage ? <img className="pd-main-image" src={current} alt={product.name} fetchPriority="high" decoding="async" draggable={false} onError={() => setFailed(true)} /> : <span className="pd-no-image"><ImageIcon size={52} strokeWidth={1} /><span>Şəkil əlavə edilməyib</span></span>}
+      {hasImage ? <img className="pd-main-image" src={current} alt={product.name} fetchPriority="high" decoding="async" draggable={false} onError={() => setFailed(true)} /> : <span className="pd-no-image"><ImageIcon size={52} strokeWidth={1} /><span>{t('Şəkil əlavə edilməyib')}</span></span>}
       {hasProductDiscount(product.price,product.originalPrice) && <span className="pd-discount-badge">{productDiscountLabel(product.price,product.originalPrice,languageAmount)||t('Endirim')}</span>}
     </button>
     {illustrative&&<p className="pd-illustration-notice"><strong>{t('İllüstrativ şəkil')}</strong><span>{t('Görünüş nümunə üçündür. Dəqiq görünüşü sifarişdən əvvəl mağaza ilə dəqiqləşdirin.')}</span></p>}
-    {photos.length > 1 && <div className="pd-thumbs" role="tablist" aria-label={t("Məhsul şəkilləri")}>{photos.map((src, photoIndex) => <button key={src} type="button" className={photoIndex === index ? "is-selected" : ""} aria-label={`${product.name} şəkli ${photoIndex + 1}`} aria-pressed={photoIndex === index} onClick={() => { setIndex(photoIndex); setFailed(false); setPinned(false); setHover(false); place(50, 50); }}><img src={src} alt="" /></button>)}</div>}
-    <p className="pd-image-hint" id={hintId}><Move size={15} aria-hidden="true" /><span className="pd-desktop-hint">Detalları görmək üçün siçanı şəkil üzərində hərəkət etdirin.</span><span className="pd-touch-hint">Böyütmək üçün toxunun, baxmaq üçün sürüşdürün.</span><span className="pd-sr-only">Klaviatura: Enter ilə böyüdün, oxlarla hərəkət edin, Escape ilə kiçildin.</span></p>
+    {photos.length > 1 && <div className="pd-thumbs" role="tablist" aria-label={t("Məhsul şəkilləri")}>{photos.map((src, photoIndex) => <button key={src} type="button" className={photoIndex === index ? "is-selected" : ""} aria-label={`${product.name} — ${t('Məhsul şəkli')} ${photoIndex + 1}`} aria-pressed={photoIndex === index} onClick={() => { setIndex(photoIndex); setFailed(false); setPinned(false); setHover(false); place(50, 50); }}><img src={src} alt="" /></button>)}</div>}
+    <p className="pd-image-hint" id={hintId}><Move size={15} aria-hidden="true" /><span className="pd-desktop-hint">{t('Detalları görmək üçün siçanı şəkil üzərində hərəkət etdirin.')}</span><span className="pd-touch-hint">{t('Böyütmək üçün toxunun, baxmaq üçün sürüşdürün.')}</span><span className="pd-sr-only">{t('Klaviatura: Enter ilə böyüdün, oxlarla hərəkət edin, Escape ilə kiçildin.')}</span></p>
   </div>;
 }
 
@@ -121,7 +121,7 @@ export default function ProductView({ product, products, inCart, onAdd, onOpenCa
   }
 
   return <div className="pd-page">
-    <nav className="pd-breadcrumb" aria-label="Səhifə yolu">
+    <nav className="pd-breadcrumb" aria-label={t('Səhifə yolu')}>
       <Link href="/">{t("Ana səhifə")}</Link><ChevronRight size={13} aria-hidden="true" />
       <Link href="/#catalog">{t("Kataloq")}</Link><ChevronRight size={13} aria-hidden="true" />
       <span aria-current="page">{product.name}</span>
@@ -131,34 +131,34 @@ export default function ProductView({ product, products, inCart, onAdd, onOpenCa
       <ProductImage key={galleryKey} product={{...product,price:unitPrice,originalPrice}} preferredImage={preferredImage} />
       <div className="pd-summary">
         <Link href="/#catalog" className="pd-back"><ArrowLeft size={15} aria-hidden="true" />{t("Kataloqa qayıt")}</Link>
-        <p className="pd-eyebrow">{product.category || "Kolleksiyamızdan"}</p>
+        <p className="pd-eyebrow">{t(product.category || "Kolleksiyamızdan")}</p>
         <h1 id="pd-product-title" className="pd-title">{product.name}</h1>
         {!product.available&&<p className="pd-stock pd-stock-empty">{t('Hazırda stokda yoxdur')}</p>}
         <div className="pd-price-row">
           <ProductPrice price={unitPrice} originalPrice={originalPrice}/>
           {!!product.options.length&&!selectedOption&&<span className="pd-starting-price">{t('Başlayan qiymət')}</span>}
         </div>
-        <p className="pd-intro">{product.description || "Məhsul haqqında sualınız var? Əlaqə bölməsindən bizə yazın, seçim etməkdə kömək edək."}</p>
+        <p className="pd-intro">{product.description || t("Məhsul haqqında sualınız var? Əlaqə bölməsindən bizə yazın, seçim etməkdə kömək edək.")}</p>
         <ProductVariantPicker product={product} selection={selection} onNavigate={chooseSelection}/>
         <div className="pd-purchase">
-          <button className="pd-add-button" type="button" disabled={!product.available || inCart >= 100||Boolean(product.options?.length&&!optionId)} onClick={() => onAdd(product.id,optionId||undefined)}><ShoppingBag size={19} aria-hidden="true" />{!product.available ? t("Stokda yoxdur") : inCart >= 100 ? "Miqdar limiti: 100" : t("Səbətə əlavə et")}<ArrowRight size={18} aria-hidden="true" /></button>
-          {inCart > 0 && <button className="pd-cart-link" type="button" onClick={onOpenCart}><Check size={16} aria-hidden="true" /><span>Səbətinizdə: {inCart}</span><span>Səbətə bax →</span></button>}
-          <p className="pd-purchase-note">Miqdarı səbətdə dəyişə və sifarişi oradan tamamlaya bilərsiniz.</p>
+          <button className="pd-add-button" type="button" disabled={!product.available || inCart >= 100||Boolean(product.options?.length&&!optionId)} onClick={() => onAdd(product.id,optionId||undefined)}><ShoppingBag size={19} aria-hidden="true" />{!product.available ? t("Stokda yoxdur") : inCart >= 100 ? `${t('Miqdar limiti')}: 100` : t("Səbətə əlavə et")}<ArrowRight size={18} aria-hidden="true" /></button>
+          {inCart > 0 && <button className="pd-cart-link" type="button" onClick={onOpenCart}><Check size={16} aria-hidden="true" /><span>{t('Səbətinizdə:')} {inCart}</span><span>{t('Səbətə bax')} →</span></button>}
+          <p className="pd-purchase-note">{t('Miqdarı səbətdə dəyişə və sifarişi oradan tamamlaya bilərsiniz.')}</p>
         </div>
         <div className="pd-fulfillment">
-          <div><Store size={20} strokeWidth={1.5} aria-hidden="true" /><p><strong>{t("Mağazadan götürmə")}</strong><span>Sifariş hazır olduqda hesabınızda görünəcək.</span></p></div>
-          <div><Truck size={20} strokeWidth={1.5} aria-hidden="true" /><p><strong>{t("Ünvana çatdırılma")}</strong><span>Sifariş zamanı ünvanınızı qeyd edin.</span></p></div>
-          <div><Package size={20} strokeWidth={1.5} aria-hidden="true" /><p><strong>Sifarişiniz nəzarətinizdə</strong><span>Mərhələləri şəxsi hesabınızdan izləyin.</span></p></div>
+          <div><Store size={20} strokeWidth={1.5} aria-hidden="true" /><p><strong>{t("Mağazadan götürmə")}</strong><span>{t('Sifariş hazır olduqda hesabınızda görünəcək.')}</span></p></div>
+          <div><Truck size={20} strokeWidth={1.5} aria-hidden="true" /><p><strong>{t("Ünvana çatdırılma")}</strong><span>{t('Sifariş zamanı ünvanınızı qeyd edin.')}</span></p></div>
+          <div><Package size={20} strokeWidth={1.5} aria-hidden="true" /><p><strong>{t('Sifarişiniz nəzarətinizdə')}</strong><span>{t('Mərhələləri şəxsi hesabınızdan izləyin.')}</span></p></div>
         </div>
       </div>
     </section>
 
     <section className="pd-information" aria-labelledby="pd-info-title">
-      <div className="pd-info-heading"><p className="pd-eyebrow">Daha yaxından tanıyın</p><h2 className="pd-section-title" id="pd-info-title">{t("Məhsul haqqında")}</h2></div>
+      <div className="pd-info-heading"><p className="pd-eyebrow">{t('Daha yaxından tanıyın')}</p><h2 className="pd-section-title" id="pd-info-title">{t("Məhsul haqqında")}</h2></div>
       <div className="pd-info-content">
-        <p className="pd-description">{product.description || "Bu məhsula aid əlavə açıqlama hələ daxil edilməyib. Ətraflı məlumat üçün bizimlə əlaqə saxlaya bilərsiniz."}</p>
+        <p className="pd-description">{product.description || t("Bu məhsula aid əlavə açıqlama hələ daxil edilməyib. Ətraflı məlumat üçün bizimlə əlaqə saxlaya bilərsiniz.")}</p>
         <dl className="pd-specifications">
-          <div><dt>{t("Kateqoriya")}</dt><dd>{product.category || "Ümumi"}</dd></div>
+          <div><dt>{t("Kateqoriya")}</dt><dd>{t(product.category || "Ümumi")}</dd></div>
           {specifications.map((line, index) => {
             const separator = line.indexOf(":");
             const label = separator > 0 ? line.slice(0, separator).trim() : "Xüsusiyyət";
@@ -170,10 +170,10 @@ export default function ProductView({ product, products, inCart, onAdd, onOpenCa
     </section>
 
     {related.length > 0 && <section className="pd-related" aria-labelledby="pd-related-title">
-      <div className="pd-related-heading"><div><p className="pd-eyebrow">Seçiminizi tamamlayın</p><h2 className="pd-section-title" id="pd-related-title">Bunlar da xoşunuza gələ bilər</h2></div><Link href="/#catalog">{t("Bütün məhsullar")}<ArrowRight size={17} aria-hidden="true" /></Link></div>
+      <div className="pd-related-heading"><div><p className="pd-eyebrow">{t('Seçiminizi tamamlayın')}</p><h2 className="pd-section-title" id="pd-related-title">{t('Bunlar da xoşunuza gələ bilər')}</h2></div><Link href="/#catalog">{t("Bütün məhsullar")}<ArrowRight size={17} aria-hidden="true" /></Link></div>
       <div className="pd-related-grid">{related.map(item => <Link className="pd-related-card" key={item.id} href={productPath(item)}>
         <div className="pd-related-image">{item.image ? <img src={item.image} alt={item.name} loading="lazy" /> : <ImageIcon size={40} strokeWidth={1} aria-hidden="true" />}{item.originalPrice > item.price && <span className="pd-related-sale">{t("Endirim")}</span>}{isCatalogIllustration(item.image)&&<span className="pd-related-illustration">{t('İllüstrativ şəkil')}</span>}</div>
-        <div className="pd-related-body"><p className="pd-related-category">{item.category || t("Məhsul")}</p><h3 className="pd-related-name">{item.name}</h3><div className="pd-related-bottom"><ProductPrice price={item.price} originalPrice={item.originalPrice} compact/><span className="pd-related-arrow"><ArrowRight size={18} aria-hidden="true" /></span></div></div>
+        <div className="pd-related-body"><p className="pd-related-category">{t(item.category || "Məhsul")}</p><h3 className="pd-related-name">{item.name}</h3><div className="pd-related-bottom"><ProductPrice price={item.price} originalPrice={item.originalPrice} compact/><span className="pd-related-arrow"><ArrowRight size={18} aria-hidden="true" /></span></div></div>
       </Link>)}</div>
     </section>}
   </div>;

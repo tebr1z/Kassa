@@ -7,6 +7,7 @@ import "./storefront-presence.css";
 
 const storeMapUrl = "https://maps.app.goo.gl/oyjVNCWgfu4EoGnT8";
 const storeMapEmbedUrl = "https://www.google.com/maps/embed?origin=mfe&pb=!1m3!3m2!1m1!4s12618702231415660293";
+const mapLanguages:Record<Language,string> = {az:'az',ru:'ru',en:'en',tr:'tr',zh:'zh-CN'};
 
 type PresenceCopy = {
   eyebrow:string;
@@ -91,7 +92,7 @@ const presenceCopy:Record<Language, PresenceCopy> = {
 };
 
 export function AboutLocation({address}:{address?:string}) {
-  const {language} = useTranslations();
+  const {language,t} = useTranslations();
   const copy = presenceCopy[language];
 
   return <div className="sf-presence-location">
@@ -99,13 +100,13 @@ export function AboutLocation({address}:{address?:string}) {
       <span className="sf-presence-eyebrow"><MapPin size={15} aria-hidden="true"/>{copy.eyebrow}</span>
       <h3>{copy.title}</h3>
       <p className="sf-presence-description">{copy.description}</p>
-      <address className="sf-presence-address"><MapPin size={19} aria-hidden="true"/><span>{address?.trim() || copy.address}</span></address>
+      <address className="sf-presence-address"><MapPin size={19} aria-hidden="true"/><span>{address?.trim()?t(address.trim()):copy.address}</span></address>
       <a className="sf-presence-directions" href={storeMapUrl} target="_blank" rel="noopener noreferrer" aria-label={`${copy.directions} (${copy.opensNewTab})`}>
         <Navigation size={17} aria-hidden="true"/><span>{copy.directions}</span><ArrowUpRight size={17} aria-hidden="true"/>
       </a>
     </div>
     <div className="sf-presence-map">
-      <iframe src={storeMapEmbedUrl} title={copy.mapTitle} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen/>
+      <iframe src={storeMapEmbedUrl+'&hl='+mapLanguages[language]} title={copy.mapTitle} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen/>
       <div className="sf-presence-map-fallback"><span>{copy.mapFallback}</span><a href={storeMapUrl} target="_blank" rel="noopener noreferrer" aria-label={`${copy.mapLink} (${copy.opensNewTab})`}>{copy.mapLink}<ArrowUpRight size={14} aria-hidden="true"/></a></div>
     </div>
   </div>;

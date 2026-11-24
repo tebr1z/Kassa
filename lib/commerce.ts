@@ -116,12 +116,13 @@ function tokenNear(query:string,word:string){
  const limit=query.length>=4?2:1;
  return editDistance(query,word)<=limit||(word.length>query.length&&editDistance(query,word.slice(0,query.length+1))<=limit);
 }
-export function productSearchScore(product:{name:string;category?:string},query:string){
+export function productSearchScore(product:{name:string;category?:string},query:string,translate?:(label:string)=>string){
  const needle=foldSearch(query);
  if(!needle)return 0;
  const name=foldSearch(product.name);
  const model=foldSearch(productModel(product.name));
- const category=foldSearch(product.category||"");
+ const rawCategory=product.category||"",localizedCategory=translate?.(rawCategory);
+ const category=foldSearch(rawCategory+(localizedCategory&&localizedCategory!==rawCategory?' '+localizedCategory:''));
  const hay=`${name} ${model} ${category}`;
  if(hay.includes(needle))return 120-Math.min(40,hay.indexOf(needle));
  const tokens=needle.split(" ").filter(Boolean);
@@ -138,10 +139,11 @@ export function productSearchScore(product:{name:string;category?:string},query:
  }
  return score;
 }
-export function labelMatches(label:string,query:string){
+export function labelMatches(label:string,query:string,translate?:(label:string)=>string){
  const needle=foldSearch(query);
  if(!needle)return true;
- const hay=foldSearch(label);
+ const localized=translate?.(label);
+ const hay=foldSearch(label+(localized&&localized!==label?' '+localized:''));
  if(hay.includes(needle))return true;
  const words=hay.split(" ").filter(Boolean);
  return needle.split(" ").filter(Boolean).every(token=>words.some(word=>tokenNear(token,word)));

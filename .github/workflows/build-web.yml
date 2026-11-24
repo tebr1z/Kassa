@@ -41,6 +41,9 @@ jobs:
       - run: node scripts/test-category-media.mjs
       - run: node scripts/test-storefront-marketing.mjs
       - run: node scripts/test-storefront-presence.mjs
+      - run: node scripts/test-storefront-about-translations.mjs
+      - run: node scripts/test-language-provider-runtime.mjs
+      - run: node scripts/test-storefront-languages.mjs
       - run: node scripts/test-storefront-filter-sections.mjs
       - run: node scripts/test-web-inventory-boundary.mjs
       - run: node scripts/test-local-stock-ui.mjs
